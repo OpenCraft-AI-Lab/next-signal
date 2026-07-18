@@ -1,0 +1,54 @@
+# digitalpaca-wiki 分类法。
+#
+# ingest 一篇 artifact 时,category 必须取下面 categories 里的某个 path。
+# 文件夹路径 = GBrain page 身份 + re-ingest manifest key —— 改名会让所有文件
+# 重新 ingest 成新 page、旧 page 变孤儿。改这里前先想清楚。
+
+# 时效性:knowledge_artifact_editor 估一个 tier,persist 用 review_after_months
+# 从 captured_at 推导出 review_by 日期(review_after_months 为 null 时不设)。
+freshness:
+  default: stable
+  tiers:
+    permanent:
+      review_after_months: null   # 数学 / 基础理论 / 历史事实,几乎不过期
+    stable:
+      review_after_months: 24     # 年尺度演进:ML 理论、投资原则
+    evolving:
+      review_after_months: 6      # 月尺度活跃领域:agent 框架、harness 设计
+    ephemeral:
+      review_after_months: 1      # 周尺度:新闻综述、radar digest
+
+# 分类目标。editor 漏填或填了非法 freshness 时,persist 回落到该 category 的
+# default_freshness,再回落到上面的 freshness.default。
+# temp-inbox/ 与 output/ 不是分类目标,也不进 GBrain 索引。
+categories:
+  - path: investing/quant
+    scope: 量化投资的方法、因子、模型、回测框架
+    default_freshness: evolving
+  - path: investing/discretionary
+    scope: 非量化 / 主观投资的方法与原则
+    default_freshness: stable
+  - path: investing/financial-planning
+    scope: 通用财务规划:预算、税务、退休、资产配置
+    default_freshness: stable
+  - path: knowledge/ai-ml
+    scope: LLM 底层与机器学习的描述性理论知识
+    default_freshness: stable
+  - path: knowledge/ai-engineering
+    scope: harness 设计、agent 框架概览等偏工程的知识
+    default_freshness: evolving
+  - path: opencraft/content
+    scope: 内容创作的可执行方法论
+    default_freshness: stable
+  - path: opencraft/venture
+    scope: 创业的可执行方法论
+    default_freshness: stable
+  - path: life
+    scope: 生活类信息咨询、流程、决策参考
+    default_freshness: stable
+  - path: radar/tech
+    scope: 科技领域的阶段性综述(digest,不是单条新闻)
+    default_freshness: ephemeral
+  - path: radar/space
+    scope: 太空领域的阶段性综述
+    default_freshness: ephemeral
