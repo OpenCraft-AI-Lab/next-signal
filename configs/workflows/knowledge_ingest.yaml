@@ -1,0 +1,16 @@
+name: knowledge_ingest
+kind: workflow
+enabled: true
+description: Fetch, edit, classify, persist, and optionally index one knowledge item.
+factory: paca.workflows.knowledge_ingest:build
+expose:
+  agent_os: true
+  tool:
+    enabled: true
+    name: knowledge_ingest_workflow
+inputs_schema:
+  value: string
+  ingest: boolean
+extra:
+  run_now: paca.workflows.knowledge_ingest:run
+  tool_fn: paca.workflows.knowledge_ingest:ingest_one

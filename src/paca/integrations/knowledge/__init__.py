@@ -1,0 +1,1 @@
+"""Knowledge-domain provider adapters."""
