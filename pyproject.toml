@@ -1,0 +1,78 @@
+[project]
+name = "next-signal"
+version = "0.1.0"
+description = "Local-first info-radar + knowledge pipeline built on agno"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Jin-Fang", email = "Jin-Fang@users.noreply.github.com" },
+]
+dependencies = [
+    "agno[os]>=2.6",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.3",
+    "sqlalchemy>=2.0",
+    "openai>=1.40",
+    "anthropic>=0.40",
+    "httpx>=0.28",
+    "requests>=2.32",
+    "feedparser>=6.0",
+    "beautifulsoup4>=4.14",
+    "markdownify>=1.2",
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "structlog>=24.4",
+    "python-dotenv>=1.0",
+    "yt-dlp>=2026.3.17",
+    "openai-whisper>=20250625",
+    "torch>=2.11",
+    "markitdown[docx,pdf,pptx,xlsx,youtube-transcription]>=0.1.5",
+    "opencc-python-reimplemented>=0.1.7",
+    "youtube-transcript-api>=1.2.4",
+    "json5>=0.14.0",
+]
+
+[project.scripts]
+paca = "paca.interfaces.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "paca"
+module-root = "src"
+
+# openai-whisper -> torch pulls the full CUDA toolkit on Linux by default
+# (multi-GB; unused since bilibili.py transcribes with fp16=False / CPU-only).
+# Route Linux installs to PyTorch's CPU-only wheel index; macOS (no CUDA
+# variant to begin with) keeps the default PyPI wheel.
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "integration: hits real external services (OMLX / web APIs); skipped unless gated by env",
+]

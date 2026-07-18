@@ -1,0 +1,34 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local environment / secrets
+.env
+.env.local
+state/
+
+# Editor / OS noise
+.DS_Store
+.idea/
+.vscode/
+
+# Test caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Dashboard (Next.js)
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+
+# Private shared-context drafts (committed shared files start with digits)
+prompts/_shared/99_*.md
+prompts/_shared/_*.md
