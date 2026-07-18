@@ -1,0 +1,31 @@
+# info-radar analysis goals.
+#
+# Copy this file to `goals.yaml` in the same directory and edit it to describe
+# what you actually want to learn from your feeds. The two-tier analysis
+# workflow (paca/workflows/info_radar_analysis/) ALL revolves around these
+# goals: tier-1 drops items that have no plausible bearing on any goal, and
+# tier-2 writes the impact analysis grounded in them.
+#
+# Schema (strict — unknown keys fail the loader fast):
+#   goals:
+#     - name: <kebab-case unique id>
+#       description: <one-sentence purpose, used in agent prompts>
+#       topics: [<broad area>, ...]        # what kinds of things matter
+#       keywords: [<exact word>, ...]      # high-precision tokens
+#
+# At least one goal is required. A missing/empty goals.yaml aborts the run
+# with RuntimeError — there is no implicit default goal.
+
+goals:
+  - name: ai_research_tracking
+    description: "Stay current on AI research with practical engineering impact."
+    topics:
+      - "LLM inference optimization"
+      - "agentic systems / tool use"
+      - "open-source models and runtimes"
+    keywords:
+      - "mlx"
+      - "vllm"
+      - "agno"
+      - "claude code"
+      - "open source agent"

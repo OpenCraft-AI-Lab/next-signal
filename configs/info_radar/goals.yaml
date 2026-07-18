@@ -1,0 +1,177 @@
+# info-radar analysis goals — 用户实际目标。
+#
+# 每次改完下一次 `paca info-radar analyze` 会立刻用上（goals 在 batch 开始
+# 时一次性 load）。
+
+goals:
+  - name: ai_capability_frontier
+    description: |
+      持续追踪 AI 系统的真实能力曲线，对短期（6 个月内）和长期（3-5 年）的
+      AI 能力边界形成 evidence-based 判断。重点是分清"营销/demo/cherry-pick"
+      与"真实能力突破/严肃 benchmark/独立复现"。关心：(1) foundation model
+      的能力上限和瓶颈，(2) 训练 / 推理 / agent 三层技术栈的演化拐点，
+      (3) 哪些任务从"做不了"变成"可工程化部署"，(4) 学术 paper 与工业落地的
+      gap。**不**关心（命中也不得 ≥70，除非含独立复现或第三方 benchmark）：个人
+      观点 takes（访谈/播客/演讲/经验博客/评论文/排名口水战）、营销 demo（发布方
+      自报、无第三方复现或开源的能力数字）、产品与资本通稿（融资/估值/IPO/招聘/
+      并购/集成发布，即便来自顶级实验室）、与 AI 能力无关的命中（通用云安全 CVE、
+      通用 DB/图形/量子计算、非 AI 网络架构）。例外——高信号个人：领域奠基者 /
+      前沿实验室核心研究者（如 Andrej Karpathy、Yann LeCun、Ilya Sutskever、
+      Demis Hassabis 等）本人的演讲 / 访谈 / 长文，无论平台都按内容实质评分，不受
+      上述个人观点排除与 <70 上限限制。
+    topics:
+      - "foundation model 能力突破、benchmark、独立复现实验"
+      - "训练方法：pre-training / post-training / RLHF / RL / synthetic data"
+      - "推理能力：reasoning、agent、planning、long-horizon task"
+      - "long context、记忆架构、retrieval-augmented systems"
+      - "scaling laws、数据墙、算力曲线、效率优化"
+      - "多模态：vision、audio、video、embodied AI、world model"
+      - "推理优化：MoE、speculative decoding、quantization、distillation"
+      - "agent infrastructure：tool use、computer use、coding agent"
+      - "AI 安全与 alignment 的实证研究（不是政治讨论）"
+    keywords:
+      - "GPT"
+      - "Claude"
+      - "Gemini"
+      - "Qwen"
+      - "DeepSeek"
+      - "Llama"
+      - "o1"
+      - "o3"
+      - "reasoning"
+      - "agent"
+      - "MoE"
+      - "scaling laws"
+      - "benchmark"
+      - "MMLU"
+      - "GPQA"
+      - "SWE-bench"
+      - "ARC-AGI"
+      - "RLHF"
+      - "RLVR"
+      - "synthetic data"
+      - "context window"
+      - "world model"
+      - "embodied"
+      - "vllm"
+      - "mlx"
+      - "speculative decoding"
+      - "quantization"
+
+  - name: ai_robotics_space_investment
+    description: |
+      把对 AI / 机器人 / 太空 三个产业链的深度理解转化为长期投资决策（个股 +
+      ETF + 一级市场观察）。判断标准：(1) 行业是否真正处在 S 曲线的早段或加速段，
+      (2) 这家公司是否在价值链上占据 chokepoint 或者拥有飞轮，(3) 估值是否反映
+      未来 3-5 年预期、还是已经透支。关心：财报与产业链验证、关键客户与供应链
+      变化、技术路线之争（谁的押注会赢）、监管/地缘对竞争格局的影响。**不**
+      关心：日线技术分析、短线消息面炒作（IPO 估值叙事/员工造富/P&L 财务标题/
+      路演/一级估值传闻）、纯 macro 解读（投行情绪报告/宏观与贸易统计/capex 泛论/
+      地缘政治视角），以及无产业链或财报一手验证的融资轮与招聘动态。"财报/产业链
+      验证"指产品线/订单/客户/产能/chokepoint 等一手证据，不是市值或 P&L 标题。
+      监管/地缘的边界：具体、已发生的监管动作（管制名单/禁令/许可/政府或政企协议）
+      且能点名受影响的公司或供应链环节 → 关心，按影响面正常打分；无具体动作的宏观
+      评论、情绪解读、"视角"文 → 不关心。
+    topics:
+      - "半导体：GPU / TPU / 推理芯片 / HBM / 光通信 / 先进封装"
+      - "云算力 / 数据中心 / 电力基建（与 AI capex 相关）"
+      - "AI 软件基础设施：inference engine、agent OS、向量数据库"
+      - "人形机器人：硬件、电机、传感器、训练数据、应用场景"
+      - "自动驾驶 / 具身智能：FSD、L4 落地、机器人学习"
+      - "太空：可重复使用火箭、卫星互联网、低轨星座、深空探索"
+      - "上市公司财报、产业链验证、关键客户披露"
+      - "中美科技竞争、出口管制对供应链的影响"
+      - "AI 应用层公司：垂直 SaaS、企业 agent、创作工具的商业化"
+    keywords:
+      - "NVIDIA"
+      - "NVDA"
+      - "AMD"
+      - "TSM"
+      - "TSMC"
+      - "Broadcom"
+      - "AVGO"
+      - "ARM"
+      - "SMCI"
+      - "GOOGL"
+      - "MSFT"
+      - "META"
+      - "AAPL"
+      - "Tesla"
+      - "TSLA"
+      - "Figure"
+      - "Optimus"
+      - "Boston Dynamics"
+      - "SpaceX"
+      - "Rocket Lab"
+      - "RKLB"
+      - "ASTS"
+      - "PLTR"
+      - "PLD"
+      - "ANET"
+      - "ORCL"
+      - "CRWV"
+      - "CoreWeave"
+      - "寒武纪"
+      - "中芯国际"
+      - "海光"
+      - "比亚迪"
+      - "小米"
+      - "宇树"
+      - "Unitree"
+      - "earnings"
+      - "guidance"
+      - "capex"
+      - "supply chain"
+      - "export control"
+
+  - name: startup_opportunity_scouting
+    description: |
+      寻找符合三个硬条件的创业机会：(1) **复利**——产品 / 业务 / 数据三类飞轮
+      之一明显成立，每多一个用户、一个交易、一个数据点都让护城河更深；
+      (2) **与未来风口一致**——AI / 机器人 / 太空 / 自动化 是大方向，避开
+      sunset 行业；(3) **早期阶段、潜力巨大**——TAM ≥ 100 亿美金、当前 PMF
+      尚未成熟但拐点临近、估值还在 seed / Series A / B 阶段。重点观察：
+      product wedge 是什么、moat 怎么建、为什么是现在（why now）、创始人
+      为什么是对的人。**不**关心：成熟期 SaaS、纯执行型创业、me-too 项目。
+    topics:
+      - "AI-native 产品形态：agent first、多模态交互、个人化 AI"
+      - "开发者工具：coding agent、agent infra、dev productivity、API 平台"
+      - "垂直行业 AI：医疗、法律、金融、教育、制造、保险、税务"
+      - "机器人新形态：家庭服务、配送、清洁、农业、建筑"
+      - "内容生产范式变革：生成式媒体、创作者经济、AI native social"
+      - "商业模式创新：usage-based pricing、数据飞轮、网络效应、平台化"
+      - "早期市场信号：YC / a16z / Sequoia / Benchmark / 创始人故事"
+      - "AI native infra：browser use、computer use、operator agent"
+      - "中国独特机会：海外华人创业、跨境产品、出海"
+    keywords:
+      - "YC"
+      - "Y Combinator"
+      - "a16z"
+      - "Andreessen Horowitz"
+      - "Sequoia"
+      - "Benchmark"
+      - "seed"
+      - "Series A"
+      - "Series B"
+      - "founder"
+      - "wedge"
+      - "moat"
+      - "PMF"
+      - "TAM"
+      - "agent"
+      - "vertical AI"
+      - "coding agent"
+      - "browser use"
+      - "operator"
+      - "personal AI"
+      - "video gen"
+      - "robotics startup"
+      - "dev tool"
+      - "API"
+      - "platform"
+      - "flywheel"
+      - "network effect"
+      - "data moat"
+      - "出海"
+      - "AI native"
+      - "founder mode"

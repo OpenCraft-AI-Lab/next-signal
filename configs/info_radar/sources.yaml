@@ -1,0 +1,25 @@
+# info-radar source descriptors. Each entry invokes a CLI on the schedule
+# defined in configs/schedules.yaml (or via `paca info-radar pull`), parses
+# stdout through the named parser, and upserts into the `radar_items` Postgres
+# table with (source, source_id) dedup.
+#
+# Auth (folocli): operator runs `folo login` once (token at ~/.folo/config.json)
+# or sets FOLO_TOKEN in .env. The default argv pins folocli@0.0.5 because
+# `npx folocli` (no version) resolves to a stale cache that breaks timeline —
+# bump via FOLO_CLI_ARGV env override when a newer release ships and works.
+
+sources:
+  - name: folo_timeline_articles
+    enabled: true
+    cli:
+      argv:
+        - npx
+        - --yes
+        - folocli@0.0.5
+        - timeline
+        - --view
+        - articles
+        - --limit
+        - "100"
+      timeout_sec: 60
+    parser: folo_timeline
