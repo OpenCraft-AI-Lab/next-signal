@@ -6,8 +6,8 @@ import { getLocale } from "@/lib/i18n/server";
 export const dynamic = "force-dynamic";
 
 async function readRadarGoals(): Promise<GoalsTabData> {
-  const result = await readGoals(goalsPathFor("radar"));
-  const examplePath = goalsExampleFor("radar");
+  const result = await readGoals(goalsPathFor());
+  const examplePath = goalsExampleFor();
   if (result.ok) {
     return { ok: true, missing: false, message: "", goals: result.goals, examplePath };
   }
