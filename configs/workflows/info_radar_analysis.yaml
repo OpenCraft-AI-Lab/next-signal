@@ -1,0 +1,14 @@
+name: info_radar_analysis
+kind: workflow
+enabled: true
+description: Two-tier LLM analysis of unseen radar_items, with goal-conditioned filtering and pgvector + LLM-judge dedup before any push.
+factory: paca.workflows.info_radar_analysis:factory
+expose:
+  # Not an agno/AgentOS workflow — no LLM exposure to the dashboard UI; scheduler
+  # and CLI invoke via extra.run_now below. factory above raises if AgentOS ever
+  # tries to bind it.
+  agent_os: false
+  tool:
+    enabled: false
+extra:
+  run_now: paca.workflows.info_radar_analysis:run

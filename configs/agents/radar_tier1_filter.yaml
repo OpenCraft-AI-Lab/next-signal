@@ -1,0 +1,10 @@
+name: radar_tier1_filter
+model_profile: local_structured
+tools: []
+instructions_file: agents/radar_tier1_filter.md
+markdown: false
+add_history_to_context: false
+add_datetime_to_context: false
+extra:
+  shared_context: false
+  db: false
