@@ -15,11 +15,11 @@ export const GOALS_EXAMPLE_PATH = path.join(
 /** Which goals file a view/action targets. Only info-radar filtering exists here. */
 export type GoalsKind = "radar";
 
-export function goalsPathFor(_kind: GoalsKind): string {
+export function goalsPathFor(): string {
   return GOALS_PATH;
 }
 
-export function goalsExampleFor(_kind: GoalsKind): string {
+export function goalsExampleFor(): string {
   return GOALS_EXAMPLE_PATH;
 }
 
