@@ -1,0 +1,6 @@
+# Force LF for files that run inside Linux containers, regardless of the
+# checkout platform's core.autocrlf. A CRLF shebang/script breaks `sh` with
+# `$'\r': command not found` when COPYed into the image and run on Windows
+# clones (see docs/containerized-deployment.md).
+*.sh text eol=lf
+Dockerfile text eol=lf
