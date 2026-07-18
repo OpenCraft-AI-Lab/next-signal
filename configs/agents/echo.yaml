@@ -1,0 +1,11 @@
+# Smoke-test agent: no tools, just talks. Useful for verifying the AgentOS
+# wiring before any real specialist is implemented.
+name: echo
+model_profile: local
+tools: []
+instructions: |
+  You are a minimal smoke-test agent. Reply concisely.
+  When asked who you are, say "I am the echo smoke-test agent."
+markdown: true
+add_history_to_context: true
+add_datetime_to_context: true

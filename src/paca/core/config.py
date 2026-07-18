@@ -118,7 +118,7 @@ class AgentConfig(BaseModel):
         if self.instructions:
             return self.instructions
         if self.instructions_file:
-            return (PROMPTS_DIR / self.instructions_file).read_text()
+            return (PROMPTS_DIR / self.instructions_file).read_text(encoding="utf-8")
         return ""
 
 
@@ -211,7 +211,7 @@ class TeamConfig(BaseModel):
         if self.instructions:
             return self.instructions
         if self.instructions_file:
-            return (PROMPTS_DIR / self.instructions_file).read_text()
+            return (PROMPTS_DIR / self.instructions_file).read_text(encoding="utf-8")
         return ""
 
 
@@ -279,7 +279,7 @@ def load_schedules() -> SchedulesConfig:
 def _read_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"config file missing: {path}")
-    with path.open() as f:
+    with path.open(encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     if not isinstance(data, dict):
         raise ValueError(f"{path}: top-level must be a mapping, got {type(data).__name__}")
