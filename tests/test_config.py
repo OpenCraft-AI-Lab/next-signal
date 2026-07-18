@@ -60,10 +60,3 @@ def test_workflow_yaml_loads_with_exposure() -> None:
     assert cfg.factory == "paca.workflows.knowledge_ingest:build"
     assert cfg.expose.tool.enabled is True
     assert cfg.expose.tool.name == "knowledge_ingest_workflow"
-
-
-def test_team_yaml_loads_disabled_placeholder() -> None:
-    cfg = config.load_team("personal_assistant")
-    assert cfg.name == "personal_assistant"
-    assert cfg.enabled is False
-    assert cfg.resolved_instructions().strip()

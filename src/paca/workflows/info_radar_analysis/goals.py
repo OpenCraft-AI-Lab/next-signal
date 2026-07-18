@@ -43,7 +43,7 @@ def load_goals(path: Path | None = None) -> list[Goal]:
             f"info-radar goals config not found at {path}; "
             "copy goals.example.yaml to goals.yaml and edit."
         )
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
         raise RuntimeError(f"{path}: top-level must be a mapping, got {type(raw).__name__}")
 

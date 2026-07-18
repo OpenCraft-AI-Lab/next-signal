@@ -44,7 +44,7 @@ def load_sources(path: Path | None = None) -> list[SourceSpec]:
             f"info-radar sources config not found at {path}; "
             "create configs/info_radar/sources.yaml with at least one entry."
         )
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     raw_sources = raw.get("sources")
     if not isinstance(raw_sources, list):
         raise RuntimeError(f"{path}: top-level `sources:` must be a list, got {type(raw_sources)}")

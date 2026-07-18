@@ -42,5 +42,5 @@ def _load() -> str:
     for path in sorted(SHARED_DIR.glob("*.md")):
         if path.name.startswith("_"):
             continue
-        sections.append(path.read_text().rstrip())
+        sections.append(path.read_text(encoding="utf-8").rstrip())
     return "\n\n---\n\n".join(sections)
