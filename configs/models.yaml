@@ -1,0 +1,92 @@
+# Per-provider concurrent inference limits. See design.md §3.17.
+# Local providers (omlx) need strict caps — single GPU/MLX process can't
+# parallelize cleanly. Cloud providers get a generous defensive cap, far
+# above typical use, so 429s still hit agno's retry layer first; the cap
+# is there to stop a runaway loop from blasting the API.
+concurrency:
+  omlx: 2
+  claude: 64
+  openai: 64
+  gemini: 32
+  deepseek: 32
+
+profiles:
+  # The single local model. Everything runs here; cloud is fallback only.
+  local:
+    provider: omlx
+    model_id: Qwen3.5-122B-A10B-mlx-oQ4
+    temperature: 0.2
+    top_p: 0.85
+    max_tokens: 32768
+    fallback_profile: deepseek_smart
+
+  # Same underlying model + endpoint, but with a tight token cap for
+  # structured-output agents (output_schema). xgrammar-constrained
+  # generation can pathologically loop trying to satisfy a schema; a small
+  # max_tokens converts a 10-min hang into a ~100s clean failure that our
+  # per-item error path handles. Outputs for tier1/tier2/dedup schemas are
+  # all well under 2000 tokens; 4096 leaves headroom.
+  #
+  # Removing the cap was tried (Alibaba's docs say ``max_tokens`` with
+  # structured output truncates JSON). It did NOT fix our 8 / ~85 stochastic
+  # tier2 truncations — those happen at ~100 tokens generated, nowhere near
+  # the cap, so they're an unrelated xgrammar/OMLX premature-EOS issue. Cap
+  # removal also reintroduced the runaway hang. Keep the cap. Stochastic
+  # truncations are handled by json5 fallback + per-item error isolation.
+  local_structured:
+    provider: omlx
+    model_id: Qwen3.5-122B-A10B-mlx-oQ4
+    temperature: 0.2
+    top_p: 0.85
+    max_tokens: 4096
+    # Read-timeout guard, complementary to the max_tokens cap above. The cap
+    # bounds runaway *generation*; this bounds a stalled *connection* (OMLX
+    # occasionally returns 200 then never finishes the body — e.g. after a 507
+    # resource crunch). Without it the openai SDK default is 600s, long enough
+    # to freeze a whole batch behind one item. 180s clears <2000-token
+    # structured outputs with headroom; a real stall trips ReadTimeout, which
+    # runner.py's per-item except catches as tier2_error and moves on.
+    timeout: 180
+    fallback_profile: deepseek_structured
+
+  claude_smart:
+    provider: claude
+    model_id: claude-sonnet-4-5
+    temperature: 0.4
+
+  claude_fast:
+    provider: claude
+    model_id: claude-haiku-4-5
+    temperature: 0.4
+
+  deepseek_smart:
+    provider: deepseek
+    model_id: deepseek-v4-flash
+    temperature: 0.4
+    top_p: 0.85
+
+  # Tight token cap mirrors local_structured — keeps structured-output agents
+  # from hanging if json_schema constrained decoding loops.
+  deepseek_structured:
+    provider: deepseek
+    model_id: deepseek-v4-flash
+    temperature: 0.2
+    top_p: 0.85
+    max_tokens: 4096
+
+  # Optional cloud fallbacks — uncomment when keys are configured.
+  # gpt:
+  #   provider: openai
+  #   model_id: gpt-5.2
+  #   temperature: 0.4
+
+# Embedder profiles for dedup / similarity. Uses the local OMLX
+# OpenAI-compatible `/v1/embeddings` endpoint (see paca.core.models.get_embedder).
+# Qwen3-Embedding-0.6B-8bit emits 1024-dim vectors which match the
+# radar_pushed_topics.embedding column. Swapping to a different-dim model
+# REQUIRES a column migration.
+embedders:
+  local:
+    provider: omlx
+    model_id: Qwen3-Embedding-0.6B-8bit
+    dim: 1024
