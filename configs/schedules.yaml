@@ -1,0 +1,32 @@
+# launchd-managed scheduled jobs. ``paca schedule install`` will read this and
+# generate one plist per enabled job under ~/Library/LaunchAgents/ — that
+# command is NOT implemented yet (pending the launchd-scheduler change), so
+# every cadence below is a declaration; today jobs run via
+# ``paca schedule run-now <name>`` / module CLIs / dashboard only.
+#
+# ``when`` maps to launchd's StartCalendarInterval. Missing keys mean "any".
+# launchd's default behavior already covers sleep/wake catch-up, so no extra
+# config needed for the "fire on next wake" requirement.
+jobs:
+  - name: weekly_knowledge_sync
+    workflow: knowledge_ingest
+    when: { weekday: 1, hour: 9, minute: 0 }
+    inputs: {}
+    notify: none
+    enabled: true
+  - name: info_radar_pull
+    workflow: info_radar_pull
+    when: { minute: 0 }   # top of every hour
+    inputs: {}
+    notify: none
+    enabled: true  # info-radar verified end-to-end; launchd install pending the launchd-scheduler change
+  - name: info_radar_analysis
+    workflow: info_radar_analysis
+    # Cadence is operator-configurable and NOT a contract — `seen_at` plus
+    # UNIQUE(radar_item_id) make the workflow idempotent at any frequency.
+    # Default: late afternoon, after the day's hourly collector pulls. Add a
+    # second entry (e.g. when: { hour: 10, minute: 0 }) for more frequent runs.
+    when: { hour: 18, minute: 0 }
+    inputs: {}
+    notify: none
+    enabled: true
