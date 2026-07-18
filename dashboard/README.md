@@ -1,8 +1,7 @@
 # paca dashboard
 
-Local Next.js 15 app — the operator's view into `radar`, `knowledge`, the
-`content` studio, `smart-money` disclosures, goals, and Folo subscriptions.
-Single-user, desktop-only —
+Local Next.js 15 app — the operator's view into `radar`, `knowledge`, goals,
+and Folo subscriptions. Single-user, desktop-only —
 no auth, no mobile. Cross-module conventions live in
 [docs/modules/dashboard.md](../docs/modules/dashboard.md).
 
@@ -50,9 +49,8 @@ to AgentOS.
 | --- | --- |
 | Browsing `/radar`, clicking Ingest / Pull+Analyze | ❌ no |
 | Searching `/knowledge`, clicking Re-index | ❌ no |
-| Chatting with `paca` in Discord DMs | ✅ yes |
-| Running `launchd`-scheduled workflows (`daily_portfolio_brief`, …) | ✅ yes (writes agno session tables) |
-| Debugging new agents / teams / workflows | ✅ yes (or use `paca run-agent`) |
+| Running `launchd`-scheduled workflows (`info_radar_pull`, `info_radar_analysis`, `weekly_knowledge_sync`) | ✅ yes (writes agno session tables) |
+| Debugging new agents / workflows | ✅ yes (or use `paca run-agent`) |
 
 `NEXT_PUBLIC_AGENT_OS_URL` is pre-wired (default `http://localhost:7777`) for
 the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
@@ -61,7 +59,7 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 
 | Name | Default | Used by |
 | --- | --- | --- |
-| `PACA_WIKI_DIR` | `/Users/digital-paca/Projects/digitalpaca-wiki` | `/knowledge` (tree + re-index) |
+| `PACA_WIKI_DIR` | (none — required) | `/knowledge` (tree + re-index) |
 | `NEXT_PUBLIC_AGENT_OS_URL` | `http://localhost:7777` | Browser-side AgentOS calls (none yet) |
 | `DATABASE_URL` | (Postgres URL) | `dashboard-radar` (direct DB reads) |
 | `PACA_DATABASE_URL` | `DATABASE_URL` | Optional dashboard-specific Postgres URL |
@@ -72,10 +70,11 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 ## Visual design lives in `dashboard/design/`
 
 The operator commits HTML / JSX / CSS reference mocks under
-[`dashboard/design/`](./design/). Implementations of every dashboard page
-**follow those mocks** — colors, typography, layout, motion all come from the
-committed reference, not inventive guesswork. If a referenced mock is missing
-when work starts on a downstream change, the implementer pauses and asks.
+`dashboard/design/` when new pages are designed. Implementations of every
+dashboard page **follow those mocks** — colors, typography, layout, motion all
+come from the committed reference, not inventive guesswork. If a referenced
+mock is missing when work starts on a downstream change, the implementer
+pauses and asks.
 
 The design's token system (`styles.css`, `pages.css`) is ported as-is into
 [`app/globals.css`](./app/globals.css); the design's React component file
@@ -134,7 +133,7 @@ inside the same filtered, day-scoped list.
 `uv run paca info-radar analyze` detached. Pull failures surface in the toast;
 analyze failures land in the dashboard action log and the source of truth is the
 Postgres state after refresh. The dashboard also writes
-`~/.intelligent-digitalpaca/radar-state.json` so zero-result clicks and
+`~/.next-signal/radar-state.json` so zero-result clicks and
 `Last feed` views reflect the operator's most recent click rather than stale DB
 clusters. Per-item `Ingest` creates a tracked knowledge ingest job after
 re-reading the item by id; Folo rows are staged as full-text HTML first, while
@@ -161,5 +160,5 @@ adds, edits, deletes, or otherwise mutates Folo subscriptions.
 ## Build-script approval
 
 pnpm 11 requires explicit approval for packages that run install scripts.
-Both `sharp` (Next.js image optimization) and `unrs-resolver` (Next.js
+`esbuild`, `sharp` (Next.js image optimization), and `unrs-resolver` (Next.js
 internals) are whitelisted in [`pnpm-workspace.yaml`](./pnpm-workspace.yaml).
