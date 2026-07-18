@@ -97,4 +97,4 @@ services:
 
 volumes:
   pgdata:      # Postgres data
-  pstate:      # PACA_STATE_DIR (host default ~/.intelligent-digitalpaca) + gbrain PGLite
+  pstate:      # PACA_STATE_DIR (host default ~/.next-signal) + gbrain PGLite
