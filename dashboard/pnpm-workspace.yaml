@@ -1,0 +1,6 @@
+# pnpm 11+ requires explicit approval for packages that run build scripts.
+# These are standard transitive deps of Next.js / its tooling / test runner.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
