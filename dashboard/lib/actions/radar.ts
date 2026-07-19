@@ -42,7 +42,7 @@ const execFileAsync = promisify(execFile);
 async function spawnAnalyzeTracked(): Promise<void> {
   const logPath = path.join(
     os.homedir(),
-    ".intelligent-digitalpaca",
+    ".next-signal",
     "dashboard-actions.log",
   );
   await mkdir(path.dirname(logPath), { recursive: true });

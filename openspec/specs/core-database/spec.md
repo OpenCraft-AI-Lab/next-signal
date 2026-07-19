@@ -4,7 +4,7 @@ Postgres + pgvector for both agno-managed state and our own business tables. Two
 
 ## Purpose
 
-agno owns sessions, memory, knowledge, and traces. We own scheduling/portfolio/news bookkeeping. Mixing the two paths leads to contention and shape mismatches, so they must stay separated.
+agno owns sessions, memory, knowledge, and traces. We own the info-radar business tables. Mixing the two paths leads to contention and shape mismatches, so they must stay separated.
 ## Requirements
 ### Requirement: agno tables go through the singleton `PostgresDb`
 
@@ -17,12 +17,7 @@ Code that touches agno-managed tables (sessions, memory, knowledge, traces) SHAL
 
 ### Requirement: Business tables use raw psycopg connections
 
-Code that touches our business tables (`job_runs`, `scheduled_jobs`, `portfolio_tickers`, `seen_news`, `radar_items`) SHALL use short-lived `psycopg.connect(database_url())` connections. SQLAlchemy or async engines are not used for these tables.
-
-#### Scenario: scheduler writes a job_run
-
-- **WHEN** the scheduler dispatcher records a run
-- **THEN** it opens a synchronous psycopg connection, writes one row, and closes it
+Code that touches our business tables (`radar_items`, `radar_analyses`, `radar_pushed_topics`) SHALL use short-lived `psycopg.connect(database_url())` connections. SQLAlchemy or async engines are not used for these tables.
 
 #### Scenario: info-radar collector upserts radar_items
 

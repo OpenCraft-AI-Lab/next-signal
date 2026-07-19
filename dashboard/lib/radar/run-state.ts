@@ -17,7 +17,7 @@ import path from "node:path";
  */
 const STATE_PATH = path.join(
   os.homedir(),
-  ".intelligent-digitalpaca",
+  ".next-signal",
   "radar-state.json",
 );
 

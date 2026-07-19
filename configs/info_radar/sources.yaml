@@ -1,5 +1,5 @@
-# info-radar source descriptors. Each entry invokes a CLI on the schedule
-# defined in configs/schedules.yaml (or via `paca info-radar pull`), parses
+# info-radar source descriptors. Each entry invokes a CLI (via
+# `paca info-radar pull`), parses
 # stdout through the named parser, and upserts into the `radar_items` Postgres
 # table with (source, source_id) dedup.
 #

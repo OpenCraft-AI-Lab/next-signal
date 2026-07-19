@@ -14,7 +14,7 @@ import { REPO_ROOT } from "@/lib/paths";
  * Contract:
  * - Always cwd at REPO_ROOT.
  * - Always detached + stdio piped to a daily log file under
- *   ~/.intelligent-digitalpaca/dashboard-actions.log so the operator can
+ *   ~/.next-signal/dashboard-actions.log so the operator can
  *   `tail -f` to debug what the dashboard kicked off.
  * - Returns immediately. Result message is always "<verb> started" on
  *   success — NEVER "completed", because the subprocess outlives this
@@ -35,7 +35,7 @@ export async function spawnPacaDetached(
 ): Promise<{ ok: boolean; message: string }> {
   const verb = opts?.verb ?? argv.slice(0, 3).join(" ");
   const logTag = opts?.logTag ?? argv[0] ?? "paca";
-  const logPath = path.join(os.homedir(), ".intelligent-digitalpaca", "dashboard-actions.log");
+  const logPath = path.join(os.homedir(), ".next-signal", "dashboard-actions.log");
   await mkdir(path.dirname(logPath), { recursive: true });
   const handle = await open(logPath, "a");
   const ts = new Date().toISOString();

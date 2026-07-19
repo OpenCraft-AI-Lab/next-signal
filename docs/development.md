@@ -144,7 +144,7 @@ workflow 或 agent 复用的动作提升到 `tools/` 或 `integrations/`。
 - `expose.agent_os: true` → `paca.os_app` 通过 centralized loader 注册到 AgentOS。
 - `expose.tool.enabled: true` → `paca.orchestrator.workflow_tools` 注册一个 `WorkflowTools`
   toolkit，agent YAML 用这个 tool 名。
-- `extra.run_now` → CLI/scheduler 手动触发时调用的 function。不是每个 workflow 都必须支持。
+- `extra.run_now` → `paca run-workflow <name>` 手动触发时调用的 function。不是每个 workflow 都必须支持。
 
 不要为同一个 workflow 再写一份 `tools/<domain>/workflow_tools.py` wrapper。
 

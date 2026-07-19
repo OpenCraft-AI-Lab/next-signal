@@ -16,7 +16,7 @@ next-signal（Python 包名 `paca`）是一个本地优先的 info-radar + knowl
 - **workflows** —— 集中编排 agent / tool / stage，放在 `src/paca/workflows/`。
 
 一个 AgentOS 进程承载所有 runnable 和工具能力（`paca serve`，:7777，目前没有内建的
-聊天入口挂在它上面）。CLI / launchd 通过 centralized runnable loader 调同一组
+聊天入口挂在它上面）。CLI 通过 centralized runnable loader 调同一组
 workflow / agent；Dashboard 是独立 Next.js 进程，目前读 Postgres 或启动一次性
 `paca` CLI 子进程，不依赖 `paca serve` 在线。
 
@@ -27,7 +27,7 @@ paca AgentOS FastAPI (:7777)
   - specialist agents / workflows
   - tool registry
 
-CLI / launchd ---------------> runnable loader / workflow run_now
+CLI -------------------------> runnable loader / workflow run_now
 Dashboard (:3000 Next.js) ---> Postgres reads + one-shot `paca` CLI children
 
 shared lower layers:
@@ -45,7 +45,7 @@ src/paca/
   workflows/         集中 workflow factory；私有 stage 放 workflows/stages/<name>/
   teams/             team factory（复杂 team 才需要 Python；当前无 shipped team）
   interfaces/        cli 入口
-  scheduler/ api/    launchd 调度 / 自定义 FastAPI 路由（规划中，当前为空包）
+  api/               自定义 FastAPI 路由（规划中，当前为空包）
   os_app.py          AgentOS 运行时装配入口
   registry.py        工具面装配器（注册并解析所有工具）
   tools/             agent-facing tools，按领域分组：knowledge/
@@ -65,7 +65,7 @@ src/paca/
 依赖严格向下，不允许反向 import：
 
 ```text
-interfaces / scheduler / api
+interfaces / api
   -> orchestrator
   -> workflows / teams / agents
   -> tools
@@ -87,13 +87,12 @@ interfaces / scheduler / api
 | 决策 | 原因 |
 |---|---|
 | **agno 框架** | AgentOS 自带 FastAPI / tracing / sessions / memory，不自造框架 |
-| **单一 AgentOS 进程** | CLI / launchd / Dashboard（间接）共用同一组件定义；trace / sessions 单一存储模型 |
+| **单一 AgentOS 进程** | CLI / Dashboard（间接）共用同一组件定义；trace / sessions 单一存储模型 |
 | **Postgres + pgvector** | agno 原生支持；pgvector 省掉第二个向量库；单一备份策略 |
 | **YAML 定义行为** | Dashboard 可编辑 + 热加载；diff 可读；Python 只定义"形状" |
 | **本地模型优先** | 隐私 + 成本；云模型作为显式 fallback，不是默认 |
 | **显式工具注册表** | LLM 可见的工具面 grep 得到；不做动态扫描（隐式暴露是安全风险） |
 | **GBrain 外挂做长期知识库** | markdown-first + hybrid search + 自动图谱；不自建 |
-| **launchd 调度** | 比进程内循环更扛登出 / 睡眠唤醒；唤醒后补跑漏掉的任务 |
 | **telemetry 关闭** | 本地优先，不发数据出门（`AgentOS` 和直接构造 `Agent` 都要关） |
 
 ## 非目标
@@ -109,11 +108,11 @@ interfaces / scheduler / api
 4. 新 workflow：`configs/workflows/<name>.yaml` 声明，复杂的在 `src/paca/workflows/<name>.py` 实现 factory。
 5. 新 team：`configs/teams/<name>.yaml` 声明；复杂 routing 才加 `src/paca/teams/<name>.py`。
 6. 新 collector（周期性 CLI 数据搬运，无 LLM）：实现在 `src/paca/collectors/<name>/`，
-   scheduler 接入靠 `src/paca/workflows/<name>.py` 薄壳（YAML 设 `expose.agent_os: false`，
-   `extra.run_now` 指向 collector 入口）。
+   手动 run 接入靠 `src/paca/workflows/<name>.py` 薄壳（YAML 设 `expose.agent_os: false`，
+   `extra.run_now` 指向 collector 入口，由 `paca run-workflow <name>` 调用）。
 7. collector 之上的 analysis workflow（LLM-driven 消费 collector 的业务表）：
    `src/paca/workflows/<name>_analysis/` 作为 package 实现，stages 拆到
-   `stages/`；agent + prompt 用标准 YAML/markdown 路径；scheduler 接入同样靠
+   `stages/`；agent + prompt 用标准 YAML/markdown 路径；手动 run 接入同样靠
    thin shell `extra.run_now`；`seen_at` 列归 analysis 写，collector 不碰。
    currently shipped: `info_radar_analysis`。
 

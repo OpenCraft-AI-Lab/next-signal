@@ -14,8 +14,8 @@ The loader SHALL build each agent from `configs/agents/<name>.yaml`, where the f
 
 #### Scenario: agent built from name
 
-- **WHEN** `paca.agents.loader.build_from_name("portfolio_news")` is called
-- **THEN** the loader reads `configs/agents/portfolio_news.yaml`, resolves the model profile, attaches the listed tools, and returns an agno `Agent`
+- **WHEN** `paca.agents.loader.build_from_name("knowledge_classifier")` is called
+- **THEN** the loader reads `configs/agents/knowledge_classifier.yaml`, resolves the model profile, attaches the listed tools, and returns an agno `Agent`
 
 #### Scenario: agent instructions use owner path
 

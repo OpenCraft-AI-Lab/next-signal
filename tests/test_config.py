@@ -48,12 +48,6 @@ def test_knowledge_frontmatter_loads_as_db_free_agent() -> None:
     assert "Return JSON only" in cfg.resolved_instructions()
 
 
-def test_schedules_yaml_loads() -> None:
-    cfg = config.load_schedules()
-    # File can be empty of jobs but must parse.
-    assert isinstance(cfg.jobs, list)
-
-
 def test_workflow_yaml_loads_with_exposure() -> None:
     cfg = config.load_workflow("knowledge_ingest")
     assert cfg.name == "knowledge_ingest"

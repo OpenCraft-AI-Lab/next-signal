@@ -26,7 +26,7 @@ uv run paca dashboard --start     # `pnpm start` (requires prior --build)
 ```
 
 It's a thin wrapper over `pnpm`: `os.execvp` replaces the python process so
-Ctrl-C / launchd SIGTERM hit Next directly with no middleman. Native pnpm
+Ctrl-C / SIGTERM hit Next directly with no middleman. Native pnpm
 commands still work:
 
 ```bash
@@ -49,7 +49,7 @@ to AgentOS.
 | --- | --- |
 | Browsing `/radar`, clicking Ingest / Pull+Analyze | ❌ no |
 | Searching `/knowledge`, clicking Re-index | ❌ no |
-| Running `launchd`-scheduled workflows (`info_radar_pull`, `info_radar_analysis`, `weekly_knowledge_sync`) | ✅ yes (writes agno session tables) |
+| Running workflows manually (`paca info-radar pull/analyze`, `paca run-workflow knowledge_ingest`) | ❌ no (CLI child, writes Postgres directly) |
 | Debugging new agents / workflows | ✅ yes (or use `paca run-agent`) |
 
 `NEXT_PUBLIC_AGENT_OS_URL` is pre-wired (default `http://localhost:7777`) for

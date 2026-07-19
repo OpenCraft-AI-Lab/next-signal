@@ -68,7 +68,7 @@ uv run paca knowledge ingest <url|staged-file>
 uv run paca knowledge ingest <url> --category knowledge/ai-ml   # 指定落点文件夹（跳过自动分类）
 uv run paca knowledge ingest <url> --progress                   # 每个 pipeline step 一行 JSON 事件 + 末行结果 JSON
 uv run paca knowledge gbrain-search "query"
-uv run paca schedule run-now weekly_knowledge_sync   # re-ingest 变更文件 + 刷新所有 Related 区块
+uv run paca run-workflow knowledge_ingest            # re-ingest 变更文件 + 刷新所有 Related 区块
 ```
 
 `--category` 必须是 `configs/knowledge_taxonomy.yaml` 里的某个 path，非法值在 fetch 之前
@@ -81,7 +81,7 @@ loud fail。`--progress` 给 dashboard 的入库进度面板用（见下）。
 - GBrain ingest 失败不能丢 artifact：clean wiki / raw 文件保留在磁盘，workflow loud fail。
   不把这次运行标成成功；修好 GBrain 后靠 direct ingest / weekly sync 补索引。
 - re-ingest manifest 只在成功索引后才前进，否则后续不重试、KB search 会 stale。
-- 直接 ingest 和 scheduled re-ingest 必须从 wiki-relative path 推出同一个 GBrain-safe slug；
+- 直接 ingest 和 re-ingest 必须从 wiki-relative path 推出同一个 GBrain-safe slug；
   非 ASCII 路径要补稳定 hash 后缀避免 GBrain page 撞车。
 - wiki 文件名由标题派生，frontmatter 记 `digest`（来源 hash）作为同源标识：同源 re-ingest
   原地覆盖（幂等更新）；同名标题但不同来源时新文件追加 `-<digest[:8]>` 后缀，绝不静默

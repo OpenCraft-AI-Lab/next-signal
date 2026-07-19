@@ -135,12 +135,12 @@ The dashboard SHALL render `/design` as a living style guide reflecting the desi
 
 ### Requirement: Shared `paca` subprocess launcher
 
-Every dashboard server action that runs `uv run paca ...` SHALL go through `dashboard/lib/actions/spawn-paca.ts::spawnPacaDetached`. The helper SHALL spawn detached with `unref()`, pipe stdio to `~/.intelligent-digitalpaca/dashboard-actions.log` (creating the directory if missing), and return a result whose success message is `"<verb> started"` (never `"completed"`).
+Every dashboard server action that runs `uv run paca ...` SHALL go through `dashboard/lib/actions/spawn-paca.ts::spawnPacaDetached`. The helper SHALL spawn detached with `unref()`, pipe stdio to `~/.next-signal/dashboard-actions.log` (creating the directory if missing), and return a result whose success message is `"<verb> started"` (never `"completed"`).
 
 #### Scenario: detached + logged
 
-- **WHEN** any caller invokes `spawnPacaDetached(["schedule", "run-now", "weekly_knowledge_sync"])`
-- **THEN** the action returns within the request lifecycle, the subprocess outlives the request, and a line tagged with the call's `logTag` (or default tag) is appended to `~/.intelligent-digitalpaca/dashboard-actions.log`
+- **WHEN** any caller invokes `spawnPacaDetached(["run-workflow", "knowledge_ingest"])`
+- **THEN** the action returns within the request lifecycle, the subprocess outlives the request, and a line tagged with the call's `logTag` (or default tag) is appended to `~/.next-signal/dashboard-actions.log`
 
 #### Scenario: "started" semantics enforced
 
@@ -182,7 +182,7 @@ The dashboard SHALL render `gbrain` search snippets through a component that tre
 
 ### Requirement: Knowledge page (redesigned)
 
-The dashboard SHALL render `/knowledge` matching the design at `dashboard/design/pages-other.jsx::KnowledgePage`: a left sidebar wiki tree (`PACA_WIKI_DIR`-driven, categorized, collapsible), a search input wired to `gbrain search`, a result-cards column with snippet highlights, and a preview pane showing the active document's frontmatter / tags / body. The `Re-index` action SHALL still invoke `uv run paca schedule run-now weekly_knowledge_sync` from the repo root.
+The dashboard SHALL render `/knowledge` matching the design at `dashboard/design/pages-other.jsx::KnowledgePage`: a left sidebar wiki tree (`PACA_WIKI_DIR`-driven, categorized, collapsible), a search input wired to `gbrain search`, a result-cards column with snippet highlights, and a preview pane showing the active document's frontmatter / tags / body. The `Re-index` action SHALL still invoke `uv run paca run-workflow knowledge_ingest` from the repo root.
 
 #### Scenario: search still hits gbrain
 
@@ -192,7 +192,7 @@ The dashboard SHALL render `/knowledge` matching the design at `dashboard/design
 #### Scenario: re-index still works
 
 - **WHEN** the operator clicks `Re-index`
-- **THEN** the same `paca schedule run-now weekly_knowledge_sync` subprocess runs, with the same cwd, and a `sonner` toast confirms it
+- **THEN** the same `paca run-workflow knowledge_ingest` subprocess runs, with the same cwd, and a `sonner` toast confirms it
 
 #### Scenario: wiki tree reflects PACA_WIKI_DIR
 

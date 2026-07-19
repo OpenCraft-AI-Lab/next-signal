@@ -246,7 +246,7 @@ def _headers(*, force_anonymous: bool = False) -> dict[str, str]:
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "intelligent-digitalpaca-knowledge-ingest",
+        "User-Agent": "next-signal-knowledge-ingest",
     }
     if force_anonymous or _AUTH_DISABLED_THIS_SESSION:
         return headers

@@ -2,8 +2,7 @@
 and create the custom tables that AgentOS doesn't manage for us.
 
 agno's PostgresDb auto-provisions sessions / memory / knowledge / traces on
-first use, so we don't touch those here — only the things specific to this
-framework: scheduling state and per-tool persistent state.
+first use, so we don't touch those here — only the info-radar business tables.
 
 Usage::
 
@@ -21,38 +20,6 @@ from psycopg import sql
 
 
 CREATE_EXTENSION = "CREATE EXTENSION IF NOT EXISTS vector"
-
-CREATE_JOB_RUNS = """
-CREATE TABLE IF NOT EXISTS job_runs (
-    id              BIGSERIAL PRIMARY KEY,
-    job_name        TEXT NOT NULL,
-    workflow_name   TEXT NOT NULL,
-    started_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    finished_at     TIMESTAMPTZ,
-    status          TEXT NOT NULL DEFAULT 'running',  -- running | success | failed
-    exit_code       INTEGER,
-    trace_id        TEXT,
-    output          TEXT,
-    error           TEXT,
-    log_path        TEXT,
-    inputs_json     JSONB
-);
-CREATE INDEX IF NOT EXISTS job_runs_job_name_idx ON job_runs (job_name, started_at DESC);
-CREATE INDEX IF NOT EXISTS job_runs_status_idx ON job_runs (status) WHERE status = 'running';
-"""
-
-CREATE_SCHEDULED_JOBS = """
-CREATE TABLE IF NOT EXISTS scheduled_jobs (
-    name            TEXT PRIMARY KEY,
-    workflow_name   TEXT NOT NULL,
-    when_spec       JSONB NOT NULL,
-    inputs_json     JSONB NOT NULL DEFAULT '{}'::jsonb,
-    notify          TEXT NOT NULL DEFAULT 'none',
-    enabled         BOOLEAN NOT NULL DEFAULT true,
-    plist_path      TEXT,
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-"""
 
 # paca.collectors.info_radar state.
 CREATE_RADAR_ITEMS = """
@@ -135,8 +102,6 @@ def main() -> int:
     with psycopg.connect(url, autocommit=True) as conn:
         with conn.cursor() as cur:
             cur.execute(CREATE_EXTENSION)
-            cur.execute(CREATE_JOB_RUNS)
-            cur.execute(CREATE_SCHEDULED_JOBS)
             cur.execute(CREATE_RADAR_ITEMS)
             cur.execute(CREATE_RADAR_PUSHED_TOPICS)
             cur.execute(CREATE_RADAR_ANALYSES)

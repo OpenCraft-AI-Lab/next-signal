@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Code review for the intelligent-digitalpaca (paca) project. Two modes — light (review the current diff and flag docs that need syncing) and full (audit the whole project for bugs, convention violations, and docs/code drift). Use this skill whenever the user asks to review code, review changes, review a diff / branch / PR, check work before committing or merging, audit the project, verify the code follows project conventions, or check whether docs and code are still consistent — even if they do not say the word "review" explicitly.
+description: Code review for the next-signal (paca) project. Two modes — light (review the current diff and flag docs that need syncing) and full (audit the whole project for bugs, convention violations, and docs/code drift). Use this skill whenever the user asks to review code, review changes, review a diff / branch / PR, check work before committing or merging, audit the project, verify the code follows project conventions, or check whether docs and code are still consistent — even if they do not say the word "review" explicitly.
 license: MIT
 metadata:
   author: paca
@@ -9,7 +9,7 @@ metadata:
 
 # Code review (paca)
 
-Review code against `intelligent-digitalpaca`'s own conventions, not generic
+Review code against `next-signal`'s own conventions, not generic
 best practice. The value of this skill is that it knows *this* project: the
 layering rules, the config-driven design, and which docs must move when code
 moves. A review that just says "looks fine" is a failed review — find the real
@@ -73,7 +73,7 @@ gets a focused remit and a clean context window, then synthesize yourself.
 Spawn these in one batch (use `Explore` or `general-purpose`):
 
 - **Architecture agent** — verify the dependency direction holds (`interfaces /
-  scheduler / api → orchestrator / workflows / teams / agents → tools →
+  api → orchestrator / workflows / teams / agents → tools →
   integrations → core`, no reverse imports), that every module sits in the
   right layer, and that `tools` vs `integrations` vs `core` placement follows
   responsibility, not call-convenience.
@@ -219,12 +219,9 @@ SQL, or path handling elsewhere — against:
 - agno-managed tables (sessions / memory / knowledge / traces) go through the
   `paca.core.db.get_db()` singleton — never a hand-rolled `PostgresDb(...)`,
   and never redefine tables agno provisions itself.
-- Business tables (`job_runs`, `scheduled_jobs`, `portfolio_tickers`,
-  `seen_news`) use short-lived `psycopg.connect(database_url())`. If their shape
-  changes, the DDL in `scripts/bootstrap_db.py` changes with it.
-- The financial-news path defaults to local files (`portfolio.yaml` /
-  `news_cache.json` / `signals.md`), not Postgres — a change must not quietly
-  route it back to the DB.
+- Business tables (`radar_items`, `radar_analyses`, `radar_pushed_topics`) use
+  short-lived `psycopg.connect(database_url())`. If their shape changes, the DDL
+  in `scripts/bootstrap_db.py` changes with it.
 
 ### Encoding & i18n
 - This project ingests Chinese content (WeChat, Bilibili) and writes a wiki

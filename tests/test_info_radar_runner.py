@@ -163,7 +163,7 @@ def test_disabled_source_skipped(monkeypatch, fake_run, fake_store):
     assert runner.run_all() == []
 
 
-# ---- scheduler-facing thin shell (paca.workflows.info_radar_pull) -----------
+# ---- manual-run thin shell (paca.workflows.info_radar_pull) -----------------
 
 
 def test_pull_shell_summarizes_results(monkeypatch):
