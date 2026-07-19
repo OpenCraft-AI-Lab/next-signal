@@ -4,8 +4,8 @@ enabled: true
 description: Two-tier LLM analysis of unseen radar_items, with goal-conditioned filtering and pgvector + LLM-judge dedup before any push.
 factory: paca.workflows.info_radar_analysis:factory
 expose:
-  # Not an agno/AgentOS workflow — no LLM exposure to the dashboard UI; scheduler
-  # and CLI invoke via extra.run_now below. factory above raises if AgentOS ever
+  # Not an agno/AgentOS workflow — no LLM exposure to the dashboard UI; the CLI
+  # invokes via extra.run_now below. factory above raises if AgentOS ever
   # tries to bind it.
   agent_os: false
   tool:

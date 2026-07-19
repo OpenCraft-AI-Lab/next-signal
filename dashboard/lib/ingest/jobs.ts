@@ -32,7 +32,7 @@ export { INGEST_STEPS } from "@/lib/ingest/types";
 
 const MAX_FINISHED = 20;
 const FINISHED_TTL_MS = 5 * 60_000;
-const LOG_PATH = path.join(os.homedir(), ".intelligent-digitalpaca", "dashboard-actions.log");
+const LOG_PATH = path.join(os.homedir(), ".next-signal", "dashboard-actions.log");
 
 type Registry = { jobs: Map<string, IngestJob>; emitter: EventEmitter };
 

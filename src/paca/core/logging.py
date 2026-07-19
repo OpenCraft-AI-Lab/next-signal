@@ -1,4 +1,4 @@
-"""Structured logging via structlog. Console-pretty in dev, JSON for launchd runs."""
+"""Structured logging via structlog. Console-pretty in dev, JSON for non-TTY runs."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ def configure(json_logs: bool | None = None, level: str = "INFO") -> None:
     """Configure structlog. Call once at process startup.
 
     json_logs: force JSON output. Defaults to True when stdout is not a TTY
-    (so launchd / dispatcher runs produce parseable logs).
+    (so dashboard-spawned / redirected CLI runs produce parseable logs).
     """
     if json_logs is None:
         json_logs = not sys.stdout.isatty()

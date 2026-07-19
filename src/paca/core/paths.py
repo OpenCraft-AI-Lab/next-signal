@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 # Project root — resolved from this file's location, not CWD, so it works
-# regardless of where commands are invoked from (CLI, launchd, tests).
+# regardless of where commands are invoked from (CLI, dashboard child, tests).
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 CONFIGS_DIR = PROJECT_ROOT / "configs"

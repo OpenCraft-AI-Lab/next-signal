@@ -174,7 +174,7 @@ function agentTmpDir(): string {
     return process.env.PACA_AGENT_TMP_DIR.trim();
   const stateRoot =
     process.env.PACA_STATE_DIR?.trim() ||
-    path.join(os.homedir(), ".intelligent-digitalpaca");
+    path.join(os.homedir(), ".next-signal");
   return path.join(stateRoot, "agent-tmp");
 }
 
