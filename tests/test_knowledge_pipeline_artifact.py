@@ -43,8 +43,8 @@ def test_to_jsonable_round_trips_through_json() -> None:
         ingest_result={"ok": True},
     )
     payload = a.to_jsonable()
-    assert payload["raw_path"] == "/tmp/raw"
-    assert payload["clean_path"] == "/tmp/clean.md"
+    assert payload["raw_path"] == str(Path("/tmp/raw"))
+    assert payload["clean_path"] == str(Path("/tmp/clean.md"))
     assert payload["artifact_edit"]["summary"] == "s"
     text = json.dumps(payload)
     assert "# hi" in text
