@@ -1,10 +1,11 @@
-"""Thin scheduler-facing shell for the info-radar collector.
+"""Thin workflow shell for the info-radar collector.
 
-This module exists only so the existing scheduler dispatcher (which keys off
-workflow names) can invoke the collector. It contains no LLM logic, no agno
-``Workflow`` machinery, and is never exposed to AgentOS — the YAML sets
-``expose.agent_os: false`` and ``extra.run_now`` to ``:run`` below, which is
-all that ``paca schedule run-now info_radar_pull`` calls.
+This module exists only so a manual run (keyed off the workflow name) can
+invoke the collector. It contains no LLM logic, no agno ``Workflow`` machinery,
+and is never exposed to AgentOS — the YAML sets ``expose.agent_os: false`` and
+``extra.run_now`` to ``:run`` below, which is all that
+``paca run-workflow info_radar_pull`` calls. Day-to-day pulls run through the
+dedicated ``paca info-radar pull`` command instead.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from typing import Any, NoReturn
 
 
 def run(**inputs: Any) -> dict[str, Any]:
-    """Pull every enabled source and return a summary suitable for job_runs."""
+    """Pull every enabled source and return a run summary."""
     from paca.collectors.info_radar.runner import all_failed, run_all
 
     results = run_all()
@@ -38,5 +39,5 @@ def factory() -> NoReturn:
     """
     raise NotImplementedError(
         "info_radar_pull is not an AgentOS workflow; it is invoked via "
-        "extra.run_now (`paca schedule run-now info_radar_pull` or launchd)."
+        "extra.run_now (`paca run-workflow info_radar_pull`)."
     )

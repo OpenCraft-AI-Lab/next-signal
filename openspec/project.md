@@ -4,14 +4,14 @@
 
 `next-signal` (Python package `paca`) — a local-first info-radar + knowledge
 pipeline on agno 2.6+. One AgentOS process hosts every agent, team, and
-workflow; CLI / Dashboard / launchd all call the same capability surface.
+workflow; CLI and Dashboard call the same capability surface.
 
 ## Shape
 
 Orchestrator chassis + runnable units:
 
 - **Chassis** (`src/paca/core`, `agents`, `orchestrator`, `interfaces`,
-  `scheduler`, `api`, `os_app.py`).
+  `os_app.py`).
 - **Runnables** (`configs/agents`, `configs/workflows`, `configs/teams`) with
   implementations in `src/paca/agents`, `src/paca/workflows`, and `src/paca/teams`.
 - **Capabilities**: agent-facing tools in `src/paca/tools/<domain>/`; provider

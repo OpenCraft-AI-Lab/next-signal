@@ -1,4 +1,4 @@
-"""``paca`` CLI — entrypoint for local debugging, schedule management, and
+"""``paca`` CLI — entrypoint for local debugging, manual workflow runs, and
 quick agent invocation. Subcommands are added incrementally as features land.
 """
 
@@ -12,15 +12,13 @@ import subprocess
 import typer
 from dotenv import load_dotenv
 
-from paca.core.config import ScheduledJob, list_agents, list_teams, list_workflows, load_schedules
+from paca.core.config import list_agents, list_teams, list_workflows
 from paca.core.logging import configure as configure_logging
 from paca.core.paths import PROJECT_ROOT
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
-schedule_app = typer.Typer(help="Manage launchd-scheduled jobs.")
 knowledge_app = typer.Typer(help="Manage knowledge adapters and GBrain.")
 info_radar_app = typer.Typer(help="Pull and sweep the info-radar collector.")
-app.add_typer(schedule_app, name="schedule")
 app.add_typer(knowledge_app, name="knowledge")
 app.add_typer(info_radar_app, name="info-radar")
 
@@ -75,13 +73,6 @@ def _check_gbrain() -> tuple[str, bool, str]:
         return ("GBrain", ok, msg)
     except Exception as e:  # noqa: BLE001
         return ("GBrain", False, f"unhealthy: {e}")
-
-
-def _find_scheduled_job(name: str) -> ScheduledJob:
-    for job in load_schedules().jobs:
-        if job.name == name:
-            return job
-    raise RuntimeError(f"unknown scheduled job: {name}")
 
 
 def _run_workflow_now(workflow: str, inputs: dict | None = None) -> dict:
@@ -142,7 +133,7 @@ def dashboard(
     page actually talks to AgentOS HTTP endpoints (none today).
 
     This subcommand is a thin wrapper over ``pnpm`` so the operator has a
-    single ``paca`` entrypoint and ``launchd`` can target one binary.
+    single ``paca`` entrypoint.
     """
     pnpm = shutil.which("pnpm")
     if not pnpm:
@@ -167,7 +158,7 @@ def dashboard(
         argv = [pnpm, "start", "-p", str(port)]
     else:
         argv = [pnpm, "dev", "-p", str(port)]
-    # exec-style replacement so signals (Ctrl-C, launchd SIGTERM) reach pnpm
+    # exec-style replacement so signals (Ctrl-C, SIGTERM) reach pnpm
     # directly and we don't leak a python middleman on the process tree.
     # `execvp` inherits cwd, so chdir first — pnpm scans cwd for package.json.
     os.chdir(cwd)
@@ -365,30 +356,16 @@ def knowledge_ingest_cmd(
         typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
-@schedule_app.command("install")
-def schedule_install() -> None:
-    """Generate launchd plists from configs/schedules.yaml and load them."""
-    typer.echo("Not yet implemented (Phase 4).")
-    raise typer.Exit(code=1)
+@app.command("run-workflow")
+def run_workflow(name: str = typer.Argument(..., help="Workflow config name.")) -> None:
+    """Run one workflow immediately via its ``extra.run_now`` entry point.
 
-
-@schedule_app.command("list")
-def schedule_list() -> None:
-    """Show installed scheduled jobs and their next run times."""
-    for job in load_schedules().jobs:
-        status = "enabled" if job.enabled else "disabled"
-        typer.echo(f"{job.name}\t{job.workflow}\t{status}")
-
-
-@schedule_app.command("run-now")
-def schedule_run_now(name: str = typer.Argument(..., help="Scheduled job name.")) -> None:
-    """Run one scheduled workflow immediately."""
+    The dashboard uses this to trigger jobs (e.g. the knowledge re-index) from
+    the UI; there is no background scheduler.
+    """
     import json
 
-    job = _find_scheduled_job(name)
-    if not job.enabled:
-        raise RuntimeError(f"scheduled job is disabled: {name}")
-    result = _run_workflow_now(job.workflow, job.inputs)
+    result = _run_workflow_now(name)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 

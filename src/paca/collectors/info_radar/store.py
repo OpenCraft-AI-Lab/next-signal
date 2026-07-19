@@ -1,7 +1,7 @@
 """Postgres I/O for ``radar_items``.
 
-Short-lived ``psycopg`` connections, mirroring the rest of the business-table
-code path (``portfolio_tickers`` / ``seen_news``). 30-day retention is enforced
+Short-lived ``psycopg`` connections, like the rest of the business-table code
+path. 30-day retention is enforced
 both at write time (``sweep_expired``) and at read time (query helpers always
 AND ``fetched_at > now() - interval '30 days'``).
 """

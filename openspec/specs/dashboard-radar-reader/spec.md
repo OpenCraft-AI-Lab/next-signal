@@ -79,7 +79,7 @@ The `/radar` page SHALL render a filter bar between the tracker and the item lis
 #### Scenario: last-feed filter uses the most recent dashboard-triggered run
 
 - **WHEN** `lastFeedOnly=1` is active on today's view
-- **THEN** the tracker and item list are bounded to the latest dashboard-triggered pull/analyze timestamps recorded in `~/.intelligent-digitalpaca/radar-state.json`, falling back to latest DB clusters only when that state is absent
+- **THEN** the tracker and item list are bounded to the latest dashboard-triggered pull/analyze timestamps recorded in `~/.next-signal/radar-state.json`, falling back to latest DB clusters only when that state is absent
 
 ### Requirement: Radar detail page
 

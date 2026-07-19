@@ -14,13 +14,13 @@ Avoid dynamic scanning. Every tool the LLM can call is registered explicitly so 
 
 #### Scenario: agent references a registered tool
 
-- **WHEN** an agent YAML lists `tools: [browser_research]`
-- **THEN** the registry returns the `browser_research` callable; an unregistered name raises a clear error
+- **WHEN** an agent YAML lists `tools: [search_knowledge]`
+- **THEN** the registry returns the `search_knowledge` callable; an unregistered name raises a clear error
 
 #### Scenario: domain tool package registers tools
 
-- **WHEN** an agent YAML lists `tools: [portfolio_list]`
-- **THEN** the registry resolves it through `src/paca/tools/finance/__init__.py::register`
+- **WHEN** an agent YAML lists `tools: [search_knowledge]`
+- **THEN** the registry resolves it through `src/paca/tools/knowledge/__init__.py::register`
 
 #### Scenario: workflow tool exposure registers tools
 

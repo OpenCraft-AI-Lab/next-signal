@@ -11,7 +11,7 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 
 `src/paca/collectors/info_radar/` —— 无 LLM collector，source CLI → `radar_items`。
 `src/paca/integrations/info_radar/` —— Folo / YouTube subtitle 等 provider adapter。
-`src/paca/workflows/info_radar_pull.py` —— collector 的 scheduler thin shell。
+`src/paca/workflows/info_radar_pull.py` —— collector 的 manual-run thin shell。
 `src/paca/workflows/info_radar_analysis/` —— 两层 LLM analysis pipeline。
 
 ## Agents
@@ -69,10 +69,8 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 [`openspec/specs/dashboard-radar-reader/`](../../openspec/specs/dashboard-radar-reader/)。
 
 当前状态：info-radar pull / analysis / dashboard reader / goals editor / Folo subscriptions
-table 已就位。`configs/schedules.yaml` 为 `info_radar_pull` 声明每小时、`info_radar_analysis`
-声明 18:00 的 cadence，但 launchd 安装（`paca schedule install`）尚未实现（pending
-`launchd-scheduler` change）——**当前两者都靠手动触发**：`paca info-radar pull|analyze`、
-`paca schedule run-now <name>` 或 dashboard `/radar` 的 Pull + Analyze。
+table 已就位。没有后台调度——pull 和 analysis **都靠手动触发**：`paca info-radar pull|analyze`、
+`paca run-workflow <name>` 或 dashboard `/radar` 的 Pull + Analyze。
 
 dashboard `/radar` 的 `Pull + Analyze` 现在显示**实时 analyze 进度**：action 在 pull 后把
 未分析条目数（denominator）连同 `analyzeRunning` 标记写进
@@ -81,5 +79,5 @@ dashboard `/radar` 的 `Pull + Analyze` 现在显示**实时 analyze 进度**：
 `GET /api/radar/run`（约 1.5s 轮询，`done = radar_analyses` 自最近 analyze 起的行数）驱动一个
 `done/total` 进度条，并在运行中节流刷新让 `TodayTracker` 计数实时跳动；进度条的 running 状态在
 页面加载时即从 `radar-state.json` 读取，刷新页面也能续上。仅覆盖 dashboard 触发的 run
-（scheduled/CLI run 不显示进度条）；dashboard 重启会让 in-flight 的 `analyzeRunning` 残留到下次
+（CLI run 不显示进度条）；dashboard 重启会让 in-flight 的 `analyzeRunning` 残留到下次
 run（best-effort，子进程与 DB 写入不受影响）。

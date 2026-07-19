@@ -48,8 +48,8 @@ _DONE = object()
 def run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any]:
     """Process unseen radar_items through the two-tier analysis pipeline.
 
-    Returns a counters dict suitable for ``job_runs.output``. Always returns
-    — never raises — except for the one fatal precondition (no goals.yaml).
+    Returns a counters dict summarizing the run. Always returns — never raises
+    — except for the one fatal precondition (no goals.yaml).
     """
     goals = load_goals()  # fail-fast intentional: empty/missing → RuntimeError
 
@@ -72,7 +72,7 @@ def run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any
                 verdicts = _run_chunk(chunk, goals)
                 for item, verdict in zip(chunk, verdicts):
                     work_queue.put((item, verdict))
-        except Exception:  # noqa: BLE001 — stderr-only thread tracebacks vanish under launchd
+        except Exception:  # noqa: BLE001 — stderr-only thread tracebacks vanish in non-TTY runs
             log.exception("tier1_producer_crashed")
         finally:
             # Always signal completion — even on unexpected raise — so the

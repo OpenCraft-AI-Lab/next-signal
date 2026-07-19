@@ -1,8 +1,8 @@
 """Single Postgres + pgvector connection used by AgentOS and our own tables.
 
 The database URL is read from ``DATABASE_URL`` env var. agno's PostgresDb will
-auto-provision its own tables (sessions, memory, knowledge, traces). We add
-``job_runs`` and ``scheduled_jobs`` in ``scripts/bootstrap_db.py``.
+auto-provision its own tables (sessions, memory, knowledge, traces). We add the
+info-radar business tables in ``scripts/bootstrap_db.py``.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def database_url(*, for_sqlalchemy: bool = False) -> str:
     if not url:
         raise RuntimeError(
             "DATABASE_URL not set. Example: "
-            "postgresql://localhost:5432/intelligent_digitalpaca"
+            "postgresql://localhost:5432/next_signal"
         )
     if for_sqlalchemy and url.startswith("postgresql://"):
         return "postgresql+psycopg://" + url[len("postgresql://") :]

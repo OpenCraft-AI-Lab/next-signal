@@ -12,8 +12,8 @@ Pipeline (per item, sequential — no agno Team):
 
 Every per-item failure is isolated: one bad item never aborts the batch.
 
-This module is not an AgentOS workflow — it's invoked by the scheduler /
-CLI via ``extra.run_now`` (see configs/workflows/info_radar_analysis.yaml).
+This module is not an AgentOS workflow — it's invoked by the CLI via
+``extra.run_now`` (see configs/workflows/info_radar_analysis.yaml).
 """
 
 from __future__ import annotations
@@ -41,5 +41,5 @@ def factory():
     """
     raise NotImplementedError(
         "info_radar_analysis is not an AgentOS workflow; it is invoked via "
-        "extra.run_now (`paca info-radar analyze` or `paca schedule run-now`)."
+        "extra.run_now (`paca info-radar analyze` or `paca run-workflow`)."
     )

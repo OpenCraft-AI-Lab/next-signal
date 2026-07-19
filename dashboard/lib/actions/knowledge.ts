@@ -86,16 +86,16 @@ export async function searchKnowledge(query: string): Promise<GbrainHit[]> {
 
 /**
  * Kick off the wiki → GBrain re-ingest. Detached so the toast accurately
- * reflects "started", not "finished". Job name is `weekly_knowledge_sync`
- * (see configs/schedules.yaml — `weekly_knowledge_ingest` is a stale
- * synonym that does NOT exist in the scheduler).
+ * reflects "started", not "finished". Runs the `knowledge_ingest` workflow's
+ * `extra.run_now` entry point (weekly sync: re-embed changed files + refresh
+ * Related blocks).
  */
 export async function reindexKnowledge(
   localeValue?: Locale,
 ): Promise<{ ok: boolean; message: string }> {
   const t = getDictionary(normalizeLocale(localeValue));
   const result = await spawnPacaDetached(
-    ["schedule", "run-now", "weekly_knowledge_sync"],
+    ["run-workflow", "knowledge_ingest"],
     {
       extraEnv: { PACA_WIKI_DIR: wikiRoot() },
       verb: "Re-index",

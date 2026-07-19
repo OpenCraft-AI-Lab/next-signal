@@ -4,7 +4,7 @@ Single-process agno `AgentOS` (FastAPI) that hosts all agents, teams, and workfl
 
 ## Purpose
 
-All user interfaces (Discord, Dashboard, CLI, launchd) talk to one FastAPI app. State (sessions, memory, traces) lives in local Postgres + pgvector.
+All user interfaces (Dashboard, CLI) resolve the same agents, teams, and workflows through one runnable loader. State (sessions, memory, traces) lives in local Postgres + pgvector.
 
 ## Requirements
 

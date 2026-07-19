@@ -37,7 +37,7 @@ The CLI command `paca knowledge ingest <url|file>` SHALL detect the source type 
 
 ### Requirement: Two-tree artifact layout
 
-Clean markdown artifacts SHALL be written under `/Users/digital-paca/Projects/digitalpaca-wiki/<category>/`, and originals under `/Users/digital-paca/Projects/digitalpaca-wiki-raw/`.
+Clean markdown artifacts SHALL be written under `~/Projects/digitalpaca-wiki/<category>/`, and originals under `~/Projects/digitalpaca-wiki-raw/`.
 
 #### Scenario: paths separated by purpose
 
@@ -326,10 +326,10 @@ The workflow SHALL be exposed to agents through `paca.orchestrator.workflow_tool
 
 ### Requirement: Manual run uses configured run function
 
-The CLI schedule runner SHALL use `WorkflowConfig.extra.run_now` for manual workflow execution.
+The `paca run-workflow` CLI command SHALL use `WorkflowConfig.extra.run_now` for manual workflow execution.
 
-#### Scenario: weekly knowledge ingest runs manually
+#### Scenario: knowledge ingest runs manually
 
-- **WHEN** `uv run paca schedule run-now weekly_knowledge_ingest` is invoked
-- **THEN** the CLI resolves `knowledge_ingest` to `paca.workflows.knowledge_ingest:run`
+- **WHEN** `uv run paca run-workflow knowledge_ingest` is invoked
+- **THEN** the CLI resolves `knowledge_ingest` to `paca.workflows.knowledge_ingest:run` and calls it
 

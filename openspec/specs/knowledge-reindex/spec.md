@@ -1,12 +1,12 @@
 # knowledge-reindex
 
 ## Purpose
-Keep the local wiki indexed in GBrain by re-ingesting only changed markdown files on demand or on a weekly schedule.
+Keep the local wiki indexed in GBrain by re-ingesting only changed markdown files on demand.
 
 ## Requirements
 ### Requirement: Ingest workflow walks the wiki tree
 
-`paca.workflows.knowledge_ingest` SHALL walk `/Users/digital-paca/Projects/digitalpaca-wiki/`, compute the diff against the current GBrain index, and call `gbrain_ingest` for new or changed paths.
+`paca.workflows.knowledge_ingest` SHALL walk `~/Projects/digitalpaca-wiki/`, compute the diff against the current GBrain index, and call `gbrain_ingest` for new or changed paths.
 
 #### Scenario: only changed files re-embed
 
@@ -19,11 +19,11 @@ Keep the local wiki indexed in GBrain by re-ingesting only changed markdown file
 - **THEN** the workflow raises a loud failure
 - **AND** the manifest entry for that file is not advanced
 
-### Requirement: Workflow runs on a schedule
+### Requirement: Workflow runs on demand
 
-The workflow SHALL be registered in `configs/schedules.yaml` to run weekly via the launchd scheduler, with a manual `paca schedule run-now` override available.
+The workflow SHALL be triggerable on demand via `paca run-workflow knowledge_ingest`, which the dashboard `Re-index` action invokes. There is no background scheduler.
 
-#### Scenario: weekly cadence
+#### Scenario: dashboard triggers a re-index
 
-- **WHEN** seven days have elapsed since the last successful run
-- **THEN** the launchd dispatcher invokes the workflow on next wake
+- **WHEN** the operator clicks `Re-index` on the dashboard `/knowledge` page
+- **THEN** `paca run-workflow knowledge_ingest` runs the re-embed + Related-refresh sync and a toast confirms it started

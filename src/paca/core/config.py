@@ -3,7 +3,6 @@
 Layout under ``configs/``::
 
     models.yaml              # provider profiles
-    schedules.yaml           # launchd jobs
     agents/<name>.yaml       # one per specialist agent
     workflows/<name>.yaml    # one per workflow
     teams/<name>.yaml        # one per team
@@ -232,43 +231,6 @@ def list_teams() -> list[str]:
 # ---------------------------------------------------------------------------
 # Schedules
 # ---------------------------------------------------------------------------
-
-
-class WhenSpec(BaseModel):
-    """Subset of launchd's StartCalendarInterval keys.
-
-    All fields optional — if ``hour`` and ``minute`` are set but ``weekday``
-    is not, the job runs every day at that time (launchd default).
-    """
-
-    model_config = _STRICT
-
-    minute: int | None = None
-    hour: int | None = None
-    day: int | None = None  # day of month
-    month: int | None = None
-    weekday: int | None = None  # 0 = Sunday, 6 = Saturday (launchd convention)
-
-
-class ScheduledJob(BaseModel):
-    model_config = _STRICT
-
-    name: str
-    workflow: str
-    when: WhenSpec
-    inputs: dict[str, Any] = Field(default_factory=dict)
-    notify: Literal["none"] = "none"
-    enabled: bool = True
-
-
-class SchedulesConfig(BaseModel):
-    model_config = _STRICT
-
-    jobs: list[ScheduledJob]
-
-
-def load_schedules() -> SchedulesConfig:
-    return SchedulesConfig.model_validate(_read_yaml(CONFIGS_DIR / "schedules.yaml"))
 
 
 # ---------------------------------------------------------------------------

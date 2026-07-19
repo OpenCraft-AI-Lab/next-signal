@@ -81,13 +81,13 @@ If a source's CLI exits non-zero, times out, or its parser raises, the runner SH
 - **WHEN** every enabled source fails
 - **THEN** the runner exits non-zero and surfaces each failure in stderr
 
-### Requirement: Scheduler entry uses thin workflow shell
+### Requirement: Manual entry uses thin workflow shell
 
-`paca/workflows/info_radar_pull.py` SHALL define an `InfoRadarPullWorkflow` class registered like any other workflow. Its only responsibility is to call `paca.collectors.info_radar.runner.run_all()` and return a summary. The scheduler schema is not modified.
+`paca/workflows/info_radar_pull.py` SHALL define a `run(**inputs)` function registered as a workflow shell via `configs/workflows/info_radar_pull.yaml` (`expose.agent_os: false`, `extra.run_now`). Its only responsibility is to call `paca.collectors.info_radar.runner.run_all()` and return a summary. Day-to-day pulls run through the dedicated `paca info-radar pull` command.
 
-#### Scenario: launchd-triggered pull
+#### Scenario: manual pull via workflow shell
 
-- **WHEN** the scheduler fires the `info_radar_pull` job
+- **WHEN** `paca run-workflow info_radar_pull` is invoked
 - **THEN** the workflow shell invokes the collector and persists items without involving any LLM
 
 

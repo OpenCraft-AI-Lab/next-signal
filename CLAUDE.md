@@ -11,7 +11,7 @@ it's not project documentation, it's instructions for the AI assistant working h
 
 `next-signal`（Python 包名 `paca`）。
 本地优先的 info-radar + knowledge 框架，基于 agno 2.6+ 构建。
-单一 AgentOS 进程承载所有 agent / workflow，从 CLI / launchd 调用；Dashboard 是独立
+单一 AgentOS 进程承载所有 agent / workflow，从 CLI 调用；Dashboard 是独立
 Next.js 进程。agno 会话 / trace / 记忆存在本地 Postgres + pgvector；用户可手改的运行时
 状态优先放 `~/.next-signal/`。本地模型优先用 OMLX (Qwen3)，云模型作为回落。
 
@@ -96,8 +96,7 @@ CLI 子命令：
 - `paca info-radar sweep` — 删除 30 天前的 `radar_items` 行
 - `paca info-radar analyze [--limit N] [--source NAME]` — 跑 info-radar analysis 两层 pipeline，写 `radar_analyses`
 - `paca info-radar subscriptions --json` — 读取 Folo 订阅，输出 dashboard 稳定 JSON 行
-- `paca schedule list` — 列 `configs/schedules.yaml` 里的任务
-- `paca schedule run-now weekly_knowledge_sync` — 手动触发 wiki → GBrain re-ingest
+- `paca run-workflow <name>` — 通过 workflow 的 `extra.run_now` 手动跑一次（dashboard re-index 走 `paca run-workflow knowledge_ingest`）
 - `paca serve` — 启动 AgentOS（端口 7777）
 
 ---
@@ -107,7 +106,7 @@ CLI 子命令：
 依赖方向严格向下，不允许反向 import：
 
 ```
-interfaces / scheduler / api  →  orchestrator / workflows / teams / agents  →  tools  →  integrations  →  core
+interfaces  →  orchestrator / workflows / teams / agents  →  tools  →  integrations  →  core
 ```
 
 - `core` 不能依赖任何上层。
@@ -132,9 +131,9 @@ repo = runnable orchestrator 底盘 + 按领域组织的 tools / integrations / 
   `paca/integrations/`。
 - **collectors**：周期性 CLI 数据搬运（无 LLM、无 agent caller、写业务表）。放
   `paca/collectors/<name>/`。判断规则 = 同时满足"没有 LLM step"+"没有 agent 直接调用"
-  +"周期性"+"写一张业务表"。scheduler 仍按 workflow 名分发，所以每个 collector 配一个
+  +"周期性"+"写一张业务表"。手动 run 按 workflow 名分发，所以每个 collector 配一个
   `paca/workflows/<name>.py` 薄壳（`expose.agent_os: false`，`extra.run_now` 指向 collector
-  入口）。当前实例：`paca/collectors/info_radar/`。
+  入口，由 `paca run-workflow <name>` 调用）。当前实例：`paca/collectors/info_radar/`。
 
 ### tools vs integrations vs core
 
@@ -215,9 +214,9 @@ prepend 到**每个 agent** 的 instructions 头部。house rules / 用户 profi
 - **agno 自管的表**（sessions / memory / knowledge / traces）→ `paca.core.db.get_db()` 单例，
   绝不要自己 `PostgresDb(...)`。URL 走 `database_url(for_sqlalchemy=True)`，自动改 scheme 到 psycopg v3。
   agno 会自动 provision 这些表，**不要**重复定义
-- **我们自己的业务表**（`job_runs` / `scheduled_jobs` / `radar_items` / `radar_analyses` /
-  `radar_pushed_topics`）→ 裸 `psycopg.connect(database_url())`（同步 short-lived 连接）；
-  DDL 在 `scripts/bootstrap_db.py`，运行时读写在对应 tool / scheduler 模块里
+- **我们自己的业务表**（`radar_items` / `radar_analyses` / `radar_pushed_topics`）→ 裸
+  `psycopg.connect(database_url())`（同步 short-lived 连接）；
+  DDL 在 `scripts/bootstrap_db.py`，运行时读写在对应 collector / workflow 模块里
 
 ---
 
@@ -236,8 +235,8 @@ prepend 到**每个 agent** 的 instructions 头部。house rules / 用户 profi
   宽 cap 会把单次失败拖成 10+ 分钟挂死
 - 每个 item 独立 try/except，一个 LLM 爆炸不阻断整批；tier1 batch 结构不符回退单 item；
   dedup embed 失败 conservatively 走 novel，都不静默丢 item
-- scheduler 走 thin shell `configs/workflows/info_radar_analysis.yaml`
-  (`expose.agent_os: false` + `extra.run_now`)；cadence 不是 contract
+- 手动 run 走 thin shell `configs/workflows/info_radar_analysis.yaml`
+  (`expose.agent_os: false` + `extra.run_now`，由 `paca info-radar analyze` / `paca run-workflow` 调)；cadence 不是 contract
 
 ---
 
@@ -257,7 +256,7 @@ prepend 到**每个 agent** 的 instructions 头部。house rules / 用户 profi
 - ingest 的 LLM 步都走正式 `configs/agents/knowledge_*.yaml` + `prompts/`；不要在
   `artifact_editor.py` 里临时 `Agent(...)` 或写 deterministic fallback
 - re-ingest 走 `PACA_WIKI_DIR` + `knowledge_ingest_manifest.json`，embed 失败必须 loud、
-  manifest 不前进（否则 KB search stale）；weekly entry 在 `configs/schedules.yaml`
+  manifest 不前进（否则 KB search stale）；dashboard re-index 走 `paca run-workflow knowledge_ingest`
 - `dashboard/app/knowledge/page.tsx`：re-index 用 POST，不要 GET query
 
 ---
@@ -269,6 +268,19 @@ prepend 到**每个 agent** 的 instructions 头部。house rules / 用户 profi
 - 集成测试如需要 OMLX 或外部 API：`@pytest.mark.integration` + 默认跳过
 - 改了 `paca/tools/_json_extract.py` 必须跑 `tests/test_json_extract.py`（从生产 case 反推的）
 - 测试默认全绿（含若干 `@pytest.mark.integration` / 外部环境 smoke 的 skip）；新增工具/集成至少配一个对应的 smoke test
+
+### 验证走 Docker（不在宿主机裸跑）
+
+单元测试 `uv run pytest` 本地跑即可；但任何**运行时 / 端到端验证**（跑 CLI、dashboard、
+完整流程、连 Postgres / gbrain / folocli）必须通过 docker build + 容器执行，让验证环境和
+真正 ship 的 Linux 容器一致——不在宿主机裸起 `paca serve` / `paca dashboard` 去验证：
+
+- 构建：`docker compose build`；起栈：`docker compose up`（postgres + bootstrap + dashboard，见
+  `docker-compose.yml`）
+- 进容器验证：`docker compose exec dashboard <cmd>`，或一次性 `docker compose run --rm dashboard <cmd>`
+  （app 镜像已把 `paca` / `uv` 放进 PATH，例如 `paca doctor`、`paca run-workflow knowledge_ingest`、
+  `paca info-radar pull`）
+- 完整设计与卷 / 环境变量映射见 [`docs/containerized-deployment.md`](./docs/containerized-deployment.md)
 
 ---
 
@@ -347,8 +359,8 @@ def register(registry) -> None:
   到旧 cache 会返回 stale 错误；不要 `folocli@latest` — 漂移）；version 走 `${TOOL}_CLI_ARGV`
   env var 让 operator 覆盖
 - 认证优先级：`<TOOL>_TOKEN` env var > CLI 自己的 session 文件（folocli 是 `~/.folo/config.json`）
-  → launchd 友好的路径是 token env var
-- 给 agent / scheduler 看的入口在 `paca/collectors/` 或 `paca/tools/` 而不是 integration 本身
+  → 无人值守场景优先用 token env var
+- 给 agent / CLI 看的入口在 `paca/collectors/` 或 `paca/tools/` 而不是 integration 本身
 
 ---
 

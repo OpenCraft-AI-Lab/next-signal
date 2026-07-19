@@ -135,18 +135,18 @@ The workflow SHALL select only `radar_items` with `seen_at IS NULL`. The `radar_
 - **WHEN** `paca info-radar analyze --limit 5` is invoked and 20 unseen items exist
 - **THEN** at most 5 items are processed, and the printed summary reflects counts that sum to ≤ 5
 
-### Requirement: Scheduler entry is present and idempotent across cadences
+### Requirement: Workflow entry is present and idempotent across runs
 
-`configs/schedules.yaml` SHALL contain an enabled entry named `info_radar_analysis` whose `workflow_name` is `info_radar_analysis`. The cron expression is operator-configurable and NOT a stable contract — the workflow's idempotency (`seen_at` gate plus `UNIQUE(radar_item_id)` on `radar_analyses`) SHALL make it safe to run at any cadence. The associated `configs/workflows/info_radar_analysis.yaml` SHALL set `expose.agent_os: false` and `extra.run_now: paca.workflows.info_radar_analysis:run`.
+`configs/workflows/info_radar_analysis.yaml` SHALL set `expose.agent_os: false` and `extra.run_now: paca.workflows.info_radar_analysis:run`. How often it runs is operator-controlled and NOT a stable contract — the workflow's idempotency (`seen_at` gate plus `UNIQUE(radar_item_id)` on `radar_analyses`) SHALL make it safe to run at any frequency.
 
-#### Scenario: scheduler can invoke the workflow
+#### Scenario: manual run invokes the workflow
 
-- **WHEN** the launchd dispatcher fires the `info_radar_analysis` entry
-- **THEN** it calls `paca.workflows.info_radar_analysis:run()` with no kwargs and records a `job_runs` row
+- **WHEN** `paca info-radar analyze` (or `paca run-workflow info_radar_analysis`) is invoked
+- **THEN** it calls `paca.workflows.info_radar_analysis:run()` and processes unseen items
 
 #### Scenario: running back-to-back produces no duplicate analyses
 
-- **WHEN** two scheduler firings occur in quick succession with no collector pull between them
+- **WHEN** two runs occur in quick succession with no collector pull between them
 - **THEN** the second run processes zero items because all unseen items from the first run were marked `seen_at`
 
 ### Requirement: paca doctor checks goals.yaml

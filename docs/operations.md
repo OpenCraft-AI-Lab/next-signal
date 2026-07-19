@@ -95,14 +95,12 @@ uv run paca info-radar pull [--source NAME]           # 跑各 source CLI，写 
 uv run paca info-radar sweep                          # 删 radar_items 中超 30 天的行
 uv run paca info-radar analyze [--limit N] [--source NAME]
                                                       # 跑两层 analysis pipeline，写 radar_analyses
-                                                      # schedules.yaml 声明 18:00 cadence，但 launchd 安装
-                                                      # 尚未实现——当前手动触发（CLI / run-now / dashboard）；
+                                                      # 手动触发（CLI / dashboard）；没有后台调度
                                                       # `seen_at` 保证任意频率重跑 idempotent
                                                       # 前置：configs/info_radar/goals.yaml 必须存在
                                                       # (cp configs/info_radar/goals.example.yaml configs/info_radar/goals.yaml 后手改)
 uv run paca info-radar subscriptions --json           # 读取 Folo 订阅，输出 dashboard 稳定 JSON 行
-uv run paca schedule list                             # 列 schedules.yaml 任务
-uv run paca schedule run-now weekly_knowledge_sync  # 手动跑 wiki → GBrain re-ingest
+uv run paca run-workflow knowledge_ingest             # 手动跑 wiki → GBrain re-ingest
 ```
 
 Dashboard UI 默认中文，可在导航栏切英文；选择存到 `paca_locale` cookie。这里只翻译
@@ -126,7 +124,7 @@ PACA_GBRAIN_HOME=state/test-gbrain uv run paca doctor
   OMLX 恢复后长驻进程要调 `paca.core.models.reset_cache()`。
 - **GBrain 搜索 / re-index 失败** → 跑 `paca doctor` 和 `gbrain doctor --fast`；
   embed 失败时 ingest 应在写完 wiki artifact 后 loud fail，manifest 不前进，
-  修好后重跑 `paca schedule run-now weekly_knowledge_sync`。
+  修好后重跑 `paca run-workflow knowledge_ingest`。
 - **Dashboard 起不来** → 先确认 `pnpm` 在 PATH；用 `uv run paca dashboard --build`
   看 Next.js 编译错误。Dashboard 不需要 `paca serve`，但 `/radar` 需要 Postgres，
   `/knowledge` 需要 GBrain CLI，`/subscriptions` 需要 Folo auth。

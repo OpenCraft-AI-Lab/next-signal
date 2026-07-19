@@ -4,7 +4,7 @@
 Python 包名 `paca`。
 
 一个 runnable orchestrator 底盘 + 按领域组织的 tools / integrations / workflows。
-一个 AgentOS 进程承载所有 agent / workflow；CLI / launchd 通过 runnable loader 调同一组
+一个 AgentOS 进程承载所有 agent / workflow；CLI 通过 runnable loader 调同一组
 能力，Dashboard 是独立 Next.js 进程（读 Postgres / 起一次性 `paca` CLI）。状态存本地
 Postgres + pgvector，本地模型走 OMLX (Qwen3) 优先，云模型作为回落。
 
@@ -33,7 +33,7 @@ uv run paca dashboard [--port 3000]                   # 启动 dashboard
 uv run paca knowledge ingest <url|staged-file>        # ingest 到知识库
 uv run paca info-radar pull [--source NAME]           # 拉取信息源到 radar_items
 uv run paca info-radar analyze [--limit N] [--source NAME]  # 两层分析 pipeline
-uv run paca schedule run-now weekly_knowledge_sync  # 手动跑 wiki → GBrain re-ingest
+uv run paca run-workflow knowledge_ingest             # 手动跑 wiki → GBrain re-ingest
 uv run pytest -q                                      # 测试
 ```
 
@@ -55,9 +55,3 @@ workflow 集中放 `src/paca/workflows/`。
 ## 相关项目
 
 - [`garrytan/gbrain`](https://github.com/garrytan/gbrain) —— 长期知识库 peer service：markdown-first + pgvector hybrid search + 自动 typed-link 图谱 + MCP server
-
-## 来源
-
-这是从 `intelligent-digitalpaca` 拆出的 info-radar + knowledge 子集，作为独立项目的起始代码。
-其余领域（smart-money、financial-news/portfolio、content-studio、Discord 个人助手）
-不在这个 repo 的范围内。
