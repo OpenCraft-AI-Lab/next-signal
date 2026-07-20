@@ -192,7 +192,7 @@ no Chrome, no Xvfb.
 
 ### Build (image)
 
-1. Linux/arm64 base with Python 3.11; install `uv`, Node 20 + `pnpm`, and (builder
+1. Linux/arm64 base with Python 3.11; install `uv`, Node 22 + `pnpm`, and (builder
    stage) Bun.
 2. Copy dependency manifests first (`pyproject.toml`, `uv.lock`, dashboard
    `package.json` + lockfile); `uv sync` and `pnpm install` — before source — for

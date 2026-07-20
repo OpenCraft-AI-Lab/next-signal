@@ -26,10 +26,11 @@ clean markdown 进 wiki 树，raw 原件归档，GBrain 做索引和 hybrid sear
 
 knowledge 领域工具：
 
-- `knowledge_ingest_workflow` —— 单篇入库路径（fetch → edit → classify → persist）。
+- `knowledge_ingest_workflow` —— 单篇入库路径（fetch → clean → enrich → classify → persist）。
 
-KB **检索**是横向基础设施（不在本模块）：`search_knowledge`、`gbrain_search` /
-`gbrain_get` / `gbrain_query` / `gbrain_ingest` 在 `paca/tools/gbrain.py`，GBrain bridge 在
+KB **检索**是横向基础设施（不在本模块）：`search_knowledge` 在
+`paca/tools/knowledge/search.py`；`gbrain_search` / `gbrain_get` / `gbrain_query` /
+`gbrain_ingest` 在 `paca/tools/gbrain.py`；GBrain bridge 在
 `paca/integrations/gbrain.py` —— 任何模块的 agent 都能按名字引用这些工具。
 
 ## 接的外部

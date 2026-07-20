@@ -37,8 +37,10 @@ Integrations SHALL perform outbound HTTP calls through `paca.integrations._helpe
 
 #### Scenario: one bad integration does not break the registry
 
-- **WHEN** the `firecrawl` module fails to import
+- **WHEN** a module listed in `paca.integrations._MODULES` fails to import
 - **THEN** the failure is logged and the remaining integrations still register their tools
+
+`_MODULES` is currently an empty list in this repo — the shared cloud-API adapters from the original project (`firecrawl`, `tavily`, `exa`, `notion`, `github`, `slack`, `news`, `weather`, `google_calendar`, `gmail`) were dropped in the trim, since they only served the personal-assistant/Discord front door that isn't part of this repo's scope. The try/except isolation mechanism itself is unaffected — it applies to whatever modules are listed whenever one is added back.
 
 ### Requirement: Long results are truncated; payloads are JSON-safe
 

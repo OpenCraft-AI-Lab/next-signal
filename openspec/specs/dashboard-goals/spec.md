@@ -5,7 +5,7 @@ TBD - created by archiving change dashboard-goals-subscriptions. Update Purpose 
 ## Requirements
 ### Requirement: Goals page
 
-The dashboard SHALL render `/goals` as the operator UI for `configs/info_radar/goals.yaml`, matching the committed Goals mock in `dashboard/design/pages-other.jsx` and showing the number of configured goals.
+The dashboard SHALL render `/goals` as the operator UI for `configs/info_radar/goals.yaml`, per `dashboard/app/goals/page.tsx` and `dashboard/components/goals/goals-editor.tsx`, showing the number of configured goals.
 
 #### Scenario: goals route renders current goals
 

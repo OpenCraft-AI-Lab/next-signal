@@ -85,6 +85,18 @@ uv add --dev <pkg>         # 加 dev 依赖
 `/opsx:<name> ...`（`explore` / `propose` / `apply` / `archive`）= 读
 `.claude/commands/opsx/<name>.md`，严格按其 workflow 走；status / 校验用本地 `openspec` CLI。
 
+**默认工作流**：非平凡的能力开发先 `/opsx:propose` 起一个 change（写
+proposal / design / tasks），再实现；完成后 `/opsx:archive` 把 delta 合进
+`openspec/specs/`。判断"非平凡"：
+
+- 非平凡（需要 change）：加 / 删一个 agent、tool、integration、workflow；新
+  CLI 子命令；改变某个已有 capability 的行为或契约（`openspec/specs/`
+  里已经描述过的东西变了）
+- 平凡（可直接改，不需要 change）：bug fix、行为不变的纯 refactor、typo、
+  格式化、单个 prompt 文案微调、补测试
+
+不确定属于哪类 → 按非平凡处理，先问或先 `/opsx:propose`，不要默默直接改。
+
 CLI 子命令：
 - `paca list` — 列 agents / workflows
 - `paca doctor` — 自检 .env / Postgres / OMLX / 注册的 tools / GBrain health / folocli auth / info-radar goals.yaml
@@ -309,6 +321,9 @@ prepend 到**每个 agent** 的 instructions 头部。house rules / 用户 profi
 ## 提交
 
 - 用户主动让我 commit 才 commit
+- 非平凡改动提交前：`openspec status --json` 确认有没有匹配的 change；对照
+  `.claude/skills/code-review/SKILL.md` 的 doc-sync map，确认没有该同步的
+  文档 / spec 漏掉
 - commit message 引用所属 change 的 task（例如 "info-radar: task 1.1"），或对应 spec capability 名（例如 "info-radar: goals.yaml validation"）
 - 不要 amend；不要 `--no-verify`
 
