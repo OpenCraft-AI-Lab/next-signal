@@ -279,7 +279,7 @@ accurate. This is the core of light mode — code and docs drift silently.
 | Added/removed/renamed a tool or integration | `CLAUDE.md` tool lists, `docs/modules/<domain>.md` tool tables, the relevant `register()` |
 | New module, moved file, new directory under `src/paca/` | `docs/architecture.md` code-layer diagram, `CLAUDE.md` 代码组织铁律 |
 | `configs/agents|workflows|teams/*.yaml` added/changed | `docs/modules/*.md` agent tables, `docs/development.md` runnable section |
-| New capability / behavior change **being made through the opsx workflow** | a matching delta under `openspec/changes/`. A change made directly (not via opsx) needs no delta — skip this row. |
+| New/removed capability, or a behavior change that makes an existing `openspec/specs/` description stale | a matching delta under `openspec/changes/`. If the change was made directly (not via opsx), the diff/PR needs a one-line justification for why it was trivial enough to skip a change — a bare "no delta" is not enough. See CLAUDE.md's OpenSpec slash aliases section for the trivial/non-trivial line. |
 | New/changed CLI subcommand | `docs/operations.md` 常用命令, `CLAUDE.md` CLI 子命令 list |
 | Test count changed materially | `CLAUDE.md` "当前 N 个 test 全过" |
 | New env var / external service | `.env.example`, `docs/operations.md` 环境变量 table |

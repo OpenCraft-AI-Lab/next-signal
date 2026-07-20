@@ -58,7 +58,8 @@ repo-local `.env` 关键值：
 - 知识库：`~/Projects/digitalpaca-wiki/`（clean）、`~/Projects/digitalpaca-wiki-raw/`（raw）
   ——路径由 `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` 指定，不是硬编码默认值。
 - agno 自管表（sessions / memory / knowledge / traces）：本地 Postgres + pgvector。
-- 日志：`~/Library/Logs/next-signal/`。
+- 日志：只写 stdout（structlog，TTY 下 console 渲染，非 TTY 下 JSON）；`~/Library/Logs/next-signal/`
+  目录会被创建但当前没有代码往里写文件。
 
 ## 健康检查
 
@@ -71,7 +72,8 @@ configured agents、registered tools、GBrain CLI/service（`gbrain doctor --fas
 folocli auth（`folocli whoami` — `FOLO_TOKEN` 或 `~/.folo/config.json` 任一可用即可）、
 info-radar `configs/info_radar/goals.yaml` 存在且可解析（缺则 `paca info-radar analyze`
 会 loud RuntimeError）。
-任一必需项失败 doctor 退出非零。
+代码层面不区分"必需"和"可选"检查——任一项失败（包括上面标为可选的 folocli auth）
+doctor 都退出非零；上面的必需/可选划分只是"这台机器不打算用这个功能就可以忽略对应的✗"。
 
 `DEEPSEEK_API_KEY` 缺失算非零项 —— `local*` 的默认 fallback profile 用 DeepSeek（OMLX 不可达时回落）；
 `ANTHROPIC_API_KEY` 缺失也算非零项，供 `claude_*` profile 使用。若刻意只跑本地，要明白这些云 fallback 会失败。

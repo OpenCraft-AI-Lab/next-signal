@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Two-tier LLM analysis layer that consumes the `radar_items` table populated by the `info-radar` collector, filters items against user-declared goals, deepens analysis on what survives via full-content fetch, and dedups against a vector-backed long-term memory before any user-facing push. Owns `radar_items.seen_at` (collector never writes it).
+Two-tier LLM analysis layer that consumes the `radar_items` table populated by the `info-radar` collector, filters items against user-declared goals, deepens analysis on what survives via full-content fetch, and dedups against a vector-backed long-term memory before any user-facing push. Owns `radar_items.seen_at` (collector never writes it); a tier-2 failure leaves the item unpersisted and unseen so it is retried on the next analysis run.
 
 ## Requirements
 
@@ -50,7 +50,7 @@ The tier-1 stage SHALL group unseen items into chunks (default size 10) and send
 
 ### Requirement: Tier 2 fetches full content via folocli entry get
 
-The tier-2 impact stage SHALL fetch full article content using `folocli entry get <source_id>` for each tier-1-kept item before invoking the tier-2 agent. The fetched content MUST be read from the JSON envelope at `data.entries.content`. If the fetch raises, times out, returns `ok: false`, or yields empty content, the workflow SHALL fall back to title+description and tag the resulting analysis row with `content_status='fallback'`. Successful fetches set `content_status='full'`.
+The tier-2 impact stage SHALL fetch full article content using `folocli entry get <source_id>` for each tier-1-kept item before invoking the tier-2 agent. The fetched content MUST be read from the JSON envelope at `data.entries.content`. If the fetch raises, times out, returns `ok: false`, or yields empty content, the workflow SHALL fall back to title+description and tag the resulting analysis row with `content_status='fallback'`. Successful fetches set `content_status='full'`. Before being sent to the tier-2 agent, content (fetched or fallback) MUST be truncated to the first 16000 characters.
 
 #### Scenario: full content available
 
@@ -62,6 +62,11 @@ The tier-2 impact stage SHALL fetch full article content using `folocli entry ge
 - **WHEN** `folocli entry get` raises a timeout or returns `ok: false`
 - **THEN** the workflow logs the failure, calls the tier-2 agent with title+description only, and writes the analysis row with `content_status='fallback'`
 
+#### Scenario: oversized content is truncated before the tier-2 agent call
+
+- **WHEN** fetched content exceeds 16000 characters
+- **THEN** only the first 16000 characters are included in the tier-2 agent's input
+
 ### Requirement: Tier 2 emits structured impact analysis grounded in goals
 
 The tier-2 agent (`radar_tier2_impact`) SHALL be invoked with the loaded goals concatenated into its prompt context and SHALL return a structured `{summary, impact, score, tags}` enforced via OMLX json_schema constrained decoding. `score` MUST be an integer in `[0, 100]`. `tags` MUST be a list of strings. `impact` SHALL be markdown describing impact on the user's declared goals specifically.
@@ -70,6 +75,16 @@ The tier-2 agent (`radar_tier2_impact`) SHALL be invoked with the loaded goals c
 
 - **WHEN** the tier-2 agent returns a valid structured output
 - **THEN** the workflow writes `radar_analyses` with `verdict='keep'`, `summary`, `impact_md`, `score`, and `tags` populated from the agent output
+
+#### Scenario: opinion-tagged items are score-capped
+
+- **WHEN** the tier-2 agent tags an item `"opinion"` and returns a `score` above 65
+- **THEN** the workflow caps the persisted `score` at 65
+
+#### Scenario: frontier-voice exemption bypasses the opinion ceiling
+
+- **WHEN** the item is by a high-signal individual carved out in `goals.yaml` (e.g. a frontier-lab founding researcher) and the tier-2 agent tags it `"frontier-voice"` instead of `"opinion"`
+- **THEN** the opinion score ceiling does NOT apply and the agent's original score is persisted as-is
 
 ### Requirement: YouTube subtitle enrichment is opportunistic
 
@@ -106,7 +121,7 @@ A failure (raised exception, timeout, schema-violation) in tier-1, the tier-2 fe
 #### Scenario: one tier 2 agent raises, others continue
 
 - **WHEN** the tier-2 agent raises for one of three kept items
-- **THEN** the other two items are analyzed and persisted, and the failing item is persisted with `content_status='error'`, `seen_at` set, and the run summary reports `tier2_error=1`
+- **THEN** the other two items are analyzed and persisted, and the failing item is left unpersisted (no `radar_analyses` row is written) with `seen_at` remaining NULL so it is retried on the next analysis run, and the run summary reports `tier2_error=1`
 
 ### Requirement: Re-running the analysis is idempotent
 

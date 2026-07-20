@@ -67,19 +67,30 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 | `FOLO_TOKEN` | (Folo CLI session file) | `/subscriptions` via `paca info-radar subscriptions --json` |
 | `FOLO_CLI_ARGV` | `npx --yes folocli@0.0.5` | Optional override for the Folo CLI launcher |
 
-## Visual design lives in `dashboard/design/`
+## Visual design system
 
-The operator commits HTML / JSX / CSS reference mocks under
-`dashboard/design/` when new pages are designed. Implementations of every
-dashboard page **follow those mocks** — colors, typography, layout, motion all
-come from the committed reference, not inventive guesswork. If a referenced
-mock is missing when work starts on a downstream change, the implementer
-pauses and asks.
+The design system's source of truth is the in-app [`/design`](./app/design)
+showcase route — tokens, components, states, and brand marks, rendered from
+the real primitives. Tokens live in [`app/globals.css`](./app/globals.css);
+components under [`components/ui/`](./components/ui/).
 
-The design's token system (`styles.css`, `pages.css`) is ported as-is into
-[`app/globals.css`](./app/globals.css); the design's React component file
-(`components.jsx`) is the visual reference for our own Radix-backed primitives
-under [`components/ui/`](./components/ui/).
+### Consuming a design mock
+
+New pages usually start from a Claude Design mock (an HTML/JSX prototype).
+Treat mocks as **transient, external scaffolding** — they stay in the Claude
+Design workspace and are never committed to this repo. To implement one:
+
+1. Build the page under `app/` and `components/`, reusing the existing tokens
+   (`app/globals.css`) and `components/ui/` primitives — don't invent new
+   colors, spacing, or one-off styling.
+2. If the mock genuinely needs a token or primitive that doesn't exist yet,
+   add it to `app/globals.css` / `components/ui/` and surface it in `/design`
+   so the showcase stays complete.
+3. Verify against `/design` in both light and dark themes.
+
+Once the page ships, the mock has done its job and is discarded. The shipped
+page plus `/design` are the durable reference from then on — specs and docs
+point at those, never at a mock file.
 
 ## UI language
 
