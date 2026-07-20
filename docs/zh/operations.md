@@ -5,7 +5,7 @@
 ## 安装
 
 > **容器是推荐路径** —— 见
-> [`containerized-deployment.md`](../containerized-deployment.md)，或
+> [`containerized-deployment.md`](./containerized-deployment.md)，或
 > [README 快速开始](../../README.zh-CN.md#快速开始docker-compose)。
 > 以下是 host-native 备选路径；需要本地 OMLX 模型跑在同一进程里时走这条。
 
@@ -66,7 +66,7 @@ repo-local `.env` 关键值：
   目录会被创建但当前没有代码往里写文件。
 
 跑 Docker Compose 时这些改为映射到 `pstate` 卷和 wiki bind mount，见
-[`containerized-deployment.md`](../containerized-deployment.md)。
+[`containerized-deployment.md`](./containerized-deployment.md)。
 
 ## 健康检查
 
@@ -147,4 +147,4 @@ PACA_GBRAIN_HOME=state/test-gbrain uv run paca doctor
 - **某工具 agent 看不到** → 查工具是否注册（`_IN_TREE_TOOLS`、`tools/<domain>.register()`、
   workflow tool exposure 或集成注册）、agent YAML 是否写了准确注册名，跑 `tests/test_registry.py`。
 - **容器相关问题**（build 失败、卷映射、纯云环境下的 embedder 缺口）→ 见
-  [`containerized-deployment.md`](../containerized-deployment.md) §7–§8。
+  [`containerized-deployment.md`](./containerized-deployment.md) §7–§8。

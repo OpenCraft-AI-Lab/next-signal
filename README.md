@@ -103,10 +103,15 @@ Active domains: `knowledge` (knowledge management) and `info_filter`
 ### Docs are bilingual
 
 English is canonical and lives at the paths above. The Chinese translation
-mirrors it under [`docs/zh/`](./docs/zh/) and [`README.zh-CN.md`](./README.zh-CN.md);
-every page carries a switcher link at the top. Anything written in Chinese ships
-with an English counterpart — `docs/containerized-deployment.md` is
-English-only because it was authored in English and has no Chinese original.
+mirrors it under [`docs/zh/`](./docs/zh/), plus
+[`README.zh-CN.md`](./README.zh-CN.md) and
+[`dashboard/README.zh-CN.md`](./dashboard/README.zh-CN.md); every page carries a
+switcher link at the top. Every human-facing doc exists in both languages, and
+both sides change in the same commit.
+
+Not translated, deliberately: `CLAUDE.md` (agent instructions, Chinese-only) and
+`openspec/specs/` (capability contracts, English-only). Both churn with the code,
+where a second copy would drift rather than help.
 
 ## Related projects
 

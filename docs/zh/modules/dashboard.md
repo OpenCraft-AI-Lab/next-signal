@@ -9,7 +9,7 @@
 所有功能要么直接读 Postgres，要么 spawn 一次性 `paca` CLI 子进程。
 
 > 运行方式、env 变量、design system、i18n、依赖策略、radar/goals/subscriptions
-> 页面行为的完整说明在 [`dashboard/README.md`](../../../dashboard/README.md)——那是
+> 页面行为的完整说明在 [`dashboard/README.zh-CN.md`](../../../dashboard/README.zh-CN.md)——那是
 > dashboard 自己的主文档，本页只给全景和跨模块约定。
 
 ## 页面族

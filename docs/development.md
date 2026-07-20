@@ -230,13 +230,16 @@ design and the volume / env-var mapping.
 ## Documentation
 
 Docs are bilingual, and **English is canonical**. English pages live at
-`README.md` and `docs/`; the Chinese mirror lives at `README.zh-CN.md` and
-`docs/zh/`. Every page opens with a switcher link to its counterpart.
+`README.md`, `docs/`, and `dashboard/README.md`; the Chinese mirror lives at
+`README.zh-CN.md`, `docs/zh/`, and `dashboard/README.zh-CN.md`. Every page opens
+with a switcher link to its counterpart.
 
-When you change a doc, update both languages in the same change. If you write
-something new in Chinese, it ships with an English counterpart before the change
-is done. (The reverse is not required: `containerized-deployment.md` is
-English-only.)
+**Every human-facing doc exists in both languages.** When you change one, update
+the other in the same change — a one-sided edit is an unfinished one.
+
+Two things are deliberately not translated: `CLAUDE.md` (agent instructions,
+Chinese-only) and `openspec/specs/` (capability contracts, English-only). Both
+change with the code often enough that a second copy would drift rather than help.
 
 ## Commits
 

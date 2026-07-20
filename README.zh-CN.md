@@ -86,7 +86,7 @@ uv run pytest -q                                      # 测试
 | 理解系统怎么搭、为什么这么搭 | [docs/zh/architecture.md](./docs/zh/architecture.md) |
 | 加 agent / 工具 / 集成 / 模型 / 新领域 | [docs/zh/development.md](./docs/zh/development.md) |
 | 安装、env 配置、`paca doctor`、故障排查 | [docs/zh/operations.md](./docs/zh/operations.md) |
-| 容器化部署（Docker Compose，cloud-LLM） | [docs/containerized-deployment.md](./docs/containerized-deployment.md)（仅英文） |
+| 容器化部署（Docker Compose，cloud-LLM） | [docs/zh/containerized-deployment.md](./docs/zh/containerized-deployment.md) |
 | 深入某个方向 | [docs/zh/modules/](./docs/zh/modules/)：[core](./docs/zh/modules/core.md) · [knowledge](./docs/zh/modules/knowledge.md) · [info_filter](./docs/zh/modules/info_filter.md) · [dashboard](./docs/zh/modules/dashboard.md) |
 | 能力的规范契约 / 待办变更 | [openspec/specs/](./openspec/specs/) · [openspec/changes/](./openspec/changes/) |
 
@@ -97,9 +97,12 @@ workflow 集中放 `src/paca/workflows/`。
 ### 文档是双语的
 
 英文是标准版本，放在 `README.md` 和 `docs/` 下；中文镜像在
-[`docs/zh/`](./docs/zh/) 和本文件，每页顶部都有语言切换链接。**写了中文的最后都要有
-英文版**——`docs/containerized-deployment.md` 只有英文，因为它本来就是英文写的，
-没有中文原稿。
+[`docs/zh/`](./docs/zh/)、本文件、以及
+[`dashboard/README.zh-CN.md`](./dashboard/README.zh-CN.md)，每页顶部都有语言切换
+链接。**所有面向人的文档都有中英两版**，且两边在同一个 commit 里一起改。
+
+有意不翻的两处：`CLAUDE.md`（给 agent 的指令，只有中文）和 `openspec/specs/`
+（能力契约，只有英文）。这两层都随代码高频变动，多一份拷贝只会漂移。
 
 ## 相关项目
 

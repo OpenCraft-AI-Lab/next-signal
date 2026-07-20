@@ -1,5 +1,7 @@
 # paca dashboard
 
+> **English** · [简体中文](./README.zh-CN.md)
+
 Local Next.js 15 app — the operator's view into `radar`, `knowledge`, goals,
 and Folo subscriptions. Single-user, desktop-only —
 no auth, no mobile. Cross-module conventions live in
