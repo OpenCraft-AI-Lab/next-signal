@@ -67,19 +67,13 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 | `FOLO_TOKEN` | (Folo CLI session file) | `/subscriptions` via `paca info-radar subscriptions --json` |
 | `FOLO_CLI_ARGV` | `npx --yes folocli@0.0.5` | Optional override for the Folo CLI launcher |
 
-## Visual design lives in `dashboard/design/`
+## Visual design system
 
-The operator commits HTML / JSX / CSS reference mocks under
-`dashboard/design/` when new pages are designed. Implementations of every
-dashboard page **follow those mocks** — colors, typography, layout, motion all
-come from the committed reference, not inventive guesswork. If a referenced
-mock is missing when work starts on a downstream change, the implementer
-pauses and asks.
-
-The design's token system (`styles.css`, `pages.css`) is ported as-is into
-[`app/globals.css`](./app/globals.css); the design's React component file
-(`components.jsx`) is the visual reference for our own Radix-backed primitives
-under [`components/ui/`](./components/ui/).
+[`app/design`](./app/design) is a live in-app showcase route (tokens,
+components, states, brand) that documents the current design system —
+colors, typography, layout, motion. New pages should reuse the tokens and
+Radix-backed primitives under [`components/ui/`](./components/ui/) rather
+than inventing new styling.
 
 ## UI language
 
