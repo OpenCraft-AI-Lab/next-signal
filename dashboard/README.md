@@ -67,25 +67,36 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 | `FOLO_TOKEN` | (Folo CLI session file) | `/subscriptions` via `paca info-radar subscriptions --json` |
 | `FOLO_CLI_ARGV` | `npx --yes folocli@0.0.5` | Optional override for the Folo CLI launcher |
 
-## Design system (`/design`, dev-only nav)
+## Visual design system
 
-[`app/design/page.tsx`](./app/design/page.tsx) is the living reference for the
-visual language: every color token as a swatch, every `components/ui/` primitive
-in each of its states, and the brand marks. It is an internal reference surface,
-not a product page.
+The design system's source of truth is the in-app [`/design`](./app/design)
+showcase route — tokens, components, states, and brand marks, rendered from
+the real primitives. Tokens live in [`app/globals.css`](./app/globals.css);
+components under [`components/ui/`](./components/ui/).
 
-**The nav link renders only when `NODE_ENV === "development"`** (see
+**The nav link to `/design` renders only when `NODE_ENV === "development"`** (see
 [`components/nav.tsx`](./components/nav.tsx)), so it stays out of a deployed
 dashboard. The route itself is not blocked — `/design` still resolves in any
-build if you navigate to it directly, which is the intended escape hatch for
-inspecting a production build.
+build if you navigate to it directly, which is the escape hatch for inspecting a
+production build.
 
-When you add a token or a UI primitive, add it to `/design` in the same change.
-That page is how the next agent discovers what already exists instead of
-inventing a parallel button.
+### Consuming a design mock
 
-The token system lives in [`app/globals.css`](./app/globals.css); the
-Radix-backed primitives live under [`components/ui/`](./components/ui/).
+New pages usually start from a Claude Design mock (an HTML/JSX prototype).
+Treat mocks as **transient, external scaffolding** — they stay in the Claude
+Design workspace and are never committed to this repo. To implement one:
+
+1. Build the page under `app/` and `components/`, reusing the existing tokens
+   (`app/globals.css`) and `components/ui/` primitives — don't invent new
+   colors, spacing, or one-off styling.
+2. If the mock genuinely needs a token or primitive that doesn't exist yet,
+   add it to `app/globals.css` / `components/ui/` and surface it in `/design`
+   so the showcase stays complete.
+3. Verify against `/design` in both light and dark themes.
+
+Once the page ships, the mock has done its job and is discarded. The shipped
+page plus `/design` are the durable reference from then on — specs and docs
+point at those, never at a mock file.
 
 ## UI language
 

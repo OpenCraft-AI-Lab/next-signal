@@ -6,7 +6,7 @@ Keep the local wiki indexed in GBrain by re-ingesting only changed markdown file
 ## Requirements
 ### Requirement: Ingest workflow walks the wiki tree
 
-`paca.workflows.knowledge_ingest` SHALL walk `~/Projects/digitalpaca-wiki/`, compute the diff against the current GBrain index, and call `gbrain_ingest` for new or changed paths.
+`paca.workflows.knowledge_ingest` SHALL walk the wiki root resolved from the `PACA_WIKI_DIR` environment variable (via `src/paca/core/paths.py`, no hardcoded default — reading it with the variable unset raises `RuntimeError`), compute the diff against the current GBrain index, and call `gbrain_ingest` for new or changed paths.
 
 #### Scenario: only changed files re-embed
 

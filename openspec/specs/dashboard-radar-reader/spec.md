@@ -222,10 +222,24 @@ The dashboard SHALL read `radar_items`, `radar_analyses`, and `radar_pushed_topi
 
 ### Requirement: Design conformance
 
-Implementations of the `/radar` and `/radar/[id]` pages SHALL match the committed reference in `dashboard/design/pages-radar.jsx` (plus shared primitives in `components.jsx` and tokens in `styles.css` / `pages.css`), in both light and dark themes on a 1440-wide desktop viewport.
+The `/radar` and `/radar/[id]` pages (`dashboard/app/radar/page.tsx` and `dashboard/app/radar/[id]/page.tsx`) SHALL render correctly in both light and dark themes on a 1440-wide desktop viewport.
 
-#### Scenario: implementer follows the mock
+#### Scenario: page renders correctly in both themes
 
-- **WHEN** the implementer starts the `/radar` or `/radar/[id]` task
-- **THEN** they first read `dashboard/design/pages-radar.jsx` end-to-end, and the final rendered page matches the mock in both light and dark themes
+- **WHEN** the operator toggles between light and dark theme on `/radar` or `/radar/[id]`
+- **THEN** the page renders correctly in both, with no unstyled or broken elements
+
+### Requirement: Radar feed export as Markdown or PDF
+
+The `/radar` page SHALL offer "Download MD" and "Download PDF" links that export exactly the currently filtered view (same query params the page uses) via `GET /api/radar/export`. The PDF path SHALL drive system Chrome's headless `--print-to-pdf` (path overridable via `CHROME_BIN`) rather than bundling a PDF-rendering dependency. The page SHALL also support a `?export=1` print-only render mode with an "appendix" section, used as the source Chrome prints from.
+
+#### Scenario: operator downloads the current filtered view as markdown
+
+- **WHEN** the operator clicks "Download MD" with an active score/category filter
+- **THEN** the exported markdown reflects the same filtered item set the page is currently showing
+
+#### Scenario: operator downloads the current filtered view as PDF
+
+- **WHEN** the operator clicks "Download PDF"
+- **THEN** the export route renders the `?export=1` print view and drives headless Chrome to produce a PDF of it
 

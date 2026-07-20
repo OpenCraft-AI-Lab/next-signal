@@ -36,9 +36,10 @@ dashboard/
 
 ## 跨模块约定
 
-- **server action 两种 spawn 模式**（`lib/actions/`）：长任务（analyze）detached
-  spawn，页面靠轮询（`/api/radar/run`）收敛；短任务（goals 保存）`execFile`
-  同步等待。
+- **server action 两种模式**（`lib/actions/`）：长任务（analyze）detached
+  spawn，页面靠轮询（`/api/radar/run`）收敛；短任务（gbrain search、`info-radar pull`）
+  `execFile` 同步等待；goals 保存则完全不 spawn 子进程，直接在 server action 里
+  做 in-process fs 读写（`lib/goals.ts`）。
 - **入库进度是单进程内存态**：两个入库入口（`/knowledge` 表单、`/radar` Ingest）共用
   `lib/ingest/jobs.ts` 的 job registry，spawn `paca knowledge ingest --progress` 并经
   SSE 推到面板。dashboard 重启会丢进行中 job 的**进度视图**（子进程和 artifact 写入
@@ -46,7 +47,8 @@ dashboard/
 - **数据语言不翻译**：i18n 只覆盖界面文案（`paca_locale` cookie，默认英文）；文章标题、
   分析摘要、tag、YAML 值按原样渲染。
 - **写配置走原子写 + loader 契约镜像**：`/goals` 与 `/knowledge` 的 taxonomy 改写都先按
-  Python loader 的 schema 校验、再 temp-file rename / 文本行 splice，不整篇 reserialize。
+  Python loader 的 schema 校验、再 temp-file rename 落盘。`/knowledge` 的 taxonomy 用
+  文本行 splice，不整篇 reserialize；`/goals` 则整篇 `YAML.stringify` 后写入。
 
 ## 开发注意（不变量）
 
