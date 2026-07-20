@@ -203,15 +203,19 @@ docker compose run --rm dashboard paca run-workflow knowledge_ingest
 ```
 
 完整设计与卷 / 环境变量映射见
-[containerized-deployment.md](../containerized-deployment.md)。
+[containerized-deployment.md](./containerized-deployment.md)。
 
 ## 文档
 
-文档双语，**英文是标准版本**。英文页在 `README.md` 和 `docs/`；中文镜像在
-`README.zh-CN.md` 和 `docs/zh/`。每页开头都有指向对应语言的切换链接。
+文档双语，**英文是标准版本**。英文页在 `README.md`、`docs/`、`dashboard/README.md`；
+中文镜像在 `README.zh-CN.md`、`docs/zh/`、`dashboard/README.zh-CN.md`。每页开头都有
+指向对应语言的切换链接。
 
-改文档时**两个语言在同一个 change 里一起改**。新写的中文内容，在这个 change 完成前
-必须补上英文版。（反过来不强制：`containerized-deployment.md` 只有英文。）
+**所有面向人的文档都有中英两版。** 改其中一边时，另一边要在同一个 change 里跟上——
+只改一半等于没改完。
+
+有意不翻的两处：`CLAUDE.md`（agent 指令，只有中文）和 `openspec/specs/`（能力契约，
+只有英文）。这两层都随代码频繁变动，多一份拷贝只会漂移，不会帮忙。
 
 ## 提交
 

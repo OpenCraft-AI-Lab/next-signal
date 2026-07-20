@@ -6,10 +6,12 @@ it's not project documentation, it's instructions for the AI assistant working h
 > 人类文档：[`docs/`](./docs/architecture.md)（英文标准版；中文镜像在 [`docs/zh/`](./docs/zh/architecture.md)） ·
 > 能力规格：[`openspec/specs/`](./openspec/specs/) · 待办变更：[`openspec/changes/`](./openspec/changes/)
 
-**文档双语，英文是标准版本。** 英文在 `README.md` + `docs/`，中文镜像在
-`README.zh-CN.md` + `docs/zh/`（结构一一对应，每页顶部有语言切换链接）。改文档时
-**两个语言在同一个 change 里一起改**；新写中文内容必须在该 change 完成前补上英文版
-（反向不强制——`docs/containerized-deployment.md` 只有英文）。
+**文档双语，英文是标准版本。** 英文在 `README.md` + `docs/` + `dashboard/README.md`，
+中文镜像在 `README.zh-CN.md` + `docs/zh/` + `dashboard/README.zh-CN.md`（结构一一
+对应，每页顶部有语言切换链接）。**所有面向人的文档都必须两版齐全**，改文档时
+**两个语言在同一个 change 里一起改**——只改一边就是没改完。
+
+有意不翻的两处：本文件（agent 指令，只中文）和 `openspec/specs/`（能力契约，只英文）。
 
 ---
 

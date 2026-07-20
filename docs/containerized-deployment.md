@@ -1,5 +1,7 @@
 # Containerized Deployment (Cloud-LLM)
 
+> **English** · [中文](./zh/containerized-deployment.md)
+
 How to run the whole `next-signal` stack in an isolated environment
 separate from your host OS, using **Docker Compose** with a **cloud LLM backend**
 (no local MLX model). This document is design-level: it explains *what* runs
