@@ -19,8 +19,8 @@ The loader SHALL build each agent from `configs/agents/<name>.yaml`, where the f
 
 #### Scenario: agent instructions use owner path
 
-- **WHEN** `configs/agents/knowledge_manager.yaml` sets `instructions_file: agents/knowledge_manager.md`
-- **THEN** the loader reads `prompts/agents/knowledge_manager.md`
+- **WHEN** `configs/agents/knowledge_classifier.yaml` sets `instructions_file: agents/knowledge_classifier.md`
+- **THEN** the loader reads `prompts/agents/knowledge_classifier.md`
 
 #### Scenario: hard-coded model is rejected
 

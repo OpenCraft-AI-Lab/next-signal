@@ -37,12 +37,17 @@ The CLI command `paca knowledge ingest <url|file>` SHALL detect the source type 
 
 ### Requirement: Two-tree artifact layout
 
-Clean markdown artifacts SHALL be written under `~/Projects/digitalpaca-wiki/<category>/`, and originals under `~/Projects/digitalpaca-wiki-raw/`.
+Clean markdown artifacts SHALL be written under `<PACA_WIKI_DIR>/<category>/`, and originals under `<PACA_WIKI_RAW_DIR>/`. Both roots SHALL be resolved lazily from the required `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` environment variables (`src/paca/core/paths.py`); there is no hardcoded default, and reading either path with the variable unset SHALL raise a loud `RuntimeError`.
 
 #### Scenario: paths separated by purpose
 
 - **WHEN** any source is saved
 - **THEN** the wiki tree contains only LLM-friendly markdown; the raw tree contains the original file (HTML, PDF, audio, etc.)
+
+#### Scenario: wiki path env var unset
+
+- **WHEN** `PACA_WIKI_DIR` (or `PACA_WIKI_RAW_DIR`) is not set and code attempts to resolve the wiki root
+- **THEN** a `RuntimeError` is raised instead of falling back to a default path
 
 ### Requirement: GBrain ingest failure does not lose artifacts
 
@@ -63,28 +68,28 @@ The single-item knowledge ingest path SHALL be coordinated by an Agno workflow t
 - **WHEN** the ingest workflow completes successfully for a supported input
 - **THEN** the result includes `ok`, `source_type`, `category`, `markdown_path`, `raw_path`, `frontmatter`, and optional `ingest` fields with the same meaning as before
 
-#### Scenario: manager uses ingest workflow
+#### Scenario: an agent uses the ingest workflow tool
 
-- **WHEN** the knowledge manager handles a user request to ingest a URL or staged file
+- **WHEN** an agent configured with the `knowledge_ingest_workflow` tool handles a request to ingest a URL or staged file
 - **THEN** it uses `knowledge_ingest_workflow` instead of calling low-level `gbrain_ingest` directly
 
-### Requirement: Artifact editor owns clean body and frontmatter generation
+### Requirement: Artifact editing is split into a clean pass and a frontmatter pass
 
-The pipeline SHALL use a dedicated artifact editor agent to transform a fetched source packet into cleaned markdown plus frontmatter draft fields: `title`, `summary`, `tags`, and `freshness`.
+The pipeline SHALL transform a fetched source packet into cleaned markdown and frontmatter draft fields (`title`, `summary`, `tags`, `freshness`) via two separate agent passes rather than one combined call: `clean_body` (the `clean` step) runs the `knowledge_artifact_editor` agent (or `knowledge_github_cleaner` for github sources) and returns plain cleaned markdown text with no schema; `write_frontmatter` (the `enrich` step) separately runs `knowledge_frontmatter` (or `knowledge_github_summary` for github sources) under the `FrontmatterDraft` pydantic schema via `run_structured`. This split exists because a single combined pass would intermittently have a local model drop a field (e.g. an empty `summary`) — splitting keeps each call's output small and focused.
 
 #### Scenario: orchestrator avoids full-body editing
 
 - **WHEN** a fetched markdown packet is ready for content processing
-- **THEN** the orchestrator passes the packet to the artifact editor agent and does not generate cleaned markdown or frontmatter itself
+- **THEN** the orchestrator passes the packet to `clean_body` and `write_frontmatter` in turn and does not generate cleaned markdown or frontmatter itself
 
-#### Scenario: editor output is structured
+#### Scenario: clean pass returns plain markdown, not structured output
 
-- **WHEN** the artifact editor returns a result
-- **THEN** the result is parsed as structured data containing cleaned markdown and the required frontmatter draft fields
+- **WHEN** `clean_body` runs
+- **THEN** it returns plain cleaned markdown text (no schema); only `write_frontmatter`'s output is parsed as structured data (`FrontmatterDraft`)
 
 ### Requirement: LLM artifact edit and frontmatter enrichment fail loud
 
-The artifact editor SHALL populate cleaned markdown plus `summary`, `tags`, `freshness` (`permanent` / `stable` / `evolving` / `ephemeral`), and source metadata in one LLM pass. If the LLM call or structured output validation fails, the workflow SHALL fail loud rather than writing deterministic fallback content.
+`clean_body` and `write_frontmatter` SHALL together populate cleaned markdown plus `summary`, `tags`, `freshness` (`permanent` / `stable` / `evolving` / `ephemeral`), and source metadata across their two passes. If either LLM call or `write_frontmatter`'s structured output validation fails, the workflow SHALL fail loud rather than writing deterministic fallback content.
 
 #### Scenario: transcript summary is rejected
 
@@ -101,10 +106,15 @@ The artifact editor SHALL populate cleaned markdown plus `summary`, `tags`, `fre
 - **WHEN** the artifact editor agent cannot complete the required edit
 - **THEN** the save operation raises a loud failure and no clean wiki artifact is written
 
-#### Scenario: retry output remains invalid
+#### Scenario: clean-step retry is a blind step re-run
 
-- **WHEN** validation feedback is sent to the artifact editor and the retried output still fails validation
-- **THEN** the save operation raises a loud failure instead of creating fallback markdown or frontmatter
+- **WHEN** the `clean` step (`max_retries=1`) fails validation (e.g. the retention guard trips)
+- **THEN** the workflow step re-runs `clean_body` from the same input rather than sending validation feedback back to the agent; a second failure raises loud
+
+#### Scenario: frontmatter-step retry uses schema-validation feedback
+
+- **WHEN** `write_frontmatter`'s `run_structured` call produces output that fails `FrontmatterDraft` validation
+- **THEN** the agent is re-prompted with the exact validation error and retried (up to `run_structured`'s `max_repairs`); a still-invalid result raises `RuntimeError` instead of creating fallback frontmatter
 
 #### Scenario: related links empty when no matches
 
@@ -291,15 +301,17 @@ The `KnowledgeArtifact` SHALL include source value, source type, digest, optiona
 - **WHEN** the `edit` stage runs after `fetch`
 - **THEN** it reads markdown from the `KnowledgeArtifact` returned by `fetch`
 
-### Requirement: Workflow topology is fetch edit persist
+### Requirement: Workflow topology is fetch clean enrich classify persist
 
 The knowledge ingest `Workflow` SHALL declare these steps in order:
 
-1. `fetch`
-2. `edit`
-3. `persist`
+1. `fetch` (`max_retries=2`)
+2. `clean` (`max_retries=1`, runs `clean_body`)
+3. `enrich` (`max_retries=1`, runs `write_frontmatter`)
+4. `classify` (`max_retries=0`)
+5. `persist` (`max_retries=0`)
 
-Each step SHALL be a thin adapter that unwraps `StepInput`, calls the corresponding stage function, and returns `StepOutput(content=artifact)`.
+All steps use `on_error=OnError.fail`. Each step SHALL be a thin adapter that unwraps `StepInput`, calls the corresponding stage function, and returns `StepOutput(content=artifact)`.
 
 #### Scenario: workflow runs Bilibili input
 
@@ -319,10 +331,12 @@ OpenCLI (WeChat) and Bilibili provider details SHALL live under `src/paca/integr
 
 The workflow SHALL be exposed to agents through `paca.orchestrator.workflow_tools`, using the `expose.tool` section in workflow config. Domain packages SHALL NOT create separate workflow-tool wrapper modules for the same workflow.
 
-#### Scenario: knowledge manager lists workflow tool
+#### Scenario: an agent lists the workflow tool
 
-- **WHEN** `configs/agents/knowledge_manager.yaml` is loaded
-- **THEN** it lists `knowledge_ingest_workflow` and does not list `knowledge_pipeline_workflow`
+- **WHEN** an agent YAML declares `tools: [knowledge_ingest_workflow]`
+- **THEN** the registry resolves it to the workflow's `WorkflowTools` toolkit and no separate `knowledge_pipeline_workflow` wrapper exists
+
+Note: no agent in this repo currently ships with `knowledge_ingest_workflow` in its `tools:` list (there is no `knowledge_manager` agent) — the mechanism above is exercised by `paca run-workflow knowledge_ingest` and the dashboard's re-index action, not by an agent-initiated tool call, as of this repo.
 
 ### Requirement: Manual run uses configured run function
 

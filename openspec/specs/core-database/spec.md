@@ -42,3 +42,26 @@ Code that touches our business tables (`radar_items`, `radar_analyses`, `radar_p
 - **WHEN** the operator runs `uv run python scripts/bootstrap_db.py` against an empty database
 - **THEN** `radar_items` exists with the documented columns, unique constraint, and both indexes
 
+### Requirement: `radar_pushed_topics` table is provisioned by bootstrap
+
+`scripts/bootstrap_db.py` SHALL create `radar_pushed_topics` with columns `id BIGSERIAL PRIMARY KEY`, `topic_summary TEXT NOT NULL`, `embedding vector(1024) NOT NULL`, `item_ids JSONB NOT NULL`, `first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()`. It SHALL also create an `ivfflat (embedding vector_cosine_ops)` index (`lists = 100`) for the dedup gate's approximate-nearest-neighbor lookup. The embedding dimension is fixed at 1024 to match the default `Qwen3-Embedding-0.6B-8bit` embedder profile; swapping embedders requires a column migration.
+
+#### Scenario: fresh bootstrap creates the topics table
+
+- **WHEN** the operator runs `uv run python scripts/bootstrap_db.py` against an empty database
+- **THEN** `radar_pushed_topics` exists with the documented columns and the ivfflat cosine index
+
+### Requirement: `radar_analyses` table is provisioned by bootstrap
+
+`scripts/bootstrap_db.py` SHALL create `radar_analyses` with columns `id BIGSERIAL PRIMARY KEY`, `radar_item_id BIGINT NOT NULL REFERENCES radar_items(id) ON DELETE CASCADE`, `verdict TEXT NOT NULL` (`'drop'` | `'keep'`), `tier1_reason TEXT`, `summary TEXT`, `impact_md TEXT`, `score INTEGER`, `tags JSONB NOT NULL DEFAULT '[]'::jsonb`, `content_status TEXT` (`'full'` | `'fallback'` | `'error'` | `NULL`), `dedup_status TEXT` (`'novel'` | `'duplicate'` | `NULL`), `dedup_match_id BIGINT REFERENCES radar_pushed_topics(id) ON DELETE SET NULL`, `pushed_at TIMESTAMPTZ`, `analyzed_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `UNIQUE (radar_item_id)` (makes re-runs idempotent). `radar_item_id`'s `ON DELETE CASCADE` means the 30-day `radar_items` sweep also removes the corresponding analysis row. It SHALL also create `radar_analyses_unpushed_idx` on `analyzed_at WHERE verdict='keep' AND dedup_status='novel' AND pushed_at IS NULL`.
+
+#### Scenario: fresh bootstrap creates the analyses table
+
+- **WHEN** the operator runs `uv run python scripts/bootstrap_db.py` against an empty database
+- **THEN** `radar_analyses` exists with the documented columns, the `radar_items` foreign key with `ON DELETE CASCADE`, the unique constraint, and the partial index
+
+#### Scenario: sweeping a radar_items row cascades to its analysis
+
+- **WHEN** the 30-day sweep deletes a `radar_items` row that has a corresponding `radar_analyses` row
+- **THEN** the `radar_analyses` row is deleted along with it via `ON DELETE CASCADE`
+

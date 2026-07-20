@@ -5,7 +5,7 @@ TBD - created by archiving change dashboard-goals-subscriptions. Update Purpose 
 ## Requirements
 ### Requirement: Subscriptions page
 
-The dashboard SHALL render `/subscriptions` as a read-only inventory of the operator's Folo subscriptions, matching the committed Subscriptions mock in `dashboard/design/pages-other.jsx`.
+The dashboard SHALL render `/subscriptions` as a read-only inventory of the operator's Folo subscriptions, per `dashboard/app/subscriptions/page.tsx`. (This was originally validated against a `dashboard/design/pages-other.jsx` mock; that mock directory is not present in this trimmed repo, so conformance is judged against the shipped page directly.)
 
 #### Scenario: subscriptions route renders feed rows
 

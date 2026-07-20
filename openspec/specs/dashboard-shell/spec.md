@@ -42,12 +42,17 @@ The dashboard SHALL load Geist Sans and Geist Mono via Vercel's `geist/font/sans
 
 ### Requirement: Theme provider uses the `data-theme` attribute
 
-The dashboard SHALL wrap the app in `<ThemeProvider attribute="data-theme" defaultTheme="system" enableSystem>` (from `next-themes`) so the design's `[data-theme="dark"]` / `[data-theme="light"]` CSS selectors work as authored, and SHALL configure Tailwind's `darkMode` to recognize the same selector.
+The dashboard SHALL wrap the app in `<ThemeProvider attribute="data-theme" defaultTheme="light" disableTransitionOnChange>` (from `next-themes`, via `dashboard/components/theme-provider.tsx`) so the design's `[data-theme="dark"]` / `[data-theme="light"]` CSS selectors work as authored, and SHALL configure Tailwind's `darkMode` to recognize the same selector. The default theme is `light`; the provider does NOT pass `enableSystem`, so the app does not follow the OS theme by default — the operator must explicitly toggle to dark.
 
 #### Scenario: theme toggle flips data-theme
 
 - **WHEN** the operator toggles the theme
 - **THEN** `<html data-theme="dark">` or `data-theme="light"` updates, the design's CSS variables swap accordingly, and Tailwind dark utilities (`dark:`) resolve to the same state
+
+#### Scenario: default theme is light, not OS-driven
+
+- **WHEN** the operator loads the dashboard for the first time with no stored theme preference, regardless of OS theme setting
+- **THEN** the dashboard renders with `data-theme="light"`
 
 #### Scenario: SSR avoids hydration mismatch
 
@@ -67,6 +72,20 @@ The dashboard SHALL render a global app shell — top navigation bar (`Radar`, `
 
 - **WHEN** the operator clicks the theme toggle and reloads
 - **THEN** the previously selected theme (light / dark / system) is restored without a flash of incorrect theme
+
+### Requirement: Bilingual UI via a locale cookie
+
+The dashboard SHALL support English and Chinese UI text via `dashboard/lib/i18n/` (dictionaries + a `getDictionary(locale)` lookup), an `I18nProvider` (`dashboard/components/i18n-provider.tsx`) exposing `useI18n() -> {locale, t}` to client components, and a `LanguageToggle` component (`dashboard/components/language-toggle.tsx`) that flips the locale. The active locale SHALL be persisted in a `paca_locale` cookie (`LOCALE_COOKIE`, 1-year `max-age`, `path=/`, `samesite=lax`) and applied on the server for the initial render.
+
+#### Scenario: operator toggles language
+
+- **WHEN** the operator clicks the language toggle
+- **THEN** the `paca_locale` cookie flips between `zh` and `en`, the router refreshes, and subsequently rendered text uses the new locale's dictionary
+
+#### Scenario: locale persists across reloads
+
+- **WHEN** the operator reloads the dashboard after toggling language
+- **THEN** the same locale (read from the `paca_locale` cookie) is used for the initial server render, with no flash of the other language
 
 ### Requirement: UI primitive library
 
@@ -199,21 +218,41 @@ The dashboard SHALL render `/knowledge` matching the design at `dashboard/design
 - **WHEN** `/knowledge` loads
 - **THEN** the sidebar tree lists categories and documents discovered by walking `PACA_WIKI_DIR`, and clicking a doc swaps the preview pane
 
+#### Scenario: operator creates a wiki folder
+
+- **WHEN** the operator uses the new-folder dialog (`dashboard/components/knowledge/new-folder-dialog.tsx`) to create a folder path with a scope/freshness tier
+- **THEN** `createWikiFolder` validates the path (lowercase segments, no traversal), registers the taxonomy category, creates the directory, and refreshes `/knowledge`
+
+#### Scenario: operator deletes a wiki doc or folder
+
+- **WHEN** the operator confirms deletion via the delete-confirm dialog (`dashboard/components/knowledge/delete-confirm-dialog.tsx`) for a doc or folder
+- **THEN** `deleteWikiDoc` (removing the whole per-article directory for the `<slug>/<slug>.md` layout) or `deleteWikiFolder` (recursive, refuses the wiki root, prunes taxonomy categories) removes it from the wiki tree only — the GBrain index and raw archive are left for the next re-index — and `/knowledge` refreshes
+
 ### Requirement: Design-mocks-driven implementation convention
 
-The dashboard SHALL treat `dashboard/design/` as the source of truth for visual layouts and `dashboard/README.md` SHALL document that downstream dashboard changes implement against those mocks rather than inventing visual layouts.
+`dashboard/README.md` SHALL document `dashboard/design/` as the source of truth for visual layouts, instructing implementers to build against those mocks rather than inventing visual layouts. This convention is currently stale/inactive in this trimmed repo: `dashboard/design/` does not exist here (no git history for the directory), even though the README still references it. Implementers SHALL treat the shipped pages under `dashboard/app/` as the current source of truth until/unless the mock directory is restored.
 
 #### Scenario: README documents the convention
 
 - **WHEN** a contributor reads `dashboard/README.md`
 - **THEN** they find a section that names `dashboard/design/` as the source-of-truth for visual layouts and instructs implementers to pause and ask if a referenced mock is missing
 
+#### Scenario: referenced mock directory is absent in this repo
+
+- **WHEN** a contributor looks for `dashboard/design/` in this repo
+- **THEN** it does not exist; new dashboard work should follow the shipped pages' existing patterns rather than blocking on a missing mock
+
 ### Requirement: Dev workflow documentation
 
-`dashboard/README.md` SHALL document the `pnpm dev` (port 3000) + `uv run paca serve` (port 7777) two-process workflow and the `NEXT_PUBLIC_AGENT_OS_URL` env var (default `http://localhost:7777`).
+`dashboard/README.md` SHALL document the `pnpm dev` (port 3000) + `uv run paca serve` (port 7777) two-process workflow and the `NEXT_PUBLIC_AGENT_OS_URL` env var (default `http://localhost:7777`). It SHALL also document the `paca dashboard` CLI wrapper (a thin `pnpm dev|build|start` exec, see core-cli spec) as an alternative entrypoint.
 
 #### Scenario: README covers the two-process flow
 
 - **WHEN** a new operator reads `dashboard/README.md`
 - **THEN** they can start the dashboard and AgentOS together without referring to other docs, and they know which env var points the browser at AgentOS
+
+#### Scenario: README documents the paca dashboard wrapper
+
+- **WHEN** a new operator reads `dashboard/README.md`
+- **THEN** they find `paca dashboard` documented as an alternative to running `pnpm dev` directly from `dashboard/`
 

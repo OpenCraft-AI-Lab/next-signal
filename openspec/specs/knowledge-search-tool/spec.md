@@ -17,7 +17,9 @@ Expose a stable agent-facing search tool for retrieving snippets from the local 
 
 The tool SHALL be registered by the `src/paca/tools/knowledge/` package so it can be referenced from any agent YAML.
 
-#### Scenario: knowledge_manager picks up the tool
+#### Scenario: an agent picks up the tool
 
-- **WHEN** the `knowledge_manager` agent YAML lists `tools: [search_knowledge]`
+- **WHEN** an agent YAML lists `tools: [search_knowledge]`
 - **THEN** the agent can call the tool at runtime
+
+Note: no agent in this repo currently lists `search_knowledge` in its `tools:` (there is no `knowledge_manager` agent) — the registration mechanism itself is real and verified (`src/paca/tools/knowledge/__init__.py::register`), just not yet exercised by a shipped agent.
