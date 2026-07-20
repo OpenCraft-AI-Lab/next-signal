@@ -72,7 +72,9 @@ corresponding tool — it never blocks startup.
   `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR`, they are not hardcoded defaults.
 - agno-managed tables (sessions / memory / knowledge / traces): local Postgres +
   pgvector.
-- Logs: `~/Library/Logs/next-signal/`.
+- Logs: stdout only (structlog — console rendering on a TTY, JSON otherwise).
+  `~/Library/Logs/next-signal/` is created, but nothing currently writes files
+  there.
 
 Under Docker Compose these map to the `pstate` volume and the wiki bind mounts
 instead — see [`containerized-deployment.md`](./containerized-deployment.md).
@@ -89,8 +91,12 @@ It checks `DATABASE_URL`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`,
 GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`folocli whoami` —
 either `FOLO_TOKEN` or `~/.folo/config.json` is enough), and that info-radar's
 `configs/info_radar/goals.yaml` exists and parses (without it,
-`paca info-radar analyze` raises a loud `RuntimeError`). `doctor` exits non-zero
-if any required check fails.
+`paca info-radar analyze` raises a loud `RuntimeError`).
+
+The code does **not** distinguish "required" from "optional" checks — **any**
+failure exits non-zero, including the folocli auth listed as optional above. The
+required/optional split above only means "if this machine will not use that
+feature, you can ignore its ✗".
 
 A missing `DEEPSEEK_API_KEY` counts as a failure — the default fallback profile
 for `local*` uses DeepSeek when OMLX is unreachable. A missing

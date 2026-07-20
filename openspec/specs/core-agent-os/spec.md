@@ -38,8 +38,10 @@ The system SHALL run all agents, teams, and workflows inside a single `agno.os.A
 
 #### Scenario: disabled team is skipped
 
-- **WHEN** `configs/teams/personal_assistant.yaml` sets `enabled: false`
+- **WHEN** a `configs/teams/<name>.yaml` sets `enabled: false`
 - **THEN** the team config remains listable but is not registered in AgentOS
+
+No team configs currently ship — `configs/teams/` is empty in this repo — but `load_teams()` applies the same `cfg.enabled` check it applies to agents and workflows.
 
 #### Scenario: a single bad config does not block startup
 

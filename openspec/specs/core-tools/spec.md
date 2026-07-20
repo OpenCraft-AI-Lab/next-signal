@@ -29,18 +29,25 @@ Avoid dynamic scanning. Every tool the LLM can call is registered explicitly so 
 
 ### Requirement: Provider-prefixed tool names
 
-Provider-backed or integration-specific tools SHALL be named with the form `<provider>_<verb>` (e.g. `tavily_search`, `finnhub_fetch_news`).
+Provider-backed or integration-specific tools SHALL be named with the form `<provider>_<verb>` (e.g. `gbrain_search`, `gbrain_ingest`).
 
 #### Scenario: name disambiguates source
 
-- **WHEN** two integrations both expose a "search" capability
-- **THEN** their registered names (`tavily_search`, `moomoo_news_search`) prevent the LLM from confusing them at routing time
+- **WHEN** an integration exposes multiple capabilities
+- **THEN** their registered names (`gbrain_search`, `gbrain_get`, `gbrain_query`, `gbrain_ingest`) prevent the LLM from confusing them at routing time
 
-### Requirement: JSON repair for local models
+### Requirement: JSON extraction salvages malformed tool-call wrapping
 
-`paca.tools._json_extract` SHALL repair Qwen3-style malformed JSON tool-call output (trailing commas, single quotes, comment fragments, etc.) using the documented case set.
+`paca.tools._json_extract.extract_json_object` SHALL salvage the largest balanced `{...}` object out of text that wraps JSON in prose, `<thinking>`/`<action>`-style tags, or markdown code fences, returning the original text unchanged if no candidate object is found. It does **not** repair malformed JSON syntax (trailing commas, unescaped quotes, etc.) — it only extracts a well-formed span from surrounding noise.
 
-#### Scenario: regression tests guard the JSON repair
+Actual repair of malformed-but-almost-valid JSON (trailing commas, unescaped quotes in long strings, comments) happens one layer up, in `paca.agents.structured.run_structured`: after extraction, a strict `json.loads`/`model_validate_json` attempt is followed by a `json5.loads()` fallback that tolerates these xgrammar-style near-misses; if both fail, the agent is re-prompted with the validation error and retried up to `max_repairs` times before raising `RuntimeError`.
+
+#### Scenario: regression tests guard the JSON extraction
 
 - **WHEN** `paca.tools._json_extract` is modified
-- **THEN** the 12-case test suite in `tests/test_json_extract.py` MUST be re-run and must pass before the change ships
+- **THEN** the test suite in `tests/test_json_extract.py` MUST be re-run and must pass before the change ships
+
+#### Scenario: xgrammar near-miss is repaired without a retry round-trip
+
+- **WHEN** a local model's structured output has a trailing comma or an unescaped quote inside a long string
+- **THEN** `run_structured`'s `json5.loads()` fallback parses it successfully, skipping the repair-prompt retry entirely

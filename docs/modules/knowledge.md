@@ -29,14 +29,14 @@ and GBrain provides indexing and hybrid search.
 
 Knowledge-domain tools:
 
-- `knowledge_ingest_workflow` — the single-article ingest path (fetch → edit →
-  classify → persist).
+- `knowledge_ingest_workflow` — the single-article ingest path (fetch → clean →
+  enrich → classify → persist).
 
 KB **retrieval** is cross-cutting infrastructure and does not belong to this
-module: `search_knowledge` plus `gbrain_search` / `gbrain_get` / `gbrain_query` /
-`gbrain_ingest` live in `paca/tools/gbrain.py`, and the GBrain bridge is
-`paca/integrations/gbrain.py`. Agents in any module can reference these tools by
-name.
+module: `search_knowledge` lives in `paca/tools/knowledge/search.py`;
+`gbrain_search` / `gbrain_get` / `gbrain_query` / `gbrain_ingest` live in
+`paca/tools/gbrain.py`; and the GBrain bridge is `paca/integrations/gbrain.py`.
+Agents in any module can reference these tools by name.
 
 ## External systems
 

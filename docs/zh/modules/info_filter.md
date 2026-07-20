@@ -61,7 +61,6 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
   `opinion` tag 的 ≤65 上限由代码层 clamp 兜底（`stages/tier2.py::_apply_ceilings`），
   goals 列名的高信号个人由 prompt 引导打 `frontier-voice` tag 豁免。
 - Dedup embedding 失败时 conservatively 走 novel，不静默丢 item。
-- 新闻 cache 状态只能 `pulled` → `reviewed` / `pushed`；`reviewed` 不能覆盖 `pushed`。
 - 不要往 logger dump 整个 provider dict。
 
 ## 规范与状态

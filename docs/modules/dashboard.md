@@ -38,9 +38,11 @@ dashboard/
 
 ## Cross-module conventions
 
-- **Two server-action spawn modes** (`lib/actions/`): long tasks (analyze) spawn
+- **Three server-action modes** (`lib/actions/`): long tasks (analyze) spawn
   detached and the page converges by polling (`/api/radar/run`); short tasks
-  (saving goals) use `execFile` and await synchronously.
+  (gbrain search, `info-radar pull`) use `execFile` and await synchronously; and
+  saving goals spawns nothing at all — it is in-process fs I/O inside the server
+  action (`lib/goals.ts`).
 - **Ingest progress is single-process in-memory state**: both ingest entrypoints
   (the `/knowledge` form and `/radar` Ingest) share the job registry in
   `lib/ingest/jobs.ts`, which spawns `paca knowledge ingest --progress` and pushes
@@ -53,8 +55,9 @@ dashboard/
   summaries, tags, and YAML values render as stored.
 - **Config writes are atomic and mirror the loader contract**: both `/goals` and
   `/knowledge`'s taxonomy edits validate against the Python loader's schema
-  first, then do a temp-file rename or a text-line splice — never a whole-file
-  reserialize.
+  first, then land via a temp-file rename. `/knowledge`'s taxonomy uses a
+  text-line splice so comments and alignment survive; `/goals` reserializes the
+  whole file with `YAML.stringify`.
 
 ## Development notes (invariants)
 

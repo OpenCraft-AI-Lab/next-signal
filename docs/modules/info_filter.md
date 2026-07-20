@@ -74,8 +74,6 @@ reading and manual triggering.
   goals are exempted via a prompt-driven `frontier-voice` tag.
 - When dedup embedding fails, treat the item conservatively as novel — never
   silently drop it.
-- News cache status only moves `pulled` → `reviewed` / `pushed`; `reviewed` never
-  overwrites `pushed`.
 - Never dump a whole provider dict into the logger.
 
 ## Specs and status
