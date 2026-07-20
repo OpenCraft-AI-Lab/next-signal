@@ -1,38 +1,42 @@
-# 开发指南
+# Development Guide
 
-## 默认工作流
+> **English** · [中文](./zh/development.md)
 
-非平凡的能力开发走 OpenSpec：
+## Default workflow
 
-1. 在 `openspec/changes/` 新建或选一个 change。
-2. 写 / 改 `proposal.md`、delta specs、`tasks.md`。
-3. `openspec validate --all` 校验。
-4. 按 task 实现，验证一个勾一个。
-5. 实现完 `openspec archive <name>`，delta 合并进 `openspec/specs/`。
+Non-trivial capability work goes through OpenSpec:
 
-Slash 别名（`.claude/commands/opsx/`）：`/opsx:explore`、`/opsx:propose`、
-`/opsx:apply`、`/opsx:archive`。
+1. Create or pick a change under `openspec/changes/`.
+2. Write or update `proposal.md`, the delta specs, and `tasks.md`.
+3. Validate with `openspec validate --all`.
+4. Implement task by task, ticking each one off as you verify it.
+5. When done, `openspec archive <name>` merges the deltas into `openspec/specs/`.
 
-## 工具链
+Slash aliases (`.claude/commands/opsx/`): `/opsx:explore`, `/opsx:propose`,
+`/opsx:apply`, `/opsx:archive`.
 
-永远用 `uv`，不要直接 `python` / `pip` / `pytest`：
+## Toolchain
+
+Always go through `uv` — never bare `python` / `pip` / `pytest`:
 
 ```bash
-uv sync                 # 同步依赖（改了 pyproject 后）
-uv run paca <cmd>        # 跑 CLI
-uv run pytest -q         # 测试
+uv sync                 # sync dependencies (after editing pyproject)
+uv run paca <cmd>        # run the CLI
+uv run pytest -q         # tests
 uv run ruff check src    # lint
-uv add <pkg>             # 加依赖（自动写 pyproject + uv.lock）
+uv add <pkg>             # add a dependency (writes pyproject + uv.lock)
 ```
 
-不要手改 `uv.lock`。
+Never hand-edit `uv.lock`.
 
-## 加一个 agent
+## Adding an agent
 
-1. 写 `configs/agents/<name>.yaml`，file stem 必须等于 yaml `name:` 字段（snake_case）。
-2. 指令文本放 `prompts/agents/<name>.md`（除非极短）。
-3. 模型按 profile 名引用（`configs/models.yaml`）；工具按注册名引用。
-4. 重启 `paca serve`，或 `paca run-agent <name> "..."` 烟测。
+1. Write `configs/agents/<name>.yaml`. The file stem **must** equal the YAML
+   `name:` field (snake_case).
+2. Put instruction text in `prompts/agents/<name>.md` (unless it is very short).
+3. Reference models by profile name (`configs/models.yaml`) and tools by
+   registered name.
+4. Restart `paca serve`, or smoke-test with `paca run-agent <name> "..."`.
 
 ```yaml
 name: knowledge_frontmatter
@@ -44,13 +48,14 @@ add_history_to_context: false
 extra: { db: false, shared_context: false }
 ```
 
-production agent 不要在 Python 里硬编码 model / instructions。纯转换 / verifier
-agent 可在 yaml 写 `extra: {db: false}`（不要会话库）、`extra: {shared_context: false}`
-（不继承 shared context）。
+Production agents never hardcode a model or instructions in Python. A pure
+transformation or verifier agent can set `extra: {db: false}` (no session store)
+and `extra: {shared_context: false}` (does not inherit shared context).
 
-## runnable 配置
+## Runnable configuration
 
-agent / workflow / team 都是 runnable，配置是 repo-local source of truth：
+Agents, workflows, and teams are all runnables, and their config is the
+repo-local source of truth:
 
 ```text
 configs/agents/<name>.yaml
@@ -58,36 +63,39 @@ configs/workflows/<name>.yaml
 configs/teams/<name>.yaml
 ```
 
-共同规则：
+Shared rules:
 
-- `name:` 必须等于文件名 stem。
-- `kind:` 写 `agent` / `workflow` / `team`。
-- `enabled: false` 表示保留配置但不进运行时。
-- YAML 只用 JSON-compatible subset，便于后续前端用 JSON object 编辑、后端写回 YAML。
-- prompt 只存路径，不把长 prompt 塞进 YAML。
+- `name:` must equal the filename stem.
+- `kind:` is one of `agent` / `workflow` / `team`.
+- `enabled: false` keeps the config but excludes it from the runtime.
+- Use only the JSON-compatible subset of YAML, so a future frontend can edit it
+  as a JSON object and the backend can write YAML back.
+- Store prompt *paths*, never long prompt bodies, in YAML.
 
-Python code 只定义 loader / factory / schema。新增普通 agent 不写 Python；workflow / 复杂 team
-才写 factory。
+Python code only defines loaders, factories, and schemas. Adding an ordinary
+agent requires no Python; only workflows and complex teams need a factory.
 
-## 加一个工具
+## Adding a tool
 
-工具 = agent 能直接调用的业务动作。
+A tool is a business action an agent can call directly.
 
-- **横向工具**（跨领域通用，如 GBrain 检索）→ `src/paca/tools/`，
-  在 `paca/registry.py::_IN_TREE_TOOLS` 加一行。
-- **领域工具** → `src/paca/tools/<domain>/`，在该 package 的 `register()` 里
-  `registry.register(...)`。
+- **Cross-cutting tool** (useful in any domain, e.g. GBrain search) →
+  `src/paca/tools/`, plus one line in `paca/registry.py::_IN_TREE_TOOLS`.
+- **Domain tool** → `src/paca/tools/<domain>/`, registered via
+  `registry.register(...)` inside that package's `register()`.
 
-命名用 `<integration>_<verb>` / `<domain>_<verb>` 前缀（`gbrain_search`），
-避免 `search` / `fetch` 这种泛名让 LLM 路由混淆。docstring 一行。
+Name tools with an `<integration>_<verb>` or `<domain>_<verb>` prefix
+(`gbrain_search`). Generic names like `search` or `fetch` confuse LLM routing.
+Keep the docstring to one line.
 
-## 加一个集成
+## Adding an integration
 
-集成 = 外部 provider 的低层 API / CLI adapter。
+An integration is a low-level API or CLI adapter for an external provider.
 
-- **通用 provider**（任何领域都可能用）→ `src/paca/integrations/`，
-  在 `integrations/__init__.py` 的 `_MODULES` 加一行。
-- **领域 provider** → `src/paca/integrations/<domain>/`，由对应领域工具或 workflow stage 调用。
+- **Generic provider** (any domain might use it) → `src/paca/integrations/`,
+  plus one line in `_MODULES` in `integrations/__init__.py`.
+- **Domain provider** → `src/paca/integrations/<domain>/`, called by that
+  domain's tools or by a workflow stage.
 
 ```python
 from agno.tools import tool
@@ -105,17 +113,19 @@ def register(registry) -> None:
     registry.register("provider_action", provider_action)
 ```
 
-只有 integration 本身就是 agent-facing capability 时才实现 `register()` 并进
-`paca/integrations/__init__.py` 的 `_MODULES`；普通领域 adapter 不直接注册给 agent，
-由 tool 或 workflow stage 调用。
+Only implement `register()` and add to `_MODULES` when the integration is itself
+an agent-facing capability. Ordinary domain adapters are not registered for
+agents directly — a tool or workflow stage calls them.
 
-铁律：API key 在 call time 用 `env()` 读（不在 import time）；HTTP 走 `http_client()`；
-返回值过 `to_jsonable()`；长文本过 `truncate()`；module top-level 不做副作用。
+Hard rules: read API keys at **call time** with `env()`, never at import time;
+route HTTP through `http_client()`; pass return values through `to_jsonable()`;
+pass long text through `truncate()`; no side effects at module top level.
 
-## 加一个 workflow
+## Adding a workflow
 
-多步骤 / 可调度 / 需要可观测可恢复的工作放 workflow。workflow 集中在
-`src/paca/workflows/`，并由 `configs/workflows/<name>.yaml` 声明。
+Multi-step, schedulable work that needs observability or resumability belongs in
+a workflow. Workflows are centralized in `src/paca/workflows/` and declared by
+`configs/workflows/<name>.yaml`.
 
 ```yaml
 name: knowledge_ingest
@@ -131,28 +141,36 @@ extra:
   run_now: paca.workflows.knowledge_ingest:run
 ```
 
-**尚未实现**：纯 agent 串联、没有自定义 artifact / retry / 文件写入语义的简单线性
-workflow，未来计划支持直接用 YAML `steps:` 声明。当前 `WorkflowConfig` 是 strict
-schema（`extra="forbid"`），没有 `steps` 字段——直接写 `steps:` 的 YAML 会校验失败。
-要做这类 workflow，先扩展 centralized loader 和 `WorkflowConfig` 支持 `steps:` builder。
+**Not implemented yet:** simple linear workflows that just chain agents, with no
+custom artifact / retry / file-write semantics, are planned to be declarable
+directly via a YAML `steps:` key. Today `WorkflowConfig` is a strict schema
+(`extra="forbid"`) with no `steps` field — a YAML that writes `steps:` fails
+validation. To build one, first extend the centralized loader and
+`WorkflowConfig` with a `steps:` builder.
 
-只有 workflow 私有的 helper / stage 放 `src/paca/workflows/stages/<workflow>/`；可被多个
-workflow 或 agent 复用的动作提升到 `tools/` 或 `integrations/`。
+Helpers and stages private to one workflow go in
+`src/paca/workflows/stages/<workflow>/`. An action reusable by several workflows
+or agents gets promoted to `tools/` or `integrations/`.
 
-同一个 workflow 只有一个本体，是否暴露给 AgentOS 或 agent tool 由 `expose` 决定：
+A workflow has exactly one implementation; `expose` decides whether it reaches
+AgentOS or the agent tool surface:
 
-- `expose.agent_os: true` → `paca.os_app` 通过 centralized loader 注册到 AgentOS。
-- `expose.tool.enabled: true` → `paca.orchestrator.workflow_tools` 注册一个 `WorkflowTools`
-  toolkit，agent YAML 用这个 tool 名。
-- `extra.run_now` → `paca run-workflow <name>` 手动触发时调用的 function。不是每个 workflow 都必须支持。
+- `expose.agent_os: true` → `paca.os_app` registers it with AgentOS via the
+  centralized loader.
+- `expose.tool.enabled: true` → `paca.orchestrator.workflow_tools` registers a
+  `WorkflowTools` toolkit; agent YAML references that tool name.
+- `extra.run_now` → the function `paca run-workflow <name>` calls for a manual
+  run. Not every workflow needs to support it.
 
-不要为同一个 workflow 再写一份 `tools/<domain>/workflow_tools.py` wrapper。
+Never write a second `tools/<domain>/workflow_tools.py` wrapper for a workflow
+that already exists.
 
-## 加一个 team
+## Adding a team
 
-team 也走 runnable 配置。简单 team 只写 `configs/teams/<name>.yaml`；复杂 routing 才加
-`src/paca/teams/<name>.py` factory。当前仓库没有 shipped team——`configs/teams/`
-为空，`list_teams()` 正常返回空列表；新加一个团队方向时才需要这层。
+Teams are runnables too. A simple team is just `configs/teams/<name>.yaml`; only
+complex routing justifies a `src/paca/teams/<name>.py` factory. No team ships
+today — `configs/teams/` is empty and `list_teams()` correctly returns an empty
+list. This layer only matters once you add a team-shaped direction.
 
 ```yaml
 name: <team_name>
@@ -166,33 +184,63 @@ instructions_file: teams/<team_name>.md
 factory: paca.teams.<team_name>:build
 ```
 
-新增一个产品方向时，优先新增领域目录而不是 `modules/`：
-`src/paca/tools/<domain>/`、`src/paca/integrations/<domain>/`、必要时
-`src/paca/workflows/<name>.py` 和 `configs/{agents,workflows,teams}/`。
+When starting a new product direction, prefer adding a domain directory over a
+`modules/` layer: `src/paca/tools/<domain>/`,
+`src/paca/integrations/<domain>/`, and where needed
+`src/paca/workflows/<name>.py` plus `configs/{agents,workflows,teams}/`.
 
-## 配置约定
+## Configuration conventions
 
-- 所有可调参数走 `configs/` 下的 YAML，Python 只定义 schema 和 loader。
-- Pydantic strict model 拒绝未知 key（typo 要 loud fail）。
-- YAML `name:` 与 file stem 对齐。
-- 不在 YAML 放 secret；不在多个模块重复解析 `.env`。
+- Every tunable parameter lives in YAML under `configs/`; Python defines only the
+  schema and the loader.
+- Pydantic strict models reject unknown keys, so typos fail loud.
+- YAML `name:` stays aligned with the file stem.
+- No secrets in YAML; no duplicated `.env` parsing across modules.
 
-## 测试
+## Testing
 
 ```bash
 uv run pytest -q
 ```
 
-- 不写 mock-heavy 单测；优先 `tmp_path` + `monkeypatch` + 真函数调用。
-- 单测不碰生产本地服务 / DB / 外部 API / 真实浏览器登录态。
-- 需要 OMLX / 外部 API 的集成测试：`@pytest.mark.integration` + 默认跳过。
-- 新增工具 / 集成至少配一个 smoke test。
-- 改注册表跑 `tests/test_registry.py`；改 `tools/_json_extract.py` 跑
-  `tests/test_json_extract.py`。
+- No mock-heavy unit tests — prefer `tmp_path` + `monkeypatch` + real function
+  calls.
+- Unit tests never touch production local services, the DB, external APIs, or a
+  real browser session.
+- Integration tests that need OMLX or an external API use
+  `@pytest.mark.integration` and skip by default.
+- Every new tool or integration gets at least one smoke test.
+- Touching the registry means running `tests/test_registry.py`; touching
+  `tools/_json_extract.py` means running `tests/test_json_extract.py`.
 
-## 提交
+Run any **runtime or end-to-end** verification (the CLI, the dashboard, a full
+pipeline, anything touching Postgres / gbrain / folocli) through Docker rather
+than bare on the host, so the verification environment matches what ships:
 
-- 用户主动让 commit 才 commit。
-- message 引用所属 OpenSpec change 的 task 或 spec capability 名。
-- 不 amend；不 `--no-verify`。
-- 不提交 `.env` / `state/` / 生成的 cache / secret。
+```bash
+docker compose build
+docker compose up
+docker compose exec dashboard paca doctor
+docker compose run --rm dashboard paca run-workflow knowledge_ingest
+```
+
+See [containerized-deployment.md](./containerized-deployment.md) for the full
+design and the volume / env-var mapping.
+
+## Documentation
+
+Docs are bilingual, and **English is canonical**. English pages live at
+`README.md` and `docs/`; the Chinese mirror lives at `README.zh-CN.md` and
+`docs/zh/`. Every page opens with a switcher link to its counterpart.
+
+When you change a doc, update both languages in the same change. If you write
+something new in Chinese, it ships with an English counterpart before the change
+is done. (The reverse is not required: `containerized-deployment.md` is
+English-only.)
+
+## Commits
+
+- Only commit when the user asks for it.
+- Reference the OpenSpec change's task, or the spec capability name, in the message.
+- Never amend; never `--no-verify`.
+- Never commit `.env`, `state/`, generated caches, or secrets.

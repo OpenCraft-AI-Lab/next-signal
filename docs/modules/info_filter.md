@@ -1,83 +1,104 @@
-# 模块：info_filter（信息搜集过滤）
+# Module: info_filter (information collection and filtering)
 
-## 解决什么
+> **English** · [中文](../zh/modules/info_filter.md)
 
-收集外部信息流并过滤到 signal。当前实例是 **info-radar**：周期性拉
-Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
-`configs/info_radar/goals.yaml` 做 relevance、impact scoring 和 dedup，
-写 `radar_analyses` / `radar_pushed_topics`，dashboard `/radar` 负责阅读和手动触发。
+## What it solves
 
-## 代码位置
+Collect external information streams and filter them down to signal. The current
+instance is **info-radar**: periodically pull the Folo / source CLIs and write
+`radar_items`; then a two-tier local-LLM analysis scores relevance and impact and
+deduplicates according to `configs/info_radar/goals.yaml`, writing
+`radar_analyses` / `radar_pushed_topics`. The dashboard `/radar` page handles
+reading and manual triggering.
 
-`src/paca/collectors/info_radar/` —— 无 LLM collector，source CLI → `radar_items`。
-`src/paca/integrations/info_radar/` —— Folo / YouTube subtitle 等 provider adapter。
-`src/paca/workflows/info_radar_pull.py` —— collector 的 manual-run thin shell。
-`src/paca/workflows/info_radar_analysis/` —— 两层 LLM analysis pipeline。
+## Where the code lives
+
+`src/paca/collectors/info_radar/` — the LLM-free collector, source CLI →
+`radar_items`.
+`src/paca/integrations/info_radar/` — provider adapters (Folo, YouTube subtitles).
+`src/paca/workflows/info_radar_pull.py` — the collector's manual-run thin shell.
+`src/paca/workflows/info_radar_analysis/` — the two-tier LLM analysis pipeline.
 
 ## Agents
 
-| agent | 模型 profile | 用途 |
+| Agent | Model profile | Used for |
 |---|---|---|
-| `radar_tier1_filter` | local_structured | batched Tier-1 relevance filter，按 goals 决定 keep/drop |
-| `radar_tier2_impact` | local_structured | per-item full-content impact summary / score / tags |
-| `radar_dedup_judge` | local_structured | pgvector candidate 后的 LLM duplicate/novel 判定 |
+| `radar_tier1_filter` | local_structured | Batched tier-1 relevance filter; keep/drop against the goals |
+| `radar_tier2_impact` | local_structured | Per-item full-content impact summary / score / tags |
+| `radar_dedup_judge` | local_structured | LLM duplicate/novel verdict after pgvector candidate retrieval |
 
-## 工具
+## Tools
 
-- info-radar collector：`uv run paca info-radar pull [--source NAME]`。
-- info-radar analysis：`uv run paca info-radar analyze [--limit N] [--source NAME]`。
-- Folo subscriptions inventory：`uv run paca info-radar subscriptions --json`。
+- info-radar collector: `uv run paca info-radar pull [--source NAME]`.
+- info-radar analysis: `uv run paca info-radar analyze [--limit N] [--source NAME]`.
+- Folo subscriptions inventory: `uv run paca info-radar subscriptions --json`.
 
-## 接的外部
+## External systems
 
-- **Folo CLI**（`paca.integrations.info_radar.folo`）—— info-radar source / full content /
-  subscriptions；默认 `npx --yes folocli@0.0.5`，可用 `FOLO_CLI_ARGV` 覆盖。
-  Dashboard `/radar` 的 Ingest 会先用 `folocli entry get <source_id>` 拉全文并 stage 成
-  `PACA_AGENT_TMP_DIR` 下的 HTML，再交给 knowledge pipeline；非 Folo source 仍走
-  `radar_items.url`。
-- **YouTube native subtitles**（`paca.integrations.info_radar.youtube_subs`）—— YouTube
-  item 的无音频字幕补充。
+- **Folo CLI** (`paca.integrations.info_radar.folo`) — info-radar source, full
+  content, and subscriptions. Defaults to `npx --yes folocli@0.0.5`, overridable
+  with `FOLO_CLI_ARGV`. The dashboard's `/radar` Ingest first pulls the full text
+  with `folocli entry get <source_id>` and stages it as HTML under
+  `PACA_AGENT_TMP_DIR` before handing off to the knowledge pipeline; non-Folo
+  sources still go through `radar_items.url`.
+- **YouTube native subtitles** (`paca.integrations.info_radar.youtube_subs`) —
+  audio-free subtitle enrichment for YouTube items.
 
-## 数据存哪
+## Where data lives
 
-- info-radar raw items：Postgres `radar_items`
-- info-radar analyses：Postgres `radar_analyses`
-- info-radar dedup memory：Postgres `radar_pushed_topics`（pgvector 1024-dim）
-- info-radar goals：`configs/info_radar/goals.yaml`（dashboard `/goals` 可编辑）
-- info-radar sources：`configs/info_radar/sources.yaml`
+- info-radar raw items: Postgres `radar_items`
+- info-radar analyses: Postgres `radar_analyses`
+- info-radar dedup memory: Postgres `radar_pushed_topics` (pgvector, 1024-dim)
+- info-radar goals: `configs/info_radar/goals.yaml` (editable from the dashboard
+  `/goals` page)
+- info-radar sources: `configs/info_radar/sources.yaml`
 
-## 不变量
+## Invariants
 
-- `radar_items.seen_at` 只由 analysis 层写；collector 只写 raw item。
-- `radar_analyses.radar_item_id` 是唯一键；analysis 只处理 `seen_at IS NULL`，并且在
-  analysis row commit 后才写 `seen_at`，所以任意 cadence 重跑都保持幂等。
-- `configs/info_radar/goals.yaml` 缺失或非法时，analysis loud fail。
-- Tier-1 batch 输出结构不匹配时回退到单 item；任一 item 失败不能阻断整批。
-- Tier-1 / Tier-2 失败的 item 不写 analysis row、不写 `seen_at`——留给下一轮重试
-  （`radar_analyses` 唯一键 + 无 reanalyze 命令，写空行会把瞬时失败永久冻结）。
-- Tier-2 打分是"定档 base 分 + 三维度 ±3 档内调节"两步 rubric（prompt 定义）；
-  `opinion` tag 的 ≤65 上限由代码层 clamp 兜底（`stages/tier2.py::_apply_ceilings`），
-  goals 列名的高信号个人由 prompt 引导打 `frontier-voice` tag 豁免。
-- Dedup embedding 失败时 conservatively 走 novel，不静默丢 item。
-- 新闻 cache 状态只能 `pulled` → `reviewed` / `pushed`；`reviewed` 不能覆盖 `pushed`。
-- 不要往 logger dump 整个 provider dict。
+- `radar_items.seen_at` is written **only** by the analysis layer; the collector
+  writes raw items only.
+- `radar_analyses.radar_item_id` is a unique key. Analysis only processes rows
+  where `seen_at IS NULL`, and writes `seen_at` only after the analysis row is
+  committed — which is what keeps reruns idempotent at any cadence.
+- When `configs/info_radar/goals.yaml` is missing or invalid, analysis fails loud.
+- If a tier-1 batch response does not match the expected structure, fall back to
+  single-item processing; one failing item must never block the batch.
+- Items that fail tier-1 or tier-2 get no analysis row and no `seen_at`, leaving
+  them for the next run. (Given the unique key on `radar_analyses` and the
+  absence of a reanalyze command, writing an empty row would freeze a transient
+  failure permanently.)
+- Tier-2 scoring is a two-step rubric defined in the prompt: anchor a base score,
+  then adjust within ±3 bands across three dimensions. The ≤65 ceiling for the
+  `opinion` tag is backstopped in code
+  (`stages/tier2.py::_apply_ceilings`), and high-signal individuals named in the
+  goals are exempted via a prompt-driven `frontier-voice` tag.
+- When dedup embedding fails, treat the item conservatively as novel — never
+  silently drop it.
+- News cache status only moves `pulled` → `reviewed` / `pushed`; `reviewed` never
+  overwrites `pushed`.
+- Never dump a whole provider dict into the logger.
 
-## 规范与状态
+## Specs and status
 
-规范：[`openspec/specs/info-radar/`](../../openspec/specs/info-radar/)、
-[`openspec/specs/info-radar-analysis/`](../../openspec/specs/info-radar-analysis/)、
-[`openspec/specs/dashboard-radar-reader/`](../../openspec/specs/dashboard-radar-reader/)。
+Specs: [`openspec/specs/info-radar/`](../../openspec/specs/info-radar/),
+[`openspec/specs/info-radar-analysis/`](../../openspec/specs/info-radar-analysis/),
+[`openspec/specs/dashboard-radar-reader/`](../../openspec/specs/dashboard-radar-reader/).
 
-当前状态：info-radar pull / analysis / dashboard reader / goals editor / Folo subscriptions
-table 已就位。没有后台调度——pull 和 analysis **都靠手动触发**：`paca info-radar pull|analyze`、
-`paca run-workflow <name>` 或 dashboard `/radar` 的 Pull + Analyze。
+Current status: info-radar pull, analysis, the dashboard reader, the goals
+editor, and the Folo subscriptions table are all in place. There is no background
+scheduler — both pull and analysis are **manually triggered**, via
+`paca info-radar pull|analyze`, `paca run-workflow <name>`, or the dashboard
+`/radar` page's Pull + Analyze.
 
-dashboard `/radar` 的 `Pull + Analyze` 现在显示**实时 analyze 进度**：action 在 pull 后把
-未分析条目数（denominator）连同 `analyzeRunning` 标记写进
-`~/.next-signal/radar-state.json`，并以 **tracked**（非 detached）方式 spawn
-`info-radar analyze`，子进程退出时翻回 `analyzeRunning=false`。页面通过
-`GET /api/radar/run`（约 1.5s 轮询，`done = radar_analyses` 自最近 analyze 起的行数）驱动一个
-`done/total` 进度条，并在运行中节流刷新让 `TodayTracker` 计数实时跳动；进度条的 running 状态在
-页面加载时即从 `radar-state.json` 读取，刷新页面也能续上。仅覆盖 dashboard 触发的 run
-（CLI run 不显示进度条）；dashboard 重启会让 in-flight 的 `analyzeRunning` 残留到下次
-run（best-effort，子进程与 DB 写入不受影响）。
+The dashboard's `Pull + Analyze` shows **live analyze progress**: after pulling,
+the action writes the unanalyzed-item count (the denominator) plus an
+`analyzeRunning` flag into `~/.next-signal/radar-state.json`, then spawns
+`info-radar analyze` as a **tracked** (not detached) child, flipping
+`analyzeRunning` back to false when it exits. The page drives a `done/total`
+progress bar from `GET /api/radar/run` (~1.5s polling, where `done` is the
+`radar_analyses` row count since the most recent analyze), and throttles
+refreshes while running so the `TodayTracker` counts tick live. The bar's running
+state is read from `radar-state.json` at page load, so a refresh resumes it. This
+covers dashboard-triggered runs only (CLI runs show no progress bar), and
+restarting the dashboard can leave an in-flight `analyzeRunning` set until the
+next run — best-effort, with the child process and DB writes unaffected.

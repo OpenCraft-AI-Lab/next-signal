@@ -3,7 +3,13 @@
 This file is read by Codex on every session. Keep it short and high-signal —
 it's not project documentation, it's instructions for the AI assistant working here.
 
-> 人类文档：[`docs/`](./docs/architecture.md) · 能力规格：[`openspec/specs/`](./openspec/specs/) · 待办变更：[`openspec/changes/`](./openspec/changes/)
+> 人类文档：[`docs/`](./docs/architecture.md)（英文标准版；中文镜像在 [`docs/zh/`](./docs/zh/architecture.md)） ·
+> 能力规格：[`openspec/specs/`](./openspec/specs/) · 待办变更：[`openspec/changes/`](./openspec/changes/)
+
+**文档双语，英文是标准版本。** 英文在 `README.md` + `docs/`，中文镜像在
+`README.zh-CN.md` + `docs/zh/`（结构一一对应，每页顶部有语言切换链接）。改文档时
+**两个语言在同一个 change 里一起改**；新写中文内容必须在该 change 完成前补上英文版
+（反向不强制——`docs/containerized-deployment.md` 只有英文）。
 
 ---
 
@@ -286,7 +292,8 @@ prepend 到**每个 agent** 的 instructions 头部。house rules / 用户 profi
 
 ## 不要做的事
 
-- ❌ `dashboard/` 是自有的 `paca-dashboard` Next.js scaffold；新功能放新页 / 新组件，复用现有 design-system primitives 与 tokens，不要为单个页面硬改 app shell
+- ❌ `dashboard/` 是自有的 `paca-dashboard` Next.js scaffold；新功能放新页 / 新组件，复用现有 design-system primitives 与 tokens，不要为单个页面硬改 app shell。design system 活文档在 `/design`（`dashboard/app/design/page.tsx`）——nav 入口只在 `NODE_ENV === "development"` 渲染，路由本身没拦（任何 build 下直接访问都能开）；新增 token / UI primitive 时同一个 change 里补进这页
+- ❌ dashboard UI 默认语言是**英文**（`dashboard/lib/i18n/dictionaries.ts::DEFAULT_LOCALE`），中文靠 nav 的语言按钮切、存 `paca_locale` cookie；i18n 只覆盖界面文案，文章标题 / 分析摘要 / tag / YAML 值按原样渲染
 - ❌ 不要在 `dashboard/` 里起第二个 `next dev`——它和用户已在跑的 dev server 共用同一个 `.next`，两个进程互写缓存会把 build manifest 搞坏（典型报错 `Cannot read properties of undefined (reading 'call')`）。验证完的 dev server 一定要停掉；一个大改动收尾后 `rm -rf dashboard/.next` 清掉膨胀的增量缓存（dev 缓存大头是 `.next/cache/webpack/`，会随 HMR 一直涨）
 - ❌ 不要在 `os_app.py` 里硬编码 agent / team / workflow——一切从 configs 装
 - ❌ 不要把 `.env` / `state/` 提交到 git

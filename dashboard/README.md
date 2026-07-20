@@ -67,25 +67,31 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 | `FOLO_TOKEN` | (Folo CLI session file) | `/subscriptions` via `paca info-radar subscriptions --json` |
 | `FOLO_CLI_ARGV` | `npx --yes folocli@0.0.5` | Optional override for the Folo CLI launcher |
 
-## Visual design lives in `dashboard/design/`
+## Design system (`/design`, dev-only nav)
 
-The operator commits HTML / JSX / CSS reference mocks under
-`dashboard/design/` when new pages are designed. Implementations of every
-dashboard page **follow those mocks** — colors, typography, layout, motion all
-come from the committed reference, not inventive guesswork. If a referenced
-mock is missing when work starts on a downstream change, the implementer
-pauses and asks.
+[`app/design/page.tsx`](./app/design/page.tsx) is the living reference for the
+visual language: every color token as a swatch, every `components/ui/` primitive
+in each of its states, and the brand marks. It is an internal reference surface,
+not a product page.
 
-The design's token system (`styles.css`, `pages.css`) is ported as-is into
-[`app/globals.css`](./app/globals.css); the design's React component file
-(`components.jsx`) is the visual reference for our own Radix-backed primitives
-under [`components/ui/`](./components/ui/).
+**The nav link renders only when `NODE_ENV === "development"`** (see
+[`components/nav.tsx`](./components/nav.tsx)), so it stays out of a deployed
+dashboard. The route itself is not blocked — `/design` still resolves in any
+build if you navigate to it directly, which is the intended escape hatch for
+inspecting a production build.
+
+When you add a token or a UI primitive, add it to `/design` in the same change.
+That page is how the next agent discovers what already exists instead of
+inventing a parallel button.
+
+The token system lives in [`app/globals.css`](./app/globals.css); the
+Radix-backed primitives live under [`components/ui/`](./components/ui/).
 
 ## UI language
 
-Dashboard UI chrome defaults to Chinese and can be switched to English from the
-nav language button. The selected locale is stored in the `paca_locale` cookie
-(`zh` / `en`), and `app/layout.tsx` sets the matching document `lang`.
+Dashboard UI chrome defaults to **English** and can be switched to Chinese from
+the nav language button. The selected locale is stored in the `paca_locale`
+cookie (`en` / `zh`), and `app/layout.tsx` sets the matching document `lang`.
 
 Translations live in [`lib/i18n/dictionaries.ts`](./lib/i18n/dictionaries.ts).
 Only interface copy is localized: labels, buttons, empty states, toasts,

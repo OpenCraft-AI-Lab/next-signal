@@ -23,12 +23,16 @@ type NavItem = {
   icon: ComponentType<{ size?: number }>;
 };
 
+// `/design` is an internal design-system reference, not a product surface —
+// it stays out of the nav outside dev builds. The route itself still resolves.
+const IS_DEV = process.env.NODE_ENV === "development";
+
 const NAV_ITEMS: NavItem[] = [
   { href: "/radar", icon: RadarIcon },
   { href: "/knowledge", icon: Book },
   { href: "/goals", icon: Target },
   { href: "/subscriptions", icon: Rss },
-  { href: "/design", icon: Palette },
+  ...(IS_DEV ? [{ href: "/design", icon: Palette }] : []),
 ];
 
 export function Nav() {
