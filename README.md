@@ -1,57 +1,115 @@
 # next-signal
 
-本地优先的 info-radar + knowledge 框架，基于 [agno](https://github.com/agno-agi/agno) 构建。
-Python 包名 `paca`。
+> **English** · [简体中文](./README.zh-CN.md)
 
-一个 runnable orchestrator 底盘 + 按领域组织的 tools / integrations / workflows。
-一个 AgentOS 进程承载所有 agent / workflow；CLI 通过 runnable loader 调同一组
-能力，Dashboard 是独立 Next.js 进程（读 Postgres / 起一次性 `paca` CLI）。状态存本地
-Postgres + pgvector，本地模型走 OMLX (Qwen3) 优先，云模型作为回落。
+A local-first info-radar + knowledge framework built on
+[agno](https://github.com/agno-agi/agno). The Python package is named `paca`.
 
-## Quick start
+One runnable-orchestrator chassis plus capability building blocks. A single
+AgentOS process hosts every agent and workflow; the CLI drives the same set of
+capabilities through a centralized runnable loader, and the Dashboard is a
+separate Next.js process (it reads Postgres directly or spawns one-shot `paca`
+CLI children). State lives in a local Postgres + pgvector. Local models via
+OMLX (Qwen3) come first, with cloud models as an explicit fallback.
 
-```bash
-brew install uv
-brew install --cask postgres-app          # 或 brew install postgresql@16
-uv sync
-cp .env.example .env && $EDITOR .env       # 至少 DATABASE_URL + 一个 LLM key
-createdb next_signal
-uv run python scripts/bootstrap_db.py
-uv run paca doctor
-uv run paca serve                          # → http://localhost:7777
-uv run paca dashboard                      # → http://localhost:3000
-```
+## Quick start (Docker Compose)
 
-## 常用命令
+**Containers are the supported way to run next-signal.** The whole stack —
+Postgres + pgvector, schema bootstrap, and the dashboard — comes up with one
+command, and the container image already bundles the peer CLIs (`gbrain`,
+`opencli`, `folocli`) so there is nothing else to install.
 
 ```bash
-uv run paca list                                     # 列 agents / workflows
-uv run paca doctor                                   # 自检 env / Postgres / OMLX / tools / GBrain
-uv run paca run-agent <name> "<prompt>"              # 一次性调某个 agent
-uv run paca serve [--port 7777]                       # 启动 AgentOS
-uv run paca dashboard [--port 3000]                   # 启动 dashboard
-uv run paca knowledge ingest <url|staged-file>        # ingest 到知识库
-uv run paca info-radar pull [--source NAME]           # 拉取信息源到 radar_items
-uv run paca info-radar analyze [--limit N] [--source NAME]  # 两层分析 pipeline
-uv run paca run-workflow knowledge_ingest             # 手动跑 wiki → GBrain re-ingest
-uv run pytest -q                                      # 测试
+git clone https://github.com/OpenCraft-AI-Lab/next-signal.git
+cd next-signal
+cp .env.example .env && $EDITOR .env   # see "Minimum .env" below
+docker compose up --build              # postgres + bootstrap + dashboard
 ```
 
-## 文档地图
+Then open <http://localhost:3000>.
 
-| 你想… | 看 |
+**Minimum `.env`** — the build fails fast without these:
+
+| Key | Why |
 |---|---|
-| 理解系统怎么搭、为什么这么搭 | [docs/architecture.md](./docs/architecture.md) |
-| 加 agent / 工具 / 集成 / 模型 / 新领域 | [docs/development.md](./docs/development.md) |
-| 安装、env 配置、`paca doctor`、故障排查 | [docs/operations.md](./docs/operations.md) |
-| 容器化部署（Docker Compose，cloud-LLM） | [docs/containerized-deployment.md](./docs/containerized-deployment.md) |
-| 深入某个方向（底盘 / 知识 / 信息流 / 操作台） | [docs/modules/](./docs/modules/)：[core](./docs/modules/core.md) · [knowledge](./docs/modules/knowledge.md) · [info_filter](./docs/modules/info_filter.md) · [dashboard](./docs/modules/dashboard.md) |
-| 能力的规范契约 / 待办变更 | [openspec/specs/](./openspec/specs/) · [openspec/changes/](./openspec/changes/) |
+| One cloud LLM key: `DEEPSEEK_API_KEY` (primary), or `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | Containers cannot reach Apple Metal, so the cloud path is the default |
+| `PACA_WIKI_DIR` | Host path of your clean wiki repo — bind-mounted read-write |
+| `PACA_WIKI_RAW_DIR` | Host path of your raw archive repo — bind-mounted read-write |
 
-当前主要领域：`knowledge`（知识管理）、`info_filter`（info-radar）。
-领域能力放在 `src/paca/tools/<domain>/` 和 `src/paca/integrations/<domain>/`，
-workflow 集中放 `src/paca/workflows/`。
+`DATABASE_URL` and the in-container wiki/state paths are set by
+`docker-compose.yml`; do not override them in `.env`.
 
-## 相关项目
+Everyday container commands:
 
-- [`garrytan/gbrain`](https://github.com/garrytan/gbrain) —— 长期知识库 peer service：markdown-first + pgvector hybrid search + 自动 typed-link 图谱 + MCP server
+```bash
+docker compose up -d                          # start detached
+docker compose exec dashboard paca doctor     # self-check inside the container
+docker compose exec dashboard paca list       # list agents / workflows
+docker compose run --rm dashboard paca info-radar pull
+docker compose logs -f dashboard              # tail the dashboard
+docker compose down                           # stop, keep pgdata/pstate volumes
+```
+
+> Run any end-to-end verification through the container, not on the host — that
+> keeps the verification environment identical to what actually ships. Full
+> design, volume and env-var mapping:
+> [docs/containerized-deployment.md](./docs/containerized-deployment.md).
+
+**Optional — local LLM.** OMLX/MLX needs the Metal GPU and therefore **cannot be
+containerized**. The cloud fallback covers chat, but the *embedder* is
+OMLX-only, so `paca info-radar analyze` dedup needs it. Run an OMLX server on
+the host and point the container at it:
+
+```bash
+OMLX_BASE_URL=http://host.docker.internal:<port>/v1   # in .env
+```
+
+**Host-native setup** (no Docker; required if you want the local model in-process)
+is the alternative path — see [docs/operations.md](./docs/operations.md#installation).
+
+## Common commands
+
+Inside the container, drop the `uv run` prefix (`paca` is already on `PATH`).
+
+```bash
+uv run paca list                                     # list agents / workflows
+uv run paca doctor                                   # check env / Postgres / OMLX / tools / GBrain
+uv run paca run-agent <name> "<prompt>"              # one-shot agent call
+uv run paca serve [--port 7777]                       # start AgentOS
+uv run paca dashboard [--port 3000]                   # start the dashboard
+uv run paca knowledge ingest <url|staged-file>        # ingest into the knowledge base
+uv run paca info-radar pull [--source NAME]           # pull sources into radar_items
+uv run paca info-radar analyze [--limit N]            # two-tier analysis pipeline
+uv run paca run-workflow knowledge_ingest             # wiki → GBrain re-ingest
+uv run pytest -q                                      # tests
+```
+
+## Documentation map
+
+| You want to… | Read |
+|---|---|
+| Understand how the system is built, and why | [docs/architecture.md](./docs/architecture.md) |
+| Add an agent / tool / integration / model / domain | [docs/development.md](./docs/development.md) |
+| Install, configure env, run `paca doctor`, troubleshoot | [docs/operations.md](./docs/operations.md) |
+| Deploy in containers (Docker Compose, cloud LLM) | [docs/containerized-deployment.md](./docs/containerized-deployment.md) |
+| Go deep on one area | [docs/modules/](./docs/modules/): [core](./docs/modules/core.md) · [knowledge](./docs/modules/knowledge.md) · [info_filter](./docs/modules/info_filter.md) · [dashboard](./docs/modules/dashboard.md) |
+| Read capability contracts / pending changes | [openspec/specs/](./openspec/specs/) · [openspec/changes/](./openspec/changes/) |
+
+Active domains: `knowledge` (knowledge management) and `info_filter`
+(info-radar). Domain capabilities live in `src/paca/tools/<domain>/` and
+`src/paca/integrations/<domain>/`; workflows are centralized in
+`src/paca/workflows/`.
+
+### Docs are bilingual
+
+English is canonical and lives at the paths above. The Chinese translation
+mirrors it under [`docs/zh/`](./docs/zh/) and [`README.zh-CN.md`](./README.zh-CN.md);
+every page carries a switcher link at the top. Anything written in Chinese ships
+with an English counterpart — `docs/containerized-deployment.md` is
+English-only because it was authored in English and has no Chinese original.
+
+## Related projects
+
+- [`garrytan/gbrain`](https://github.com/garrytan/gbrain) — the long-term
+  knowledge-base peer service: markdown-first, pgvector hybrid search,
+  automatic typed-link graph, and an MCP server.

@@ -1,15 +1,20 @@
-# 运维与排查
+# Operations & Troubleshooting
 
-## 安装
+> **English** · [中文](./zh/operations.md)
 
-> 容器化部署（cloud-LLM，Docker Compose）见
-> [`containerized-deployment.md`](./containerized-deployment.md)。以下是 host-native 安装步骤。
+## Installation
+
+> **Containers are the recommended path** — see
+> [`containerized-deployment.md`](./containerized-deployment.md), or the
+> [README quick start](../README.md#quick-start-docker-compose). What follows is
+> the host-native alternative, which is what you want if you need the local OMLX
+> model in-process.
 
 ```bash
 brew install uv
-brew install --cask postgres-app          # 或 brew install postgresql@16
+brew install --cask postgres-app          # or brew install postgresql@16
 uv sync
-cp .env.example .env && $EDITOR .env       # 至少 DATABASE_URL + 一个 LLM key
+cp .env.example .env && $EDITOR .env       # at minimum DATABASE_URL + one LLM key
 createdb next_signal
 uv run python scripts/bootstrap_db.py
 uv run paca doctor
@@ -17,119 +22,153 @@ uv run paca serve                          # → http://localhost:7777
 uv run paca dashboard                      # → http://localhost:3000
 ```
 
-## 必需 / 可选服务
+## Required and optional services
 
-必需（最小可用）：Postgres 16+ with pgvector、OMLX OpenAI 兼容端点、
-GBrain CLI（知识检索必需）。
+Required for a minimal working setup: Postgres 16+ with pgvector, an
+OpenAI-compatible OMLX endpoint, and the GBrain CLI (required for knowledge
+search).
 
-可选：folocli 认证（info-radar collector）、GitHub token（knowledge 的 GitHub
-收藏功能，缺省匿名 60 req/h）、OpenCLI（WeChat 文章入库）。
+Optional: folocli auth (the info-radar collector), a GitHub token (knowledge's
+GitHub bookmarking — anonymous access is capped at 60 req/h), and OpenCLI
+(WeChat article ingest).
 
-Dashboard 是单独的 Next.js 进程，不要求 `paca serve` 同时运行；它的 server action
-会直接启动一次性 `paca` CLI 子进程，数据页直接读 Postgres。
+The Dashboard is a separate Next.js process and does not require `paca serve` to
+be running alongside it: its server actions spawn one-shot `paca` CLI children,
+and data pages read Postgres directly.
 
-## 环境变量
+## Environment variables
 
-repo-local `.env` 关键值：
+Key values in the repo-local `.env`:
 
 - `DATABASE_URL`
 - `OMLX_BASE_URL` / `OMLX_API_KEY`
-- 各云模型 / API key（按需）
-- `GBRAIN_BIN`（`gbrain` 不在 `PATH` 时；dashboard 与后端同一套解析）
-- `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR`（**必填**，无代码默认；缺失时 knowledge pipeline 与 dashboard wiki 视图 fail loud）
-- `PACA_STATE_DIR` / `PACA_AGENT_TMP_DIR`（可选，测试或换路径）
+- Cloud model / API keys, as needed
+- `GBRAIN_BIN` (when `gbrain` is not on `PATH`; the dashboard and backend resolve
+  it the same way)
+- `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` (**required**, no code default — when
+  missing, the knowledge pipeline and the dashboard wiki view fail loud)
+- `PACA_STATE_DIR` / `PACA_AGENT_TMP_DIR` (optional, for tests or alternate paths)
 
-不要在任意模块直接读这些；走对应的 core / helper 函数。完整 key 列表见 `.env.example`。
+Never read these directly from an arbitrary module — go through the corresponding
+core/helper function. The complete key list is in `.env.example`.
 
-| 集成 | Env Var |
+| Integration | Env var |
 |---|---|
-| LLM: Anthropic / OpenAI / Google / DeepSeek | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` / `DEEPSEEK_API_KEY`（+ 可选 `DEEPSEEK_BASE_URL`，默认 `https://api.deepseek.com`） |
-| Folo (info-radar) | `FOLO_TOKEN`（可选；不设则用 `~/.folo/config.json`） + 可选 `FOLO_CLI_ARGV` 覆盖默认 `npx --yes folocli@<v>` |
-| GBrain / OpenCLI (knowledge) | `GBRAIN_BIN`（`gbrain` 不在 PATH 时） / `OPENCLI_BIN`（WeChat 下载，main.js 路径或 wrapper） |
-| GitHub (knowledge 收藏) | `GITHUB_TOKEN`（可选；缺省匿名 60 req/h） |
-| OMLX embedder (info-radar analysis dedup) | `OMLX_BASE_URL` 必须可达；`configs/models.yaml::embedders.local.model_id` 默认 `Qwen3-Embedding-0.6B-8bit` (1024-dim)，需要 OMLX server 加载该模型 |
+| LLM: Anthropic / OpenAI / Google / DeepSeek | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` / `DEEPSEEK_API_KEY` (plus optional `DEEPSEEK_BASE_URL`, default `https://api.deepseek.com`) |
+| Folo (info-radar) | `FOLO_TOKEN` (optional; falls back to `~/.folo/config.json`) plus optional `FOLO_CLI_ARGV` to override the default `npx --yes folocli@<v>` |
+| GBrain / OpenCLI (knowledge) | `GBRAIN_BIN` (when `gbrain` is not on `PATH`) / `OPENCLI_BIN` (WeChat download — path to `main.js` or a wrapper) |
+| GitHub (knowledge bookmarking) | `GITHUB_TOKEN` (optional; anonymous is 60 req/h) |
+| OMLX embedder (info-radar analysis dedup) | `OMLX_BASE_URL` must be reachable; `configs/models.yaml::embedders.local.model_id` defaults to `Qwen3-Embedding-0.6B-8bit` (1024-dim) and the OMLX server must have that model loaded |
 
-每个云集成在 call time 才检查 key，缺 key 只让对应工具失败，不阻断启动。
+Every cloud integration checks its key at call time. A missing key fails only the
+corresponding tool — it never blocks startup.
 
-## State 位置
+## Where state lives
 
-- 项目 repo：configs、prompts、代码、tests、OpenSpec specs。
-- 用户 state（`~/.next-signal/`）：`knowledge_ingest_manifest.json`、`agent-tmp/`。
-- 知识库：`~/Projects/digitalpaca-wiki/`（clean）、`~/Projects/digitalpaca-wiki-raw/`（raw）
-  ——路径由 `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` 指定，不是硬编码默认值。
-- agno 自管表（sessions / memory / knowledge / traces）：本地 Postgres + pgvector。
-- 日志：`~/Library/Logs/next-signal/`。
+- Project repo: configs, prompts, code, tests, OpenSpec specs.
+- User state (`~/.next-signal/`): `knowledge_ingest_manifest.json`, `agent-tmp/`.
+- Knowledge base: `~/Projects/digitalpaca-wiki/` (clean) and
+  `~/Projects/digitalpaca-wiki-raw/` (raw) — these paths come from
+  `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR`, they are not hardcoded defaults.
+- agno-managed tables (sessions / memory / knowledge / traces): local Postgres +
+  pgvector.
+- Logs: `~/Library/Logs/next-signal/`.
 
-## 健康检查
+Under Docker Compose these map to the `pstate` volume and the wiki bind mounts
+instead — see [`containerized-deployment.md`](./containerized-deployment.md).
+
+## Health check
 
 ```bash
-uv run paca doctor
+uv run paca doctor                            # host-native
+docker compose exec dashboard paca doctor     # in the container
 ```
 
-检查：`DATABASE_URL`、`ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY`、`OMLX_BASE_URL`、Postgres 可达、
-configured agents、registered tools、GBrain CLI/service（`gbrain doctor --fast`）、
-folocli auth（`folocli whoami` — `FOLO_TOKEN` 或 `~/.folo/config.json` 任一可用即可）、
-info-radar `configs/info_radar/goals.yaml` 存在且可解析（缺则 `paca info-radar analyze`
-会 loud RuntimeError）。
-任一必需项失败 doctor 退出非零。
+It checks `DATABASE_URL`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`,
+`OMLX_BASE_URL`, Postgres reachability, configured agents, registered tools, the
+GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`folocli whoami` —
+either `FOLO_TOKEN` or `~/.folo/config.json` is enough), and that info-radar's
+`configs/info_radar/goals.yaml` exists and parses (without it,
+`paca info-radar analyze` raises a loud `RuntimeError`). `doctor` exits non-zero
+if any required check fails.
 
-`DEEPSEEK_API_KEY` 缺失算非零项 —— `local*` 的默认 fallback profile 用 DeepSeek（OMLX 不可达时回落）；
-`ANTHROPIC_API_KEY` 缺失也算非零项，供 `claude_*` profile 使用。若刻意只跑本地，要明白这些云 fallback 会失败。
+A missing `DEEPSEEK_API_KEY` counts as a failure — the default fallback profile
+for `local*` uses DeepSeek when OMLX is unreachable. A missing
+`ANTHROPIC_API_KEY` counts too, since the `claude_*` profiles need it. If you
+deliberately run local-only, understand that those cloud fallbacks will fail.
 
-## 常用命令
+In a cloud-only container, OMLX (and Anthropic, if unset) showing ✗ is expected —
+confirm Postgres, agents, and tools are ✔ and treat the rest as informational.
+
+## Common commands
 
 ```bash
-uv run paca list                                     # 列 agents / workflows
-uv run paca doctor                                   # 自检
-uv run paca run-agent <name> "<prompt>"              # 一次性调某个 agent
-uv run paca serve [--port 7777]                       # 启动 AgentOS
-uv run paca dashboard [--port 3000]                   # 启动 Next.js dashboard
+uv run paca list                                     # list agents / workflows
+uv run paca doctor                                   # self-check
+uv run paca run-agent <name> "<prompt>"              # one-shot agent call
+uv run paca serve [--port 7777]                       # start AgentOS
+uv run paca dashboard [--port 3000]                   # start the Next.js dashboard
 uv run paca dashboard --build                         # dashboard production build
-uv run paca dashboard --start                         # 启动已 build 的 dashboard
-uv run paca knowledge ingest <url|staged-file>        # ingest 到知识库
-#   --category <taxonomy-path>   指定落点，跳过自动分类
-#   --progress                   每步输出一行 JSON 事件（dashboard 入库进度面板用）
-uv run paca knowledge gbrain-search "query"           # 搜索本地 GBrain
-uv run paca knowledge gbrain-ingest <file|dir>        # 导入 markdown 到 GBrain
-uv run paca info-radar pull [--source NAME]           # 跑各 source CLI，写 radar_items
-uv run paca info-radar sweep                          # 删 radar_items 中超 30 天的行
+uv run paca dashboard --start                         # start an already-built dashboard
+uv run paca knowledge ingest <url|staged-file>        # ingest into the knowledge base
+#   --category <taxonomy-path>   pick the destination folder, skipping auto-classification
+#   --progress                   emit one JSON event per step (used by the dashboard progress panel)
+uv run paca knowledge gbrain-search "query"           # search the local GBrain
+uv run paca knowledge gbrain-ingest <file|dir>        # import markdown into GBrain
+uv run paca info-radar pull [--source NAME]           # run each source CLI, write radar_items
+uv run paca info-radar sweep                          # delete radar_items rows older than 30 days
 uv run paca info-radar analyze [--limit N] [--source NAME]
-                                                      # 跑两层 analysis pipeline，写 radar_analyses
-                                                      # 手动触发（CLI / dashboard）；没有后台调度
-                                                      # `seen_at` 保证任意频率重跑 idempotent
-                                                      # 前置：configs/info_radar/goals.yaml 必须存在
-                                                      # (cp configs/info_radar/goals.example.yaml configs/info_radar/goals.yaml 后手改)
-uv run paca info-radar subscriptions --json           # 读取 Folo 订阅，输出 dashboard 稳定 JSON 行
-uv run paca run-workflow knowledge_ingest             # 手动跑 wiki → GBrain re-ingest
+                                                      # run the two-tier analysis pipeline → radar_analyses
+                                                      # manual trigger only (CLI / dashboard); no background scheduler
+                                                      # `seen_at` keeps reruns idempotent at any cadence
+                                                      # prerequisite: configs/info_radar/goals.yaml must exist
+                                                      # (cp configs/info_radar/goals.example.yaml configs/info_radar/goals.yaml, then edit)
+uv run paca info-radar subscriptions --json           # read Folo subscriptions as stable JSON lines
+uv run paca run-workflow knowledge_ingest             # manual wiki → GBrain re-ingest
 ```
 
-Dashboard UI 默认中文，可在导航栏切英文；选择存到 `paca_locale` cookie。这里只翻译
-界面文案，文章标题、分析摘要、tag、YAML 内容等数据按原样显示。
+The Dashboard UI defaults to **English** and can be switched to Chinese from the
+nav bar; the choice is stored in the `paca_locale` cookie. Only interface copy is
+translated — article titles, analysis summaries, tags, and YAML content render
+as stored.
 
-需要碰真实 GBrain 索引的全链路测试，用隔离的 PGLite brain：
+For a full-chain test that touches a real GBrain index, use an isolated PGLite
+brain:
 
 ```bash
 uv run paca knowledge init-test-gbrain
 PACA_GBRAIN_HOME=state/test-gbrain uv run paca doctor
 ```
 
-`PACA_GBRAIN_HOME` 是父目录，GBrain 把配置和 `brain.pglite` 存到
-`$PACA_GBRAIN_HOME/.gbrain/`。保持在 ignored 的 `state/` 下，别动生产 `~/.gbrain`。
+`PACA_GBRAIN_HOME` is the parent directory; GBrain stores its config and
+`brain.pglite` under `$PACA_GBRAIN_HOME/.gbrain/`. Keep it inside the ignored
+`state/` directory and leave the production `~/.gbrain` alone.
 
-## 故障排查
+## Troubleshooting
 
-- **`DATABASE_URL not set`** → 复制 `.env.example` 到 `.env` 并填好。
-- **Postgres unreachable** → 启动 Postgres.app 或 Homebrew service，重跑 `paca doctor`。
-- **OMLX profile 回落到 DeepSeek** → 查 `OMLX_BASE_URL` / `OMLX_API_KEY` / 端点 `/v1/models`；
-  OMLX 恢复后长驻进程要调 `paca.core.models.reset_cache()`。
-- **GBrain 搜索 / re-index 失败** → 跑 `paca doctor` 和 `gbrain doctor --fast`；
-  embed 失败时 ingest 应在写完 wiki artifact 后 loud fail，manifest 不前进，
-  修好后重跑 `paca run-workflow knowledge_ingest`。
-- **Dashboard 起不来** → 先确认 `pnpm` 在 PATH；用 `uv run paca dashboard --build`
-  看 Next.js 编译错误。Dashboard 不需要 `paca serve`，但 `/radar` 需要 Postgres，
-  `/knowledge` 需要 GBrain CLI，`/subscriptions` 需要 Folo auth。
-- **knowledge ingest 拒绝本地文件** → 本地文件输入必须 stage 在 `PACA_AGENT_TMP_DIR` 下。
-  Dashboard `/radar` 的 Folo ingest 会自动把 `folocli entry get` 的全文 stage 到
-  `PACA_AGENT_TMP_DIR/radar-ingest/`；非 Folo radar item 仍要求 `radar_items.url` 是合法 URL。
-- **某工具 agent 看不到** → 查工具是否注册（`_IN_TREE_TOOLS`、`tools/<domain>.register()`、
-  workflow tool exposure 或集成注册）、agent YAML 是否写了准确注册名，跑 `tests/test_registry.py`。
+- **`DATABASE_URL not set`** → copy `.env.example` to `.env` and fill it in.
+- **Postgres unreachable** → start Postgres.app or the Homebrew service, then
+  rerun `paca doctor`.
+- **An OMLX profile fell back to DeepSeek** → check `OMLX_BASE_URL` /
+  `OMLX_API_KEY` and the endpoint's `/v1/models`. Once OMLX is back, a
+  long-running process must call `paca.core.models.reset_cache()` before it
+  retries local.
+- **GBrain search / re-index fails** → run `paca doctor` and
+  `gbrain doctor --fast`. When embedding fails, ingest should fail loud *after*
+  writing the wiki artifact, leaving the manifest un-advanced; fix the cause and
+  rerun `paca run-workflow knowledge_ingest`.
+- **Dashboard won't start** → confirm `pnpm` is on `PATH`, then use
+  `uv run paca dashboard --build` to surface Next.js compile errors. The
+  dashboard does not need `paca serve`, but `/radar` needs Postgres,
+  `/knowledge` needs the GBrain CLI, and `/subscriptions` needs Folo auth.
+- **knowledge ingest rejects a local file** → local file input must be staged
+  under `PACA_AGENT_TMP_DIR`. The dashboard's `/radar` Folo ingest stages the
+  full text from `folocli entry get` into `PACA_AGENT_TMP_DIR/radar-ingest/`
+  automatically; non-Folo radar items still require a valid `radar_items.url`.
+- **An agent can't see a tool** → check that the tool is registered
+  (`_IN_TREE_TOOLS`, `tools/<domain>.register()`, workflow tool exposure, or
+  integration registration), that the agent YAML uses the exact registered name,
+  and run `tests/test_registry.py`.
+- **Container-specific issues** (build failures, volume mapping, the cloud-only
+  embedder gap) → see
+  [`containerized-deployment.md`](./containerized-deployment.md) §7–§8.

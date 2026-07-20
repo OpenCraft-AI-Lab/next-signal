@@ -1,11 +1,11 @@
 export const LOCALE_COOKIE = "paca_locale";
-export const DEFAULT_LOCALE = "zh";
-export const LOCALES = ["zh", "en"] as const;
+export const DEFAULT_LOCALE = "en";
+export const LOCALES = ["en", "zh"] as const;
 
 export type Locale = (typeof LOCALES)[number];
 
 export function normalizeLocale(value: string | null | undefined): Locale {
-  return value === "en" ? "en" : DEFAULT_LOCALE;
+  return value === "zh" ? "zh" : DEFAULT_LOCALE;
 }
 
 type CountLabel = (count: number) => string;
