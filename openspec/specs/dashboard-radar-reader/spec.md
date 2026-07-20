@@ -222,7 +222,7 @@ The dashboard SHALL read `radar_items`, `radar_analyses`, and `radar_pushed_topi
 
 ### Requirement: Design conformance
 
-Implementations of the `/radar` and `/radar/[id]` pages SHALL render correctly in both light and dark themes on a 1440-wide desktop viewport. (This was originally validated against a committed `dashboard/design/pages-radar.jsx` reference plus shared primitives in `components.jsx` and tokens in `styles.css`/`pages.css`; that mock directory is not present in this trimmed repo, so conformance is judged against the shipped `dashboard/app/radar/page.tsx` and `dashboard/app/radar/[id]/page.tsx` directly.)
+The `/radar` and `/radar/[id]` pages (`dashboard/app/radar/page.tsx` and `dashboard/app/radar/[id]/page.tsx`) SHALL render correctly in both light and dark themes on a 1440-wide desktop viewport.
 
 #### Scenario: page renders correctly in both themes
 

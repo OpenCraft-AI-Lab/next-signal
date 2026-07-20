@@ -89,7 +89,7 @@ The dashboard SHALL support English and Chinese UI text via `dashboard/lib/i18n/
 
 ### Requirement: UI primitive library
 
-The dashboard SHALL provide a self-authored set of UI primitives under `dashboard/components/ui/` covering at minimum `Button`, `Card`, `Badge`, `Dialog`, `Sheet`, `Tooltip`, `Collapsible`, `Segmented`, plus a `cn()` utility in `dashboard/lib/utils.ts`. Each primitive that has a Radix equivalent SHALL be built on the matching Radix primitive (e.g. `Dialog` uses `@radix-ui/react-dialog`, `Collapsible` uses `@radix-ui/react-collapsible`), styled to the design tokens from `dashboard/design/styles.css`.
+The dashboard SHALL provide a self-authored set of UI primitives under `dashboard/components/ui/` covering at minimum `Button`, `Card`, `Badge`, `Dialog`, `Sheet`, `Tooltip`, `Collapsible`, `Segmented`, plus a `cn()` utility in `dashboard/lib/utils.ts`. Each primitive that has a Radix equivalent SHALL be built on the matching Radix primitive (e.g. `Dialog` uses `@radix-ui/react-dialog`, `Collapsible` uses `@radix-ui/react-collapsible`), styled to the design tokens in `dashboard/app/globals.css`.
 
 #### Scenario: primitives are importable
 
@@ -108,7 +108,7 @@ The dashboard SHALL provide a self-authored set of UI primitives under `dashboar
 
 ### Requirement: Design token system
 
-The dashboard SHALL port the CSS-variable token set from `dashboard/design/styles.css` (and supplementary tokens from `dashboard/design/pages.css`) into `dashboard/app/globals.css`, wired through Tailwind's `theme.extend` so the same tokens are accessible as both raw CSS variables (e.g. `var(--accent)`) and Tailwind utilities (e.g. `bg-accent`).
+The dashboard SHALL define the CSS-variable token set in `dashboard/app/globals.css`, wired through Tailwind's `theme.extend` so the same tokens are accessible as both raw CSS variables (e.g. `var(--accent)`) and Tailwind utilities (e.g. `bg-accent`).
 
 #### Scenario: light and dark token sets are both defined
 
@@ -117,7 +117,7 @@ The dashboard SHALL port the CSS-variable token set from `dashboard/design/style
 
 ### Requirement: Score color ramp utilities
 
-The dashboard SHALL expose `scoreHue(s: number): number` and `scoreLOff(s: number): number` from `dashboard/lib/score.ts`, with the same continuous orange→yellow→green ramp as `dashboard/design/data.js`, accepting values in the `0..100` range.
+The dashboard SHALL expose `scoreHue(s: number): number` and `scoreLOff(s: number): number` from `dashboard/lib/score.ts`, implementing a continuous orange→yellow→green ramp, accepting values in the `0..100` range.
 
 #### Scenario: ramp returns expected hues
 
@@ -131,7 +131,7 @@ The dashboard SHALL expose `scoreHue(s: number): number` and `scoreLOff(s: numbe
 
 ### Requirement: Brand assets
 
-The dashboard SHALL ship the production brand marks ported from `dashboard/design/components.jsx`: `Alpaca` (filled geometric SVG) at `dashboard/components/brand/alpaca.tsx` and `RadarAlpaca` (animated radar-sweep emblem) at `dashboard/components/brand/radar-alpaca.tsx`. Exploratory variants from the design file (`AlpacaOutline`, `AlpacaFace`, `AlpacaBadge`, `RadarAlpacaScope`, `RadarAlpacaArc`) SHALL NOT be ported.
+The dashboard SHALL ship the production brand marks: `Alpaca` (filled geometric SVG) at `dashboard/components/brand/alpaca.tsx` and `RadarAlpaca` (animated radar-sweep emblem) at `dashboard/components/brand/radar-alpaca.tsx`. Exploratory brand variants (`AlpacaOutline`, `AlpacaFace`, `AlpacaBadge`, `RadarAlpacaScope`, `RadarAlpacaArc`) SHALL NOT be shipped.
 
 #### Scenario: marks are usable
 
@@ -201,7 +201,7 @@ The dashboard SHALL render `gbrain` search snippets through a component that tre
 
 ### Requirement: Knowledge page (redesigned)
 
-The dashboard SHALL render `/knowledge` matching the design at `dashboard/design/pages-other.jsx::KnowledgePage`: a left sidebar wiki tree (`PACA_WIKI_DIR`-driven, categorized, collapsible), a search input wired to `gbrain search`, a result-cards column with snippet highlights, and a preview pane showing the active document's frontmatter / tags / body. The `Re-index` action SHALL still invoke `uv run paca run-workflow knowledge_ingest` from the repo root.
+The dashboard SHALL render `/knowledge` (`dashboard/app/knowledge/page.tsx`) with a left sidebar wiki tree (`PACA_WIKI_DIR`-driven, categorized, collapsible), a search input wired to `gbrain search`, a result-cards column with snippet highlights, and a preview pane showing the active document's frontmatter / tags / body. The `Re-index` action SHALL still invoke `uv run paca run-workflow knowledge_ingest` from the repo root.
 
 #### Scenario: search still hits gbrain
 
@@ -228,19 +228,14 @@ The dashboard SHALL render `/knowledge` matching the design at `dashboard/design
 - **WHEN** the operator confirms deletion via the delete-confirm dialog (`dashboard/components/knowledge/delete-confirm-dialog.tsx`) for a doc or folder
 - **THEN** `deleteWikiDoc` (removing the whole per-article directory for the `<slug>/<slug>.md` layout) or `deleteWikiFolder` (recursive, refuses the wiki root, prunes taxonomy categories) removes it from the wiki tree only — the GBrain index and raw archive are left for the next re-index — and `/knowledge` refreshes
 
-### Requirement: Design-mocks-driven implementation convention
+### Requirement: Visual design system is documented for contributors
 
-`dashboard/README.md` SHALL document `dashboard/design/` as the source of truth for visual layouts, instructing implementers to build against those mocks rather than inventing visual layouts. This convention is currently stale/inactive in this trimmed repo: `dashboard/design/` does not exist here (no git history for the directory), even though the README still references it. Implementers SHALL treat the shipped pages under `dashboard/app/` as the current source of truth until/unless the mock directory is restored.
+`dashboard/README.md` SHALL document the dashboard's visual design system and how a design mock is consumed: the in-app `/design` showcase route (tokens, components, states, brand) is the design-system source of truth; incoming Claude Design mocks are transient and external and are never committed to this repo; and new pages SHALL be built by reusing the existing tokens (`dashboard/app/globals.css`) and primitives (`dashboard/components/ui/`) rather than inventing new styling. Once a page ships, the shipped page plus the `/design` showcase are the durable reference — specs and docs SHALL reference those, never a mock file.
 
-#### Scenario: README documents the convention
+#### Scenario: README documents the design system and mock practice
 
 - **WHEN** a contributor reads `dashboard/README.md`
-- **THEN** they find a section that names `dashboard/design/` as the source-of-truth for visual layouts and instructs implementers to pause and ask if a referenced mock is missing
-
-#### Scenario: referenced mock directory is absent in this repo
-
-- **WHEN** a contributor looks for `dashboard/design/` in this repo
-- **THEN** it does not exist; new dashboard work should follow the shipped pages' existing patterns rather than blocking on a missing mock
+- **THEN** they find a "Visual design system" section that names `/design` as the source of truth, states that design mocks are transient and external, and directs new work to reuse existing tokens and `components/ui/` primitives
 
 ### Requirement: Dev workflow documentation
 

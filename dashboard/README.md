@@ -69,11 +69,28 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 
 ## Visual design system
 
-[`app/design`](./app/design) is a live in-app showcase route (tokens,
-components, states, brand) that documents the current design system —
-colors, typography, layout, motion. New pages should reuse the tokens and
-Radix-backed primitives under [`components/ui/`](./components/ui/) rather
-than inventing new styling.
+The design system's source of truth is the in-app [`/design`](./app/design)
+showcase route — tokens, components, states, and brand marks, rendered from
+the real primitives. Tokens live in [`app/globals.css`](./app/globals.css);
+components under [`components/ui/`](./components/ui/).
+
+### Consuming a design mock
+
+New pages usually start from a Claude Design mock (an HTML/JSX prototype).
+Treat mocks as **transient, external scaffolding** — they stay in the Claude
+Design workspace and are never committed to this repo. To implement one:
+
+1. Build the page under `app/` and `components/`, reusing the existing tokens
+   (`app/globals.css`) and `components/ui/` primitives — don't invent new
+   colors, spacing, or one-off styling.
+2. If the mock genuinely needs a token or primitive that doesn't exist yet,
+   add it to `app/globals.css` / `components/ui/` and surface it in `/design`
+   so the showcase stays complete.
+3. Verify against `/design` in both light and dark themes.
+
+Once the page ships, the mock has done its job and is discarded. The shipped
+page plus `/design` are the durable reference from then on — specs and docs
+point at those, never at a mock file.
 
 ## UI language
 
