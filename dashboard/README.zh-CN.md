@@ -61,7 +61,7 @@ spawn 一次性 `paca` CLI 子进程 —— 没有任何一个走 AgentOS 的 HT
 | `NEXT_PUBLIC_AGENT_OS_URL` | `http://localhost:7777` | 浏览器端调 AgentOS（目前没有） |
 | `DATABASE_URL` | （Postgres URL） | `dashboard-radar`（直接读 DB） |
 | `PACA_DATABASE_URL` | `DATABASE_URL` | 可选的 dashboard 专用 Postgres URL |
-| `PACA_RADAR_TIMEZONE` | `America/Los_Angeles` | `/radar` 按日历天分组 |
+| `INFO_RADAR_TIMEZONE` | `America/Los_Angeles` | `/radar` 按日历天分组 + recap 区间 |
 | `FOLO_TOKEN` | （Folo CLI session 文件） | `/subscriptions`，经 `paca info-radar subscriptions --json` |
 | `FOLO_CLI_ARGV` | `npx --yes folocli@0.0.5` | 可选，覆盖 Folo CLI 启动方式 |
 

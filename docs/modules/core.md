@@ -84,7 +84,7 @@ Pick by purpose; never mix them:
   `postgresql+psycopg://` (psycopg v3). agno provisions these tables itself —
   never redefine them.
 - **Our business tables** (`radar_items` / `radar_analyses` /
-  `radar_pushed_topics`) → bare short-lived synchronous connections via
+  `radar_pushed_topics` / `radar_recaps`) → bare short-lived synchronous connections via
   `psycopg.connect(database_url())`. DDL is centralized in
   `scripts/bootstrap_db.py`; runtime reads and writes live in the corresponding
   module's store or tool.

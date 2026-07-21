@@ -18,7 +18,7 @@ feature either reads Postgres directly or spawns a one-shot `paca` CLI child.
 
 | Route | Function | Detailed behavior |
 |---|---|---|
-| `/radar` | info-radar reader: today's tracker, filtering and sorting, Pull + Analyze (with live progress), per-item Ingest to wiki | [info_filter.md](./info_filter.md), dashboard/README |
+| `/radar` | info-radar reader: today's tracker, filtering and sorting, Pull + Analyze (with live progress), range Recap panel, per-item Ingest to wiki | [info_filter.md](./info_filter.md), dashboard/README |
 | `/knowledge` | wiki tree + file management, ANN search, preview, Re-index, URL ingest form + live progress panel | [knowledge.md](./knowledge.md) |
 | `/goals` | edits `configs/info_radar/goals.yaml` (mirrors the Python loader contract, atomic write) | dashboard/README |
 | `/subscriptions` | read-only Folo subscription inventory | dashboard/README |
@@ -27,8 +27,9 @@ feature either reads Postgres directly or spawns a one-shot `paca` CLI child.
 
 ```
 dashboard/
-  app/            pages (App Router; data pages are force-dynamic) + 3 routes under app/api/
-                  (knowledge ingest SSE stream / radar run polling / radar export)
+  app/            pages (App Router; data pages are force-dynamic) + 4 routes under app/api/
+                  (knowledge ingest SSE stream / radar run polling / radar recap polling /
+                   radar export)
   app/design/     the living design-system reference — every token, primitive, and
                   brand mark; its nav entry renders in dev builds only (see below)
   components/     grouped by page family, plus components/ui/ (Radix-backed primitives)

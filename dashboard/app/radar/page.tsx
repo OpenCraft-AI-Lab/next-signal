@@ -1,14 +1,21 @@
+import { cookies } from "next/headers";
+
 import { RadarAlpaca } from "@/components/brand/radar-alpaca";
 import { DayGroup } from "@/components/radar/day-group";
 import { FilterBar } from "@/components/radar/filter-bar";
 import { MarkdownText } from "@/components/radar/markdown-text";
 import { PullAnalyzeButton } from "@/components/radar/pull-analyze-button";
+import { RecapControls } from "@/components/radar/recap-controls";
+import { RecapPanel } from "@/components/radar/recap-panel";
 import { RunProgress } from "@/components/radar/run-progress";
+import { SavedRecaps } from "@/components/radar/saved-recaps";
+import { SmartRecapSection } from "@/components/radar/smart-recap-section";
 import { SignalCard } from "@/components/radar/signal-card";
 import { TodayTracker } from "@/components/radar/today-tracker";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/server";
 import { loadRadarFilters } from "@/lib/radar/filter-params";
+import { getRecap, listRecaps } from "@/lib/radar/recap";
 import {
   displayDay,
   getDayGroups,
@@ -17,6 +24,7 @@ import {
   getLastFeedSummary,
   todayInRadarTz,
 } from "@/lib/radar/queries";
+import { RECAP_COLLAPSED_COOKIE } from "@/lib/radar/recap-ui";
 import { getRunState } from "@/lib/radar/run-state";
 import { timeAgo } from "@/lib/relative-time";
 
@@ -32,7 +40,8 @@ export default async function RadarPage({
   const t = getDictionary(locale);
   // `?export=1` renders a print-only variant (header + signal cards, no
   // interactive chrome) for headless-Chrome PDF capture; see the export route.
-  const exportMode = (await searchParams).export === "1";
+  const raw = await searchParams;
+  const exportMode = raw.export === "1";
   const today = todayInRadarTz();
   const pinnedDay = filters.day;
   const focusDay = pinnedDay ?? today;
@@ -46,7 +55,29 @@ export default async function RadarPage({
     ? await getLastFeedBounds(focusDay)
     : { analyzeStart: null, pullStart: null };
 
-  const [items, unfilteredItems, pastDays, lastFeed, runState] =
+  // Recap range: presets resolve server-side so "last 7 days" means the radar
+  // timezone's last 7 days, not the browser's. The quality gate is inherited
+  // from the filter bar, so the recap and the item list describe the same
+  // population — and a different gate is a different cached recap.
+  const recapPresets = {
+    last7: { since: shiftDay(today, -6), until: today },
+    last30: { since: shiftDay(today, -29), until: today },
+  };
+  const recapKey = {
+    since: asDay(raw.recapSince) ?? recapPresets.last7.since,
+    until: asDay(raw.recapUntil) ?? recapPresets.last7.until,
+    minScore: filters.minScore,
+    novelOnly: filters.novelOnly,
+  };
+  // Collapse preference persists in a cookie so it survives the full re-render
+  // a filter change triggers. Force open when the URL targets a specific recap
+  // (a saved-recap click) so reopening one never lands on a collapsed header.
+  const hasExplicitRange =
+    asDay(raw.recapSince) !== null || asDay(raw.recapUntil) !== null;
+  const recapCollapsed = (await cookies()).get(RECAP_COLLAPSED_COOKIE)?.value === "1";
+  const recapOpen = hasExplicitRange || !recapCollapsed;
+
+  const [items, unfilteredItems, pastDays, lastFeed, runState, recap, savedRecaps] =
     await Promise.all([
       getItemsForDay(focusDay, filters, analyzeStart),
       // Used for the "N kept" subtitle + the X/Y counter in the filter bar.
@@ -60,6 +91,8 @@ export default async function RadarPage({
       isToday ? getDayGroups(14) : Promise.resolve([]),
       getLastFeedSummary(),
       getRunState(),
+      exportMode ? Promise.resolve(null) : getRecap(recapKey),
+      isToday && !exportMode ? listRecaps() : Promise.resolve([]),
     ]);
 
   return (
@@ -136,6 +169,36 @@ export default async function RadarPage({
           </>
         )}
         {!exportMode && (
+          <SmartRecapSection
+            // Remount when the recap range changes (e.g. a saved-recap click)
+            // so `initialOpen` re-resolves; a filter-only change keeps the same
+            // key, preserving the reader's collapse choice.
+            key={`${recapKey.since}:${recapKey.until}`}
+            initialOpen={recapOpen}
+            title={t.radar.recap.title}
+            subtitle={t.radar.recap.subtitle}
+          >
+            <div className="card" style={{ padding: 16, marginBottom: 18 }}>
+              <div className="col gap-12">
+                <RecapControls
+                  presets={recapPresets}
+                  minScore={filters.minScore}
+                  novelOnly={filters.novelOnly}
+                  status={recap?.status ?? null}
+                  staleBy={recap?.staleBy ?? 0}
+                  hasRecap={recap?.headline != null}
+                />
+                {recap ? (
+                  <RecapPanel recap={recap} t={t} />
+                ) : (
+                  <span className="muted">{t.radar.recap.none}</span>
+                )}
+              </div>
+            </div>
+          </SmartRecapSection>
+        )}
+
+        {!exportMode && (
           <FilterBar
             total={unfilteredItems.length}
             shown={items.length}
@@ -184,14 +247,35 @@ export default async function RadarPage({
               <h2 className="sec-title">{t.radar.pastDays}</h2>
               <span className="sec-sub">{t.radar.pastDaysSub}</span>
             </div>
-            <div className="col gap-8">
+            <div className="col gap-8" style={{ marginBottom: 24 }}>
               {pastDays.map((day) => (
                 <DayGroup key={day.day} day={day} />
               ))}
             </div>
           </>
         )}
+
+        {isToday && !exportMode && savedRecaps.length > 0 && (
+          <SavedRecaps recaps={savedRecaps} locale={locale} t={t} />
+        )}
       </div>
     </div>
   );
+}
+
+/**
+ * Shift a `YYYY-MM-DD` day string by `delta` days. Arithmetic stays in UTC
+ * date space because `day` is already a resolved local day — re-interpreting
+ * it in a zone would slide the result across a DST boundary.
+ */
+function shiftDay(day: string, delta: number): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + delta);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Accept a `YYYY-MM-DD` search param; ignore anything else. */
+function asDay(value: string | string[] | undefined): string | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return typeof raw === "string" && /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
 }

@@ -16,7 +16,7 @@
 
 | 路由 | 功能 | 详细行为见 |
 |---|---|---|
-| `/radar` | info-radar 阅读器：今日 tracker、过滤排序、Pull + Analyze（带实时进度）、单条 Ingest to wiki | [info_filter.md](./info_filter.md)、dashboard/README |
+| `/radar` | info-radar 阅读器：今日 tracker、过滤排序、Pull + Analyze（带实时进度）、区间 Recap 面板、单条 Ingest to wiki | [info_filter.md](./info_filter.md)、dashboard/README |
 | `/knowledge` | wiki tree + 文件管理、ANN search、预览、Re-index、URL 入库表单 + 实时进度面板 | [knowledge.md](./knowledge.md) |
 | `/goals` | 编辑 `configs/info_radar/goals.yaml`（镜像 Python loader 契约，原子写） | dashboard/README |
 | `/subscriptions` | Folo 订阅只读盘点 | dashboard/README |
@@ -25,8 +25,9 @@
 
 ```
 dashboard/
-  app/            页面（App Router；数据页 force-dynamic）+ app/api/ 的 3 个 route
-                  （knowledge ingest SSE 流 / radar run 轮询 / radar export）
+  app/            页面（App Router；数据页 force-dynamic）+ app/api/ 的 4 个 route
+                  （knowledge ingest SSE 流 / radar run 轮询 / radar recap 轮询 /
+                   radar export）
   app/design/     design system 活文档 —— token / primitive / brand mark 全展示，
                   nav 入口仅 dev 环境显示（见下）
   components/     按页面族分组 + components/ui/（Radix-backed primitives）
