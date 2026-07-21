@@ -1,14 +1,14 @@
 ## 1. Loader: locale-aware prompt selection
 
-- [x] 1.1 Add `locale: str = "zh"` param to `AgentConfig.resolved_instructions(locale)` in `src/paca/core/config.py`: resolve base `instructions_file` for the default locale; for a non-default locale insert `.<locale>` before the extension; if the variant file is missing, read the base file and log a fallback (never raise).
+- [x] 1.1 Add `locale` param to `AgentConfig.resolved_instructions(locale)` in `src/paca/core/config.py` (default `DEFAULT_LOCALE = "en"`): resolve the sibling `<stem>.<locale><ext>` variant first; else fall back to the unsuffixed `<stem><ext>` base (single-language agents); else raise `FileNotFoundError`.
 - [x] 1.2 Thread locale through `src/paca/agents/loader.py`: `build_from_name(name, locale="zh")` → `build_from_config(cfg, locale)` → `_compose_instructions(cfg, locale)` → `cfg.resolved_instructions(locale)`. Default keeps current behavior.
 - [x] 1.3 Add `tests/test_agent_loader_locale.py`: base resolution, `.en` variant resolution, and missing-variant fallback (asserts base text + a logged fallback), using a temp prompt fixture.
 
 ## 2. Prompts: de-mix into pure-language variants
 
-- [x] 2.1 `radar_tier2_impact`: rewrite `prompts/agents/radar_tier2_impact.md` as pure Chinese (prose + two-step rubric + hard ceilings), and author `prompts/agents/radar_tier2_impact.en.md` as pure English with the same rubric structure. Remove the "match the language of goals" rule; each variant hard-asserts its output language.
-- [x] 2.2 `radar_tier1_filter`: rewrite `prompts/agents/radar_tier1_filter.md` (zh) and author `radar_tier1_filter.en.md` (en). Keep the drop-category **cue vocabulary bilingual in both** — carry Chinese and English cue literals as idiomatic per-language equivalents (see design §D3 table), not literal translations. Only the `reason` output language switches.
-- [x] 2.3 `radar_dedup_judge`: rewrite `prompts/agents/radar_dedup_judge.md` (zh) and author `radar_dedup_judge.en.md` (en). Replace "match the language of the input summaries" with a fixed output language per variant.
+- [x] 2.1 `radar_tier2_impact`: author `prompts/agents/radar_tier2_impact.zh.md` as pure Chinese (prose + two-step rubric + hard ceilings) and `radar_tier2_impact.en.md` as pure English with the same rubric structure. Remove the "match the language of goals" rule; each variant hard-asserts its output language. (Both suffixed; no unsuffixed base.)
+- [x] 2.2 `radar_tier1_filter`: author `prompts/agents/radar_tier1_filter.zh.md` (zh) and `radar_tier1_filter.en.md` (en). Keep the drop-category **cue vocabulary bilingual in both** — carry Chinese and English cue literals as idiomatic per-language equivalents (see design §D3 table), not literal translations. Only the `reason` output language switches.
+- [x] 2.3 `radar_dedup_judge`: author `prompts/agents/radar_dedup_judge.zh.md` (zh) and `radar_dedup_judge.en.md` (en). Replace "match the language of the input summaries" with a fixed output language per variant.
 
 ## 3. Pipeline: thread locale end-to-end
 

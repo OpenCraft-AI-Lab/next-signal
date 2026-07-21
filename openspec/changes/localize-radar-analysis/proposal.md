@@ -17,11 +17,12 @@ to follow the UI language.
   analyze --locale <zh|en>` → `runner.run(locale=)` → each stage → agent build.
 - Agent construction becomes locale-aware: `build_from_name(name, locale)` selects a
   per-locale prompt file for the same single config (model / tools / `extra` stay
-  single-source). Missing locale file falls back to the base (`zh`) prompt.
-- Each analysis prompt is de-mixed into **pure-language variants**: the current
-  EN/CN-mixed `radar_tier1_filter` / `radar_tier2_impact` / `radar_dedup_judge`
-  prompts split into a `zh` file (pure Chinese prose + rubric) and an `en` file
-  (pure English prose + rubric).
+  single-source). Resolution prefers the `<stem>.<locale>.md` variant and falls back
+  to an unsuffixed base for single-language agents.
+- Each analysis prompt is de-mixed into **pure-language variants**, both explicitly
+  suffixed: the current EN/CN-mixed `radar_tier1_filter` / `radar_tier2_impact` /
+  `radar_dedup_judge` prompts split into a `.zh.md` file (pure Chinese prose +
+  rubric) and a `.en.md` file (pure English prose + rubric), with no unsuffixed base.
 - tier-1 drop-category **cue vocabulary stays bilingual in both variants** — a
   Chinese run may score an English article and vice-versa. Cues are rendered as
   idiomatic equivalents per language (semantic match, not literal translation), and
@@ -42,15 +43,17 @@ to follow the UI language.
   goals-block language; pipeline threads a locale and persists it per analysis row;
   prompts split into pure-language variants with bilingual tier-1 cue vocabulary.
 - `core-agents`: agent construction accepts a locale that swaps the resolved
-  instructions file for the same config, with base-language fallback.
+  instructions file for the same config, resolving a suffixed `<stem>.<locale>.md`
+  variant and falling back to the unsuffixed base for single-language agents.
 - `core-cli`: `paca info-radar analyze` accepts `--locale <zh|en>` (default `en`).
 - `dashboard-radar-reader`: the Pull + Analyze action forwards the active UI locale
   to the analyzer so generated content matches the dashboard language.
 
 ## Impact
 
-- **Prompts**: `prompts/agents/radar_tier1_filter.md`, `radar_tier2_impact.md`,
-  `radar_dedup_judge.md` → de-mixed `*_zh` + `*.en` variants (6 files).
+- **Prompts**: `prompts/agents/radar_tier1_filter`, `radar_tier2_impact`,
+  `radar_dedup_judge` → de-mixed, explicitly-suffixed `.zh.md` + `.en.md` variants
+  (6 files; no unsuffixed base).
 - **Loader**: `src/paca/agents/loader.py` (`build_from_name`, `_compose_instructions`);
   `src/paca/core/config.py` (`AgentConfig.resolved_instructions`).
 - **Pipeline**: `src/paca/workflows/info_radar_analysis/runner.py` and
