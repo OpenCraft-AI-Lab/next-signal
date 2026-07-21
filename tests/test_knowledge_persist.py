@@ -73,9 +73,17 @@ def test_persist_writes_wiki_file_and_frontmatter() -> None:
 
 
 def test_persist_appends_summary_section() -> None:
+    # Default locale is English (paca.core.config.DEFAULT_LOCALE = "en").
     result = persist(_ready())
     text = result.clean_path.read_text(encoding="utf-8")
+    assert "## Summary\n\na dense factual summary." in text
+
+
+def test_persist_summary_heading_follows_locale() -> None:
+    result = persist(_ready(), locale="zh")
+    text = result.clean_path.read_text(encoding="utf-8")
     assert "## 总结\n\na dense factual summary." in text
+    assert "## Summary" not in text
 
 
 def test_persist_uses_editor_freshness_tier() -> None:

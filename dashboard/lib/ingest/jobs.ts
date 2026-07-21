@@ -82,7 +82,7 @@ function pruneFinished(): void {
 /** Start a tracked ingest; returns the job id immediately (subprocess runs on). */
 export function startIngestJob(
   value: string,
-  opts: { category?: string | null; source: IngestSource },
+  opts: { category?: string | null; source: IngestSource; locale?: string },
 ): string {
   const { jobs, emitter } = registry();
   const id = randomUUID();
@@ -106,6 +106,7 @@ export function startIngestJob(
 
   const argv = ["run", "paca", "knowledge", "ingest", value];
   if (opts.category) argv.push("--category", opts.category);
+  if (opts.locale) argv.push("--locale", opts.locale);
   argv.push("--progress");
   void logLine(`[${job.startedAt}] [ingest:${opts.source}:${id}] spawn: uv ${argv.join(" ")}`);
 

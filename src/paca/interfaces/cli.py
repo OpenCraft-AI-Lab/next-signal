@@ -330,12 +330,18 @@ def knowledge_ingest_cmd(
     progress: bool = typer.Option(
         False, help="Emit one JSON event per pipeline step to stdout (JSONL)."
     ),
+    locale: str = typer.Option(
+        "en", "--locale", help="Language of generated structural headings: zh or en."
+    ),
 ) -> None:
     """Ingest one URL or file as a durable markdown artifact."""
     import json
     import sys
 
     from paca.workflows.knowledge_ingest import ingest_one
+
+    if locale not in ("zh", "en"):
+        raise typer.BadParameter("--locale must be 'zh' or 'en'")
 
     on_progress = None
     if progress:
@@ -346,7 +352,9 @@ def knowledge_ingest_cmd(
             sys.stdout.write(json.dumps(event, ensure_ascii=False) + "\n")
             sys.stdout.flush()
 
-    result = ingest_one(value, ingest=ingest, category=category, on_progress=on_progress)
+    result = ingest_one(
+        value, ingest=ingest, category=category, on_progress=on_progress, locale=locale
+    )
 
     if progress:
         # Final line is the result object — N event lines + 1 result line = valid JSONL.
