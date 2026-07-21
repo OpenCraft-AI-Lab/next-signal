@@ -101,6 +101,20 @@ reading and manual triggering.
   auto-regenerated: regenerating on load would turn every visit to a live range
   into a minute of local inference.
 - Never dump a whole provider dict into the logger.
+- Analysis **output language is driven by the request locale** (`run(locale=)` /
+  `analyze --locale`), no longer by the goals language. locale ∈ {`zh`, `en`},
+  default `en`; goals / article body may be in any language (input only) — the
+  locale fixes only the output language. Each stage has `zh` / `en` pure-language
+  prompts (`prompts/agents/radar_*.md` = zh base, `radar_*.en.md` = en variant);
+  tier-1's drop-category cue vocabulary stays bilingual in both variants
+  (idiomatic, not literal) because either locale may analyze an article in the
+  other language. The tier-2 two-step scoring rubric now lives in two files — a
+  rubric change must update both `radar_tier2_impact.md` and
+  `radar_tier2_impact.en.md`.
+- `radar_analyses.locale` records each row's generation language; there is no
+  post-hoc translation, so a mixed-language corpus is expected. dedup candidate
+  retrieval is **not** locale-filtered (cross-language dedup is intentional;
+  embeddings are multilingual).
 
 ## Specs and status
 

@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS radar_analyses (
     content_status  TEXT,                     -- 'full' | 'fallback' | 'error' | NULL
     dedup_status    TEXT,                     -- 'novel' | 'duplicate' | NULL
     dedup_match_id  BIGINT REFERENCES radar_pushed_topics(id) ON DELETE SET NULL,
+    locale          TEXT,                     -- generation language: 'zh' | 'en'
     pushed_at       TIMESTAMPTZ,
     analyzed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (radar_item_id)
@@ -112,6 +113,14 @@ CREATE TABLE IF NOT EXISTS radar_recaps (
 );
 """
 
+# Idempotent migration for deployments whose radar_analyses predates the
+# `locale` column (CREATE TABLE IF NOT EXISTS won't alter an existing table).
+# Backfill legacy rows to 'zh' — historically all analyses were Chinese.
+MIGRATE_RADAR_ANALYSES_LOCALE = """
+ALTER TABLE radar_analyses ADD COLUMN IF NOT EXISTS locale TEXT;
+UPDATE radar_analyses SET locale = 'zh' WHERE locale IS NULL;
+"""
+
 
 def main() -> int:
     url = os.environ.get("DATABASE_URL")
@@ -132,6 +141,7 @@ def main() -> int:
             cur.execute(CREATE_RADAR_ITEMS)
             cur.execute(CREATE_RADAR_PUSHED_TOPICS)
             cur.execute(CREATE_RADAR_ANALYSES)
+            cur.execute(MIGRATE_RADAR_ANALYSES_LOCALE)
             cur.execute(CREATE_RADAR_RECAPS)
 
     print(f"bootstrap complete on {db_name}")

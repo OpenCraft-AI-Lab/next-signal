@@ -22,7 +22,9 @@ from paca.workflows.info_radar_analysis.schemas import (
 )
 
 
-def run_batch(items: list[dict[str, Any]], goals: list[Goal]) -> list[Tier1Verdict]:
+def run_batch(
+    items: list[dict[str, Any]], goals: list[Goal], locale: str = "en"
+) -> list[Tier1Verdict]:
     """Send ``items`` to the agent in a single batched prompt; return one
     verdict per input item, in order.
 
@@ -45,7 +47,7 @@ def run_batch(items: list[dict[str, Any]], goals: list[Goal]) -> list[Tier1Verdi
             for i, item in enumerate(items)
         ],
     }
-    agent = build_from_name("radar_tier1_filter")
+    agent = build_from_name("radar_tier1_filter", locale)
     batch = run_structured(agent, json.dumps(payload, ensure_ascii=False), Tier1Batch)
 
     if len(batch.decisions) != len(items):
@@ -66,13 +68,13 @@ def run_batch(items: list[dict[str, Any]], goals: list[Goal]) -> list[Tier1Verdi
     ]
 
 
-def run(item: dict[str, Any], goals: list[Goal]) -> Tier1Verdict:
+def run(item: dict[str, Any], goals: list[Goal], locale: str = "en") -> Tier1Verdict:
     """Single-item convenience — implemented as a batch of size 1.
 
     Used by the runner's per-item fallback when a batched call fails its
     length / index validation. Keeps the agent / prompt shape uniform.
     """
-    [verdict] = run_batch([item], goals)
+    [verdict] = run_batch([item], goals, locale)
     return verdict
 
 

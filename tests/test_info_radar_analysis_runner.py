@@ -108,7 +108,7 @@ def fake_stages(monkeypatch):
     tier2_results: dict[int, object] = {}
     dedup_results: dict[int, object] = {}
 
-    def fake_run_batch(items, goals):  # noqa: ARG001
+    def fake_run_batch(items, goals, locale="zh"):  # noqa: ARG001
         key = frozenset(int(i["id"]) for i in items)
         if key not in batch_results:
             # Default: succeed with whatever per-item answers are configured,
@@ -127,7 +127,7 @@ def fake_stages(monkeypatch):
             raise r
         return list(r)
 
-    def fake_tier1(item, goals):  # noqa: ARG001
+    def fake_tier1(item, goals, locale="zh"):  # noqa: ARG001
         r = tier1_results[int(item["id"])]
         if isinstance(r, Exception):
             raise r
@@ -139,13 +139,13 @@ def fake_stages(monkeypatch):
             raise r
         return r
 
-    def fake_tier2(item, content, status, goals):  # noqa: ARG001
+    def fake_tier2(item, content, status, goals, locale="zh"):  # noqa: ARG001
         r = tier2_results[int(item["id"])]
         if isinstance(r, Exception):
             raise r
         return r
 
-    def fake_dedup(summary, **_):  # noqa: ARG001
+    def fake_dedup(summary, locale="zh", **_):  # noqa: ARG001
         r = dedup_results.pop("next")
         if isinstance(r, Exception):
             raise r

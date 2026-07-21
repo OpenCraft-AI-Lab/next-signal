@@ -33,6 +33,7 @@ def run(
     content: str,
     content_status: str,
     goals: list[Goal],
+    locale: str = "en",
 ) -> Tier2Analysis:
     """Ask radar_tier2_impact for a goal-grounded analysis of the item."""
     truncated = content[:_MAX_CONTENT_CHARS]
@@ -43,6 +44,6 @@ def run(
         "content": truncated,
         "content_status": content_status,
     }
-    agent = build_from_name("radar_tier2_impact")
+    agent = build_from_name("radar_tier2_impact", locale)
     analysis = run_structured(agent, json.dumps(payload, ensure_ascii=False), Tier2Analysis)
     return _apply_ceilings(analysis)
