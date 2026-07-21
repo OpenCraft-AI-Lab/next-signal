@@ -1,0 +1,14 @@
+name: info_radar_recap
+kind: workflow
+enabled: true
+description: Range-scoped synthesis of kept radar signals into 3-5 themed narratives with citations, cached per (range, quality gate).
+factory: paca.workflows.info_radar_recap:factory
+expose:
+  # Not an agno/AgentOS workflow — no LLM exposure to the dashboard UI; the CLI
+  # invokes via extra.run_now below. factory above raises if AgentOS ever
+  # tries to bind it.
+  agent_os: false
+  tool:
+    enabled: false
+extra:
+  run_now: paca.workflows.info_radar_recap:run
