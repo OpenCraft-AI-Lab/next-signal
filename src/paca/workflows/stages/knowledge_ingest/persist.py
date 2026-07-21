@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 import yaml
 
 from paca.core import paths
+from paca.core.config import DEFAULT_LOCALE
 from paca.integrations.gbrain import gbrain_ingest, gbrain_query, gbrain_slug_for_path
 from paca.workflows.stages.knowledge_ingest.artifact import KnowledgeArtifact, validate_category
 from paca.workflows.stages.knowledge_ingest.related_section import (
@@ -26,14 +27,18 @@ from paca.workflows.stages.knowledge_ingest.related_section import (
 from paca.workflows.stages.knowledge_ingest.taxonomy import load_taxonomy
 
 
-def persist(artifact: KnowledgeArtifact, *, ingest: bool = True) -> KnowledgeArtifact:
+def persist(
+    artifact: KnowledgeArtifact, *, ingest: bool = True, locale: str = DEFAULT_LOCALE
+) -> KnowledgeArtifact:
     """Build frontmatter, write the wiki markdown file, then ingest into GBrain."""
     if artifact.artifact_edit is None:
         raise RuntimeError("persist step requires artifact_edit to be populated")
     artifact.category = validate_category(artifact.category)
     artifact_edit = artifact.artifact_edit
 
-    body = _append_summary_section(artifact.markdown, str(artifact_edit.get("summary") or "").strip())
+    body = _append_summary_section(
+        artifact.markdown, str(artifact_edit.get("summary") or "").strip(), locale
+    )
     artifact_slug = _artifact_slug(artifact.title, artifact.source_type, artifact.digest)
     category_dir = paths.WIKI_DIR / artifact.category
     # Title-derived slugs can collide across DIFFERENT sources (same title,
@@ -179,10 +184,16 @@ def _render(frontmatter: dict[str, Any], markdown: str) -> str:
     return f"---\n{yaml_text}\n---\n\n{markdown.strip()}\n"
 
 
-def _append_summary_section(markdown: str, summary: str) -> str:
-    if not summary or re.search(r"(?m)^##\s+总结\s*$", markdown):
+_SUMMARY_HEADINGS = {"zh": "总结", "en": "Summary"}
+
+
+def _append_summary_section(markdown: str, summary: str, locale: str = DEFAULT_LOCALE) -> str:
+    # Match either language so a re-ingest (possibly in the other locale) or a
+    # source that already carries a summary heading never double-appends.
+    if not summary or re.search(r"(?m)^##\s+(?:总结|Summary)\s*$", markdown):
         return markdown
-    return f"{markdown.rstrip()}\n\n## 总结\n\n{summary}"
+    heading = _SUMMARY_HEADINGS.get(locale, _SUMMARY_HEADINGS[DEFAULT_LOCALE])
+    return f"{markdown.rstrip()}\n\n## {heading}\n\n{summary}"
 
 
 def _artifact_slug(title: str, source_type: str, digest: str) -> str:

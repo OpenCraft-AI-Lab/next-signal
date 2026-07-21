@@ -116,12 +116,14 @@ export async function startKnowledgeIngest(
   category?: string | null,
   localeValue?: Locale,
 ): Promise<{ ok: boolean; jobId?: string; message: string }> {
-  const t = getDictionary(normalizeLocale(localeValue));
+  const locale = normalizeLocale(localeValue);
+  const t = getDictionary(locale);
   const trimmed = value.trim();
   if (!trimmed) return { ok: false, message: t.knowledge.ingest.errorEmpty };
   const jobId = startIngestJob(trimmed, {
     category: category?.trim() || null,
     source: "knowledge",
+    locale,
   });
   return { ok: true, jobId, message: t.knowledge.ingest.started };
 }
