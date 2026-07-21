@@ -12,14 +12,14 @@ from __future__ import annotations
 
 from agno.agent import Agent
 
-from paca.core.config import BASE_PROMPT_LOCALE, AgentConfig, load_agent
+from paca.core.config import DEFAULT_LOCALE, AgentConfig, load_agent
 from paca.core.context import shared_context
 from paca.core.db import get_db
 from paca.core.models import get_model
 from paca.registry import resolve_tools
 
 
-def build_from_config(cfg: AgentConfig, locale: str = BASE_PROMPT_LOCALE) -> Agent:
+def build_from_config(cfg: AgentConfig, locale: str = DEFAULT_LOCALE) -> Agent:
     """Assemble an agno.Agent from a parsed AgentConfig.
 
     Tools are looked up by name in ``paca.registry``. Unknown tool names
@@ -46,11 +46,11 @@ def build_from_config(cfg: AgentConfig, locale: str = BASE_PROMPT_LOCALE) -> Age
     )
 
 
-def build_from_name(name: str, locale: str = BASE_PROMPT_LOCALE) -> Agent:
+def build_from_name(name: str, locale: str = DEFAULT_LOCALE) -> Agent:
     return build_from_config(load_agent(name), locale)
 
 
-def _compose_instructions(cfg: AgentConfig, locale: str = BASE_PROMPT_LOCALE) -> str:
+def _compose_instructions(cfg: AgentConfig, locale: str = DEFAULT_LOCALE) -> str:
     """Combine shared context (house rules, user profile) with per-agent instructions.
 
     Layout in the resulting prompt:

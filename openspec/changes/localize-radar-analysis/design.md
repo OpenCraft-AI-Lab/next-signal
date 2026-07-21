@@ -69,14 +69,22 @@ model profile, tools, and `extra` knobs (`db: false`, `shared_context: false`,
 `max_tokens: 4096`) must NOT drift between locales — A2 keeps them single-source
 and only forks the prompt text.
 
-**Selection mechanism — naming convention with base fallback:** the config's
-declared `instructions_file` is the base (default-locale, `zh`) prompt; a non-default
-locale inserts a `.<locale>` segment before the extension
-(`radar_tier2_impact.md` → `radar_tier2_impact.en.md`). Missing variant → fall back
-to base + log (never raise). Chosen over an explicit YAML mapping field
-(`instructions_files: {zh:..., en:...}`) to avoid touching `AgentConfig`'s schema
-for every agent and to keep unaffected agents' YAML unchanged; the convention is
-localized to `resolved_instructions(locale)`.
+**Selection mechanism — suffixed variant with unsuffixed-base fallback:** the
+loader resolves the sibling `<stem>.<locale><ext>` first, else the unsuffixed
+`<stem><ext>`, else raises. Multi-language agents ship one suffixed file per locale
+and **no** unsuffixed base (`radar_tier2_impact.zh.md` + `radar_tier2_impact.en.md`);
+single-language agents keep just the unsuffixed base (`knowledge_classifier.md`),
+which every locale falls back to. Both languages carry an explicit suffix so the
+directory is symmetric (`.zh.md` / `.en.md`) — no "which language is the unmarked
+base" ambiguity. `instructions_file` names the logical stem, so a multi-language
+agent's YAML still reads `agents/radar_tier2_impact.md` even though only the suffixed
+files exist on disk.
+
+Chosen over an explicit YAML mapping field (`instructions_files: {zh:..., en:...}`)
+to avoid touching `AgentConfig`'s schema for every agent and to keep unaffected
+agents' YAML unchanged; the convention is localized to `resolved_instructions(locale)`.
+The suffix is the locale code (`zh`, not `cn`) so the filename derives directly from
+`--locale` / `radar_analyses.locale` and pairs with the ISO-639 `en`.
 
 **Alternative considered:** A3 (single prompt + inject "reply in English" at call
 time). Rejected by the user requirement for pure-language prompt files — and because
@@ -118,23 +126,16 @@ multilingual, so cross-language dedup is correct and desired. dedup's `reason`
 (internal, low-visibility) follows the run locale for consistency. Stored topic
 summaries may thus be mixed-language over time — acceptable and expected.
 
-### D6: Runtime default locale `en`; base prompt-file anchor stays `zh`
+### D6: Single default locale `en` everywhere
 
-Two distinct concepts, deliberately separated:
-
-- **Runtime default** — `run()` and CLI `--locale` default to `en`, matching the
-  dashboard's English-first `DEFAULT_LOCALE = "en"` (set on main). A bare
-  `paca info-radar analyze` therefore generates English.
-- **Base prompt-file anchor** — `paca.core.config.BASE_PROMPT_LOCALE = "zh"` records
-  that the unsuffixed prompt files (`radar_tier2_impact.md`, …) are written in
-  Chinese, so the loader resolves `en` to the `.en.md` variant. This is an internal
-  file-convention constant used only by `resolved_instructions` / `build_from_name`
-  and must equal the base files' actual language; it is NOT the product default.
-
-Keeping the Chinese files as the base (rather than swapping English in) avoids
-churning all six prompt files; the runtime default is set purely by the pipeline
-entry points. `run(locale="zh")` / `--locale zh` still reproduces Chinese output for
-callers who want it.
+Because both languages are now explicitly suffixed (D2), there is no "unmarked base
+locale" to anchor, so the earlier split between a base-file anchor and a runtime
+default collapses: `paca.core.config.DEFAULT_LOCALE = "en"` is the one system
+default. `run()` and CLI `--locale` default to `en`, matching the dashboard's
+English-first `DEFAULT_LOCALE = "en"` (set on main), so a bare `paca info-radar
+analyze` generates English. `run(locale="zh")` / `--locale zh` still reproduces
+Chinese output. For single-language agents the default value is immaterial — any
+locale falls back to their unsuffixed base file.
 
 ## Risks / Trade-offs
 
@@ -158,8 +159,9 @@ callers who want it.
 ## Migration Plan
 
 1. Loader gains `build_from_name(name, locale)` + `resolved_instructions(locale)`
-   with base fallback (no behavior change at default locale).
-2. Author the 6 pure-language prompt files (split current 3), with bilingual
+   resolving `<stem>.<locale><ext>` first, then unsuffixed base, else raise.
+2. Author the 6 pure-language prompt files as suffixed `.zh.md` / `.en.md` pairs
+   (the old unsuffixed `radar_*.md` are renamed to `.zh.md`), with bilingual
    idiomatic tier-1 cues.
 3. Thread locale: `runner.run(locale=)` → stages → agent build.
 4. CLI `--locale` (default `en`); dashboard forwards `paca_locale` into the spawn.
@@ -167,9 +169,9 @@ callers who want it.
    backfill `'zh'`; `insert_analysis(locale=)`; runner passes it.
 6. Docs + tests.
 
-**Rollback:** the change is additive and default-`zh`. Reverting the code restores
-goals-language behavior; the `locale` column can be left in place (unused) or
-dropped — no data loss either way since it is provenance metadata.
+**Rollback:** reverting the code restores goals-language behavior; the `locale`
+column can be left in place (unused) or dropped — no data loss either way since it
+is provenance metadata.
 
 ## Open Questions
 
