@@ -65,7 +65,7 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 | `NEXT_PUBLIC_AGENT_OS_URL` | `http://localhost:7777` | Browser-side AgentOS calls (none yet) |
 | `DATABASE_URL` | (Postgres URL) | `dashboard-radar` (direct DB reads) |
 | `PACA_DATABASE_URL` | `DATABASE_URL` | Optional dashboard-specific Postgres URL |
-| `PACA_RADAR_TIMEZONE` | `America/Los_Angeles` | Calendar-day grouping for `/radar` |
+| `INFO_RADAR_TIMEZONE` | `America/Los_Angeles` | Calendar-day grouping and recap ranges for `/radar` |
 | `FOLO_TOKEN` | (Folo CLI session file) | `/subscriptions` via `paca info-radar subscriptions --json` |
 | `FOLO_CLI_ARGV` | `npx --yes folocli@0.0.5` | Optional override for the Folo CLI launcher |
 

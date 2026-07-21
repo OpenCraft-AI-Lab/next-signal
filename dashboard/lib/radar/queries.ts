@@ -59,7 +59,7 @@ export type DetailListItem = {
   score: number;
 };
 
-const RADAR_TZ = process.env.PACA_RADAR_TIMEZONE ?? "America/Los_Angeles";
+export const RADAR_TZ = process.env.INFO_RADAR_TIMEZONE ?? "America/Los_Angeles";
 
 function toLocalDay(date: Date): string {
   const parts = new Intl.DateTimeFormat("en", {

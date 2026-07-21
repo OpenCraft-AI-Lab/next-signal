@@ -416,6 +416,58 @@ def info_radar_analyze(
     typer.echo("info-radar analyze: " + " ".join(parts))
 
 
+@info_radar_app.command("recap")
+def info_radar_recap(
+    since: str = typer.Option(..., "--since", help="Range start, YYYY-MM-DD (inclusive)."),
+    until: str = typer.Option(..., "--until", help="Range end, YYYY-MM-DD (inclusive)."),
+    min_score: int = typer.Option(
+        0, "--min-score", min=0, max=100, help="Quality gate: minimum analysis score."
+    ),
+    novel_only: bool = typer.Option(
+        False, "--novel-only", help="Restrict to items the dedup gate marked novel."
+    ),
+    regenerate: bool = typer.Option(
+        False, "--regenerate", help="Recompute even when a recap is already cached."
+    ),
+) -> None:
+    """Synthesize a date range of kept signals into themed narratives."""
+    from paca.workflows.info_radar_recap import run as run_recap
+
+    try:
+        result = run_recap(
+            since=since,
+            until=until,
+            min_score=min_score,
+            novel_only=novel_only,
+            regenerate=regenerate,
+        )
+    except RuntimeError as e:
+        typer.echo(f"info-radar recap: {e}", err=True)
+        raise typer.Exit(code=1) from e
+
+    status = result["status"]
+    if status == "empty":
+        typer.echo(
+            f"info-radar recap: no items cleared the gate for "
+            f"{result['since']}..{result['until']}"
+        )
+        return
+    if status == "running":
+        typer.echo("info-radar recap: a generation is already running for this range")
+        return
+    if status == "error":
+        typer.echo(f"info-radar recap: FAILED — {result['error']}", err=True)
+        raise typer.Exit(code=1)
+
+    origin = "cached" if status == "cached" else "generated"
+    typer.echo(f"info-radar recap ({origin}): {result['headline']}")
+    for theme in result["themes"]:
+        typer.echo(f"  · {theme['title']} [{len(theme['item_ids'])} cited]")
+    shown, considered = result.get("item_count"), result.get("considered_count")
+    if shown and considered and considered > shown:
+        typer.echo(f"  (synthesized from the top {shown} of {considered} signals)")
+
+
 @info_radar_app.command("subscriptions")
 def info_radar_subscriptions(
     json_output: bool = typer.Option(

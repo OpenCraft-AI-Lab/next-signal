@@ -15,6 +15,7 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 `src/paca/integrations/info_radar/` —— Folo / YouTube subtitle 等 provider adapter。
 `src/paca/workflows/info_radar_pull.py` —— collector 的 manual-run thin shell。
 `src/paca/workflows/info_radar_analysis/` —— 两层 LLM analysis pipeline。
+`src/paca/workflows/info_radar_recap/` —— 区间 recap 归纳。
 
 ## Agents
 
@@ -23,11 +24,13 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 | `radar_tier1_filter` | local_structured | batched Tier-1 relevance filter，按 goals 决定 keep/drop |
 | `radar_tier2_impact` | local_structured | per-item full-content impact summary / score / tags |
 | `radar_dedup_judge` | local_structured | pgvector candidate 后的 LLM duplicate/novel 判定 |
+| `radar_recap` | local_structured | 把一个日期区间的 kept item 聚成 3-5 条带引用的主线叙述 |
 
 ## 工具
 
 - info-radar collector：`uv run paca info-radar pull [--source NAME]`。
 - info-radar analysis：`uv run paca info-radar analyze [--limit N] [--source NAME]`。
+- info-radar recap：`uv run paca info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]`。
 - Folo subscriptions inventory：`uv run paca info-radar subscriptions --json`。
 
 ## 接的外部
@@ -45,6 +48,8 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 - info-radar raw items：Postgres `radar_items`
 - info-radar analyses：Postgres `radar_analyses`
 - info-radar dedup memory：Postgres `radar_pushed_topics`（pgvector 1024-dim）
+- info-radar recaps：Postgres `radar_recaps`，一行对应一个
+  `(since, until, min_score, novel_only)`
 - info-radar goals：`configs/info_radar/goals.yaml`（dashboard `/goals` 可编辑）
 - info-radar sources：`configs/info_radar/sources.yaml`
 
@@ -61,16 +66,32 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
   `opinion` tag 的 ≤65 上限由代码层 clamp 兜底（`stages/tier2.py::_apply_ceilings`），
   goals 列名的高信号个人由 prompt 引导打 `frontier-voice` tag 豁免。
 - Dedup embedding 失败时 conservatively 走 novel，不静默丢 item。
+- recap 的身份是 `(since, until, min_score, novel_only)`。重复请求走缓存；
+  regenerate 是原地 upsert，不追加新行。
+- recap 区间按 radar 时区的 `analyzed_at` 取，两端闭区间——和 day group 同一套
+  约定，所以 7 天 recap 覆盖的正好是下方那七行 day row。绝不用 `published_at`
+  （可为 NULL，且会和页面上其他所有日期对不上）。
+- recap agent 只拿 `summary`，绝不拿 `impact_md`：recap 做的是跨 item 归纳，
+  per-item 深挖会让 prompt 体积翻三倍去塞主线本该抽象掉的内容。
+- 选取上限为 score 最高的 60 条。`item_count` 和 `considered_count` 都会持久化，
+  让读者知道这次 recap 只覆盖了子集——上限不会静默生效。
+- recap 引用到未知 id 会被丢弃；引用全失效的主线整条丢弃；若无任何主线存活，
+  本次算失败，不写 `done`。regenerate 失败时上一版 recap 仍可读。
+- `radar_recaps` **没有**指向 `radar_items` 的外键——引用 id 存在 `themes` JSONB
+  里，好让 recap 活过 30 天 sweep。来源已消失的引用渲染成纯文本。
+- recap 过期（区间内又有新分析落库）只**标注**，绝不自动重算：一进页面就重算会把
+  每次访问活跃区间变成一分钟本地推理。
 - 不要往 logger dump 整个 provider dict。
 
 ## 规范与状态
 
 规范：[`openspec/specs/info-radar/`](../../../openspec/specs/info-radar/)、
 [`openspec/specs/info-radar-analysis/`](../../../openspec/specs/info-radar-analysis/)、
+[`openspec/specs/info-radar-recap/`](../../../openspec/specs/info-radar-recap/)、
 [`openspec/specs/dashboard-radar-reader/`](../../../openspec/specs/dashboard-radar-reader/)。
 
-当前状态：info-radar pull / analysis / dashboard reader / goals editor / Folo subscriptions
-table 已就位。没有后台调度——pull 和 analysis **都靠手动触发**：`paca info-radar pull|analyze`、
+当前状态：info-radar pull / analysis / recap / dashboard reader / goals editor / Folo
+subscriptions table 已就位。没有后台调度——pull 和 analysis **都靠手动触发**：`paca info-radar pull|analyze`、
 `paca run-workflow <name>` 或 dashboard `/radar` 的 Pull + Analyze。
 
 dashboard `/radar` 的 `Pull + Analyze` 现在显示**实时 analyze 进度**：action 在 pull 后把
@@ -82,3 +103,10 @@ dashboard `/radar` 的 `Pull + Analyze` 现在显示**实时 analyze 进度**：
 页面加载时即从 `radar-state.json` 读取，刷新页面也能续上。仅覆盖 dashboard 触发的 run
 （CLI run 不显示进度条）；dashboard 重启会让 in-flight 的 `analyzeRunning` 残留到下次
 run（best-effort，子进程与 DB 写入不受影响）。
+
+`/radar` 的 **Recap** 面板选一个区间（最近 7 天 / 最近 30 天 / 自定义 from–to，预设在
+radar 时区解析），并继承 filter bar 当前的 score 阈值和 novel-only 作为质量门槛，所以
+recap 和下方条目列表描述的是同一批内容——换个门槛就是另一条缓存记录。生成走
+detached spawn `paca info-radar recap`，再轮询 `GET /api/radar/recap` 拿行的 `status`；
+`running` → `done` 时客户端调 `router.refresh()`，由服务端渲染的面板接手结果。失败会
+展示存下来的错误，而不是一直轮询。`?export=1` 下整个面板不渲染。

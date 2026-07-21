@@ -85,6 +85,33 @@ CREATE INDEX IF NOT EXISTS radar_analyses_unpushed_idx
     WHERE verdict='keep' AND dedup_status='novel' AND pushed_at IS NULL;
 """
 
+# paca.workflows.info_radar_recap: one cached recap per (range, quality gate).
+# The UNIQUE key is the recap's identity, so a repeat request is a cache hit and
+# a regenerate is an in-place upsert.
+#
+# Deliberately NO foreign key to radar_items: citation ids live inside `themes`
+# so a recap survives the 30-day sweep. A recap is a point-in-time artifact and
+# is expected to outlive its sources; readers render a citation whose item is
+# gone as plain text.
+CREATE_RADAR_RECAPS = """
+CREATE TABLE IF NOT EXISTS radar_recaps (
+    id               BIGSERIAL PRIMARY KEY,
+    since            DATE NOT NULL,
+    until            DATE NOT NULL,
+    min_score        INTEGER NOT NULL DEFAULT 0,
+    novel_only       BOOLEAN NOT NULL DEFAULT FALSE,
+    status           TEXT NOT NULL,            -- 'running' | 'done' | 'error'
+    headline         TEXT,
+    themes           JSONB NOT NULL DEFAULT '[]'::jsonb,
+    item_count       INTEGER,                  -- rows actually sent to the agent
+    considered_count INTEGER,                  -- rows clearing the gate before the cap
+    max_analyzed_at  TIMESTAMPTZ,              -- staleness watermark
+    error            TEXT,
+    generated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (since, until, min_score, novel_only)
+);
+"""
+
 
 def main() -> int:
     url = os.environ.get("DATABASE_URL")
@@ -105,6 +132,7 @@ def main() -> int:
             cur.execute(CREATE_RADAR_ITEMS)
             cur.execute(CREATE_RADAR_PUSHED_TOPICS)
             cur.execute(CREATE_RADAR_ANALYSES)
+            cur.execute(CREATE_RADAR_RECAPS)
 
     print(f"bootstrap complete on {db_name}")
     return 0

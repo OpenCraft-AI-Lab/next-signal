@@ -18,6 +18,7 @@ reading and manual triggering.
 `src/paca/integrations/info_radar/` — provider adapters (Folo, YouTube subtitles).
 `src/paca/workflows/info_radar_pull.py` — the collector's manual-run thin shell.
 `src/paca/workflows/info_radar_analysis/` — the two-tier LLM analysis pipeline.
+`src/paca/workflows/info_radar_recap/` — range-scoped recap synthesis.
 
 ## Agents
 
@@ -26,11 +27,13 @@ reading and manual triggering.
 | `radar_tier1_filter` | local_structured | Batched tier-1 relevance filter; keep/drop against the goals |
 | `radar_tier2_impact` | local_structured | Per-item full-content impact summary / score / tags |
 | `radar_dedup_judge` | local_structured | LLM duplicate/novel verdict after pgvector candidate retrieval |
+| `radar_recap` | local_structured | Clusters a date range of kept items into 3-5 themed narratives with citations |
 
 ## Tools
 
 - info-radar collector: `uv run paca info-radar pull [--source NAME]`.
 - info-radar analysis: `uv run paca info-radar analyze [--limit N] [--source NAME]`.
+- info-radar recap: `uv run paca info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]`.
 - Folo subscriptions inventory: `uv run paca info-radar subscriptions --json`.
 
 ## External systems
@@ -49,6 +52,8 @@ reading and manual triggering.
 - info-radar raw items: Postgres `radar_items`
 - info-radar analyses: Postgres `radar_analyses`
 - info-radar dedup memory: Postgres `radar_pushed_topics` (pgvector, 1024-dim)
+- info-radar recaps: Postgres `radar_recaps`, one row per
+  `(since, until, min_score, novel_only)`
 - info-radar goals: `configs/info_radar/goals.yaml` (editable from the dashboard
   `/goals` page)
 - info-radar sources: `configs/info_radar/sources.yaml`
@@ -74,16 +79,38 @@ reading and manual triggering.
   goals are exempted via a prompt-driven `frontier-voice` tag.
 - When dedup embedding fails, treat the item conservatively as novel — never
   silently drop it.
+- A recap is identified by `(since, until, min_score, novel_only)`. A repeat
+  request is a cache hit; regeneration upserts that row rather than appending.
+- Recap ranges are bounded by `analyzed_at` in the radar timezone, inclusive —
+  the same convention the day groups use, so a 7-day recap covers exactly the
+  seven day rows beneath it. `published_at` is never used (nullable, and it
+  would disagree with every other date on the page).
+- The recap agent receives `summary`, never `impact_md`: the recap synthesizes
+  across items, and the per-item deep dive would triple prompt size for content
+  the themes exist to abstract away.
+- Selection caps at the top 60 by score. Both `item_count` and
+  `considered_count` are persisted so the reader is told when a recap covers a
+  subset — the cap is never applied silently.
+- Recap citations to unknown ids are dropped; a theme left with no valid
+  citation is dropped; if no theme survives, the run is an error and nothing is
+  stored as `done`. A regeneration that fails keeps the previous recap readable.
+- `radar_recaps` holds **no** foreign key to `radar_items` — citation ids live
+  in the `themes` JSONB so a recap survives the 30-day sweep. Readers render a
+  citation whose source is gone as plain text.
+- A stale recap (further analyses landed in its range) is **labelled**, never
+  auto-regenerated: regenerating on load would turn every visit to a live range
+  into a minute of local inference.
 - Never dump a whole provider dict into the logger.
 
 ## Specs and status
 
 Specs: [`openspec/specs/info-radar/`](../../openspec/specs/info-radar/),
 [`openspec/specs/info-radar-analysis/`](../../openspec/specs/info-radar-analysis/),
+[`openspec/specs/info-radar-recap/`](../../openspec/specs/info-radar-recap/),
 [`openspec/specs/dashboard-radar-reader/`](../../openspec/specs/dashboard-radar-reader/).
 
-Current status: info-radar pull, analysis, the dashboard reader, the goals
-editor, and the Folo subscriptions table are all in place. There is no background
+Current status: info-radar pull, analysis, recap, the dashboard reader, the
+goals editor, and the Folo subscriptions table are all in place. There is no background
 scheduler — both pull and analysis are **manually triggered**, via
 `paca info-radar pull|analyze`, `paca run-workflow <name>`, or the dashboard
 `/radar` page's Pull + Analyze.
@@ -100,3 +127,13 @@ state is read from `radar-state.json` at page load, so a refresh resumes it. Thi
 covers dashboard-triggered runs only (CLI runs show no progress bar), and
 restarting the dashboard can leave an in-flight `analyzeRunning` set until the
 next run — best-effort, with the child process and DB writes unaffected.
+
+The `/radar` **Recap** panel picks a range (last 7 days / last 30 days / custom
+from–to, presets resolved in the radar timezone) and inherits the filter bar's
+score threshold and novel-only setting as its quality gate, so the recap and the
+item list describe the same population — and a different gate is a different
+cached recap. Generation spawns `paca info-radar recap` detached and polls
+`GET /api/radar/recap` for the row's `status`; on `running` → `done` the client
+calls `router.refresh()` so the server-rendered panel picks up the result.
+Failures surface the stored error rather than polling forever. The panel is
+omitted entirely under `?export=1`.

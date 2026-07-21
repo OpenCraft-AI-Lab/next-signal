@@ -113,6 +113,9 @@ uv run paca info-radar analyze [--limit N] [--source NAME]
                                                       # 前置：configs/info_radar/goals.yaml 必须存在
                                                       # (cp configs/info_radar/goals.example.yaml configs/info_radar/goals.yaml 后手改)
 uv run paca info-radar subscriptions --json           # 读取 Folo 订阅，输出 dashboard 稳定 JSON 行
+uv run paca info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]
+                                                      # 把一个日期区间的 kept 信号归纳成主线叙述
+                                                      # （按区间 + 门槛缓存）
 uv run paca run-workflow knowledge_ingest             # 手动跑 wiki → GBrain re-ingest
 ```
 

@@ -115,6 +115,7 @@ CLI 子命令：
 - `paca info-radar pull [--source NAME]` — 跑一次 info-radar 各 source 的 CLI，写入 `radar_items`
 - `paca info-radar sweep` — 删除 30 天前的 `radar_items` 行
 - `paca info-radar analyze [--limit N] [--source NAME]` — 跑 info-radar analysis 两层 pipeline，写 `radar_analyses`
+- `paca info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]` — 把区间内 kept 信号归纳成 3-5 条带引用的主线，缓存进 `radar_recaps`（按 `(since, until, min_score, novel_only)` 幂等）
 - `paca info-radar subscriptions --json` — 读取 Folo 订阅，输出 dashboard 稳定 JSON 行
 - `paca run-workflow <name>` — 通过 workflow 的 `extra.run_now` 手动跑一次（dashboard re-index 走 `paca run-workflow knowledge_ingest`）
 - `paca serve` — 启动 AgentOS（端口 7777）
