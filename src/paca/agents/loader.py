@@ -12,24 +12,25 @@ from __future__ import annotations
 
 from agno.agent import Agent
 
-from paca.core.config import AgentConfig, load_agent
+from paca.core.config import BASE_PROMPT_LOCALE, AgentConfig, load_agent
 from paca.core.context import shared_context
 from paca.core.db import get_db
 from paca.core.models import get_model
 from paca.registry import resolve_tools
 
 
-def build_from_config(cfg: AgentConfig) -> Agent:
+def build_from_config(cfg: AgentConfig, locale: str = BASE_PROMPT_LOCALE) -> Agent:
     """Assemble an agno.Agent from a parsed AgentConfig.
 
     Tools are looked up by name in ``paca.registry``. Unknown tool names
-    raise — fail loud rather than silently dropping capabilities.
+    raise — fail loud rather than silently dropping capabilities. ``locale``
+    selects a per-locale instructions variant (see AgentConfig).
     """
     kwargs = {
         "name": cfg.name,
         "model": get_model(cfg.model_profile),
         "tools": resolve_tools(cfg.tools),
-        "instructions": _compose_instructions(cfg),
+        "instructions": _compose_instructions(cfg, locale),
         "markdown": cfg.markdown,
         "add_history_to_context": cfg.add_history_to_context,
         "num_history_runs": cfg.num_history_runs,
@@ -45,11 +46,11 @@ def build_from_config(cfg: AgentConfig) -> Agent:
     )
 
 
-def build_from_name(name: str) -> Agent:
-    return build_from_config(load_agent(name))
+def build_from_name(name: str, locale: str = BASE_PROMPT_LOCALE) -> Agent:
+    return build_from_config(load_agent(name), locale)
 
 
-def _compose_instructions(cfg: AgentConfig) -> str:
+def _compose_instructions(cfg: AgentConfig, locale: str = BASE_PROMPT_LOCALE) -> str:
     """Combine shared context (house rules, user profile) with per-agent instructions.
 
     Layout in the resulting prompt:
@@ -62,7 +63,7 @@ def _compose_instructions(cfg: AgentConfig) -> str:
         # Agent role
         <per-agent instructions>
     """
-    own = cfg.resolved_instructions().strip()
+    own = cfg.resolved_instructions(locale).strip()
     if cfg.extra.get("shared_context") is False:
         return own
     shared = shared_context().strip()

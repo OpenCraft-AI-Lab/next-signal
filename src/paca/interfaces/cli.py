@@ -424,11 +424,17 @@ def info_radar_analyze(
     source: str | None = typer.Option(
         None, "--source", help="Restrict to one collector source name."
     ),
+    locale: str = typer.Option(
+        "en", "--locale", help="Output language of generated analysis: zh or en."
+    ),
 ) -> None:
     """Run the two-tier analysis pipeline over unseen radar_items."""
     from paca.workflows.info_radar_analysis import run as run_analysis
 
-    counters = run_analysis(limit=limit, source=source)
+    if locale not in ("zh", "en"):
+        raise typer.BadParameter("--locale must be 'zh' or 'en'")
+
+    counters = run_analysis(limit=limit, source=source, locale=locale)
     parts = [f"{k}={v}" for k, v in counters.items()]
     typer.echo("info-radar analyze: " + " ".join(parts))
 

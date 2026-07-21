@@ -31,8 +31,18 @@ class DedupOutcome:
     embedding: list[float] | None  # used by persist to create a new topic when novel
 
 
-def run(summary: str, *, threshold: float = DEFAULT_THRESHOLD, k: int = DEFAULT_K) -> DedupOutcome:
-    """Decide whether ``summary`` is a paraphrase of a previously-pushed topic."""
+def run(
+    summary: str,
+    locale: str = "en",
+    *,
+    threshold: float = DEFAULT_THRESHOLD,
+    k: int = DEFAULT_K,
+) -> DedupOutcome:
+    """Decide whether ``summary`` is a paraphrase of a previously-pushed topic.
+
+    ``locale`` selects the judge prompt variant (its ``reason`` output language);
+    candidate retrieval stays locale-agnostic so cross-language duplicates match.
+    """
     try:
         embedder = get_embedder("local")
         embedding = embedder(summary)
@@ -50,7 +60,7 @@ def run(summary: str, *, threshold: float = DEFAULT_THRESHOLD, k: int = DEFAULT_
         return DedupOutcome(status="novel", matched_topic_id=None, embedding=embedding)
 
     try:
-        verdict = _ask_judge(summary, candidates)
+        verdict = _ask_judge(summary, candidates, locale)
     except Exception as e:  # noqa: BLE001
         log.warning("dedup_judge_failed", extra={"error": str(e)})
         return DedupOutcome(status="novel", matched_topic_id=None, embedding=embedding)
@@ -72,12 +82,12 @@ def run(summary: str, *, threshold: float = DEFAULT_THRESHOLD, k: int = DEFAULT_
     return DedupOutcome(status="novel", matched_topic_id=None, embedding=embedding)
 
 
-def _ask_judge(summary: str, candidates: list[dict]) -> DedupVerdict:
+def _ask_judge(summary: str, candidates: list[dict], locale: str = "en") -> DedupVerdict:
     payload = {
         "new_summary": summary,
         "candidates": [
             {"id": int(c["id"]), "summary": str(c["topic_summary"])} for c in candidates
         ],
     }
-    agent = build_from_name("radar_dedup_judge")
+    agent = build_from_name("radar_dedup_judge", locale)
     return run_structured(agent, json.dumps(payload, ensure_ascii=False), DedupVerdict)

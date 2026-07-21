@@ -44,16 +44,18 @@ def insert_analysis(
     content_status: str | None = None,
     dedup_status: str | None = None,
     dedup_match_id: int | None = None,
+    locale: str = "en",
 ) -> int | None:
     """Insert one radar_analyses row. Idempotent via UNIQUE(radar_item_id).
 
-    Returns the new row id, or ``None`` if a row already existed.
+    Returns the new row id, or ``None`` if a row already existed. ``locale``
+    records the language the row's content was generated in.
     """
     sql = """
         INSERT INTO radar_analyses
             (radar_item_id, verdict, tier1_reason, summary, impact_md, score,
-             tags, content_status, dedup_status, dedup_match_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+             tags, content_status, dedup_status, dedup_match_id, locale)
+        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s)
         ON CONFLICT (radar_item_id) DO NOTHING
         RETURNING id
     """
@@ -72,6 +74,7 @@ def insert_analysis(
                     content_status,
                     dedup_status,
                     dedup_match_id,
+                    locale,
                 ),
             )
             row = cur.fetchone()

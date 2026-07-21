@@ -13,6 +13,7 @@ of truth for the hot-reload mechanism.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Literal
 
@@ -20,6 +21,15 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from paca.core.paths import CONFIGS_DIR, PROMPTS_DIR
+
+log = logging.getLogger(__name__)
+
+# Language of the unsuffixed base ``instructions_file``. When an agent is built
+# for this locale the base file is used as-is; other locales resolve to a sibling
+# ``<stem>.<locale><ext>`` variant with fallback to base. This is a prompt-file
+# convention anchor — distinct from the pipeline's runtime default locale, which
+# the CLI / runner set to "en". See core-agents spec.
+BASE_PROMPT_LOCALE = "zh"
 
 # Reject unknown YAML keys across every config schema. Typo'd keys (e.g.
 # `instuctions:` instead of `instructions:`) must fail loudly rather than
@@ -113,12 +123,32 @@ class AgentConfig(BaseModel):
     add_datetime_to_context: bool = False
     extra: dict[str, Any] = Field(default_factory=dict)
 
-    def resolved_instructions(self) -> str:
+    def resolved_instructions(self, locale: str = BASE_PROMPT_LOCALE) -> str:
         if self.instructions:
             return self.instructions
         if self.instructions_file:
-            return (PROMPTS_DIR / self.instructions_file).read_text(encoding="utf-8")
+            return _read_instructions_file(self.instructions_file, locale)
         return ""
+
+
+def _read_instructions_file(rel_path: str, locale: str) -> str:
+    """Read a prompt file, preferring a locale variant for non-default locales.
+
+    ``agents/x.md`` with ``locale="en"`` resolves to ``agents/x.en.md`` when it
+    exists; a missing variant falls back to the base file with a logged warning
+    (never raises) so a not-yet-translated agent still loads.
+    """
+    base = PROMPTS_DIR / rel_path
+    if locale != BASE_PROMPT_LOCALE:
+        variant = base.parent / f"{base.stem}.{locale}{base.suffix}"
+        if variant.exists():
+            return variant.read_text(encoding="utf-8")
+        log.warning(
+            "instructions_locale_fallback path=%s locale=%s (base prompt used)",
+            rel_path,
+            locale,
+        )
+    return base.read_text(encoding="utf-8")
 
 
 def load_agent(name: str) -> AgentConfig:

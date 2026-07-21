@@ -82,6 +82,15 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 - recap 过期（区间内又有新分析落库）只**标注**，绝不自动重算：一进页面就重算会把
   每次访问活跃区间变成一分钟本地推理。
 - 不要往 logger dump 整个 provider dict。
+- analysis 的**输出语言由请求 locale 决定**（`run(locale=)` / `analyze --locale`），
+  不再由 goals 语言决定。locale ∈ {`zh`, `en`}，默认 `en`；goals / 文章正文可以是任意
+  语言（只作输入），locale 只固定输出语言。每个 stage 有 `zh` / `en` 两份纯语言 prompt
+  （`prompts/agents/radar_*.md` = zh 基准，`radar_*.en.md` = en 变体）；tier-1 的 drop
+  类别 cue 词表在两份里都保持中英双语（同义惯用，不直译），因为任一 locale 都可能分析另
+  一语言的文章。tier-2 的两步打分 rubric 现在存在两份文件里——改 rubric 必须同步改
+  `radar_tier2_impact.md` 和 `radar_tier2_impact.en.md`。
+- `radar_analyses.locale` 记录每行的生成语言；不做事后翻译，语料库按 locale 混合是预期
+  行为。dedup 候选检索**不按 locale 过滤**（跨语言去重是有意为之，embedding 多语言）。
 
 ## 规范与状态
 
