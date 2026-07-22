@@ -51,7 +51,7 @@ Every `radar_analyses` row written by the pipeline SHALL persist the run `locale
 
 ### Requirement: Business tables and DDL
 
-`scripts/bootstrap_db.py` SHALL provision `radar_analyses` and `radar_pushed_topics` tables with the columns described in design.md §D7 and §D8. The `embedding` column on `radar_pushed_topics` SHALL be `vector(1024)` and an `ivfflat` cosine index SHALL be created. ON DELETE CASCADE from `radar_items` to `radar_analyses` SHALL be configured. `radar_analyses` SHALL include a `locale` column recording the generation language of each row; the bootstrap SHALL add it via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS locale TEXT` so pre-existing deployments gain the column, and legacy rows SHALL be backfilled to `'zh'`.
+`scripts/bootstrap_db.py` SHALL provision `radar_analyses` and `radar_pushed_topics` tables with the columns described in design.md §D7 and §D8. The `embedding` column on `radar_pushed_topics` SHALL be `vector(1024)` and an `ivfflat` cosine index SHALL be created. ON DELETE CASCADE from `radar_items` to `radar_analyses` SHALL be configured. `radar_analyses` SHALL include a `locale` column recording the generation language of each row; the bootstrap SHALL add it via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS locale TEXT` so pre-existing deployments gain the column, and legacy rows SHALL be backfilled to `'zh'`. `radar_analyses` SHALL also include a nullable `display_title` column holding the tier-2 locale-aware reader headline; the bootstrap SHALL add it via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS display_title TEXT` with no backfill (a null `display_title` falls back to the source feed title at render).
 
 #### Scenario: bootstrap is idempotent
 
@@ -62,6 +62,11 @@ Every `radar_analyses` row written by the pipeline SHALL persist the run `locale
 
 - **WHEN** `scripts/bootstrap_db.py` runs against a database whose `radar_analyses` table predates the `locale` column
 - **THEN** the column is added via `ADD COLUMN IF NOT EXISTS` and existing rows are backfilled to `'zh'`
+
+#### Scenario: existing deployment gains the display_title column
+
+- **WHEN** `scripts/bootstrap_db.py` runs against a database whose `radar_analyses` table predates the `display_title` column
+- **THEN** the column is added via `ADD COLUMN IF NOT EXISTS` and existing rows keep `display_title` null (no backfill)
 
 ### Requirement: CLI surface
 
@@ -81,3 +86,27 @@ Every `radar_analyses` row written by the pipeline SHALL persist the run `locale
 
 - **WHEN** `paca info-radar analyze` is invoked with no `--locale`
 - **THEN** the pipeline runs with `locale="en"`
+
+### Requirement: Tier 2 emits structured impact analysis grounded in goals
+
+The tier-2 agent (`radar_tier2_impact`) SHALL be invoked with the loaded goals concatenated into its prompt context and SHALL return a structured `{display_title, summary, impact, score, tags}` enforced via OMLX json_schema constrained decoding. `display_title` SHALL be a concise reader-facing headline for the item, written in the run locale (distinct from the 2-4 sentence `summary`). `score` MUST be an integer in `[0, 100]`. `tags` MUST be a list of strings. `impact` SHALL be markdown describing impact on the user's declared goals specifically. Both prompt variants (`.zh.md` / `.en.md`) SHALL carry the `display_title` instruction with identical structure so the field stays in sync across locales.
+
+#### Scenario: tier 2 output is persisted with score and tags
+
+- **WHEN** the tier-2 agent returns a valid structured output
+- **THEN** the workflow writes `radar_analyses` with `verdict='keep'`, `display_title`, `summary`, `impact_md`, `score`, and `tags` populated from the agent output
+
+#### Scenario: display_title is generated in the run locale
+
+- **WHEN** the tier-2 agent runs under `locale="zh"` on an English-source item
+- **THEN** the persisted `display_title` is a Chinese headline, while the source `radar_items.title` is left unchanged
+
+#### Scenario: opinion-tagged items are score-capped
+
+- **WHEN** the tier-2 agent tags an item `"opinion"` and returns a `score` above 65
+- **THEN** the workflow caps the persisted `score` at 65
+
+#### Scenario: frontier-voice exemption bypasses the opinion ceiling
+
+- **WHEN** the item is by a high-signal individual carved out in `goals.yaml` (e.g. a frontier-lab founding researcher) and the tier-2 agent tags it `"frontier-voice"` instead of `"opinion"`
+- **THEN** the opinion score ceiling does NOT apply and the agent's original score is persisted as-is

@@ -11,6 +11,7 @@
 
 ```
 {
+  "display_title": "该 item 的简洁标题",
   "summary": "2-4 句关于该 item 本身的事实性描述",
   "impact": "markdown，说明这对用户 goals 意味着什么",
   "score": <0-100 整数>,
@@ -19,6 +20,10 @@
 ```
 
 ## 字段
+
+- `display_title`：给读者一眼扫读的简洁事实标题——点名主体和具体变化，尽量短（约 24 个
+  汉字以内）。原始 `title` 是标题党或另一种语言时，不要照抄，改写一个能概括该 item 的
+  干净标题。这是标题不是句子：结尾不加句号。
 
 - `summary`：2-4 句，事实、不吹。写清核心主张或事件；点名主体（公司 / repo / 论文 /
   人）和具体变化。若 `content_status` 是 `"fallback"`，summary 可以更薄——在 `impact`
@@ -70,6 +75,6 @@
 
 ## 风格
 
-- `summary` / `impact` 一律用中文书写，无论 goals 或文章正文是什么语言。
+- `display_title` / `summary` / `impact` 一律用中文书写，无论 goals 或文章正文是什么语言。
 - 不用营销语言，不用 AI 助手口水话（"如你所愿……"）。
 - 返回 JSON。JSON 外不要 markdown 代码围栏，不要任何多余散文。

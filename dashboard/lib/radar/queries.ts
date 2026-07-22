@@ -13,6 +13,7 @@ export type DayGroup = {
 export type DayGroupTopItem = {
   id: number;
   title: string;
+  displayTitle: string | null;
   score: number;
   tags: string[];
 };
@@ -23,6 +24,7 @@ export type RadarItem = {
   sourceId: string;
   sourceUrl: string | null;
   title: string;
+  displayTitle: string | null;
   excerpt: string | null;
   publishedAt: string | null;
   fetchedAt: string;
@@ -83,6 +85,7 @@ function normalizeItem(row: RadarItemRow): RadarItem {
     sourceId: row.source_id,
     sourceUrl: row.source_url,
     title: row.title,
+    displayTitle: row.display_title,
     excerpt: row.excerpt,
     publishedAt: row.published_at,
     fetchedAt: row.fetched_at,
@@ -102,7 +105,15 @@ type DayGroupRow = {
   kept_count: string;
   median_score: string | null;
   top_title: string | null;
-  top_items: { id: string | number; title: string; score: number | null; tags: unknown }[] | null;
+  top_items:
+    | {
+        id: string | number;
+        title: string;
+        display_title: string | null;
+        score: number | null;
+        tags: unknown;
+      }[]
+    | null;
 };
 
 type RadarItemRow = {
@@ -111,6 +122,7 @@ type RadarItemRow = {
   source_id: string;
   source_url: string | null;
   title: string;
+  display_title: string | null;
   excerpt: string | null;
   published_at: string | null;
   fetched_at: string;
@@ -160,6 +172,7 @@ export async function getDayGroups(daysBack: number): Promise<DayGroup[]> {
           ra.score,
           ra.analyzed_at,
           ra.tags,
+          ra.display_title,
           ri.id,
           ri.title
         FROM radar_analyses ra
@@ -180,10 +193,11 @@ export async function getDayGroups(daysBack: number): Promise<DayGroup[]> {
         to_char(p.day_local, 'YYYY-MM-DD') AS day,
         count(*) AS kept_count,
         percentile_cont(0.5) WITHIN GROUP (ORDER BY p.score) AS median_score,
-        (array_agg(p.title ORDER BY p.score DESC NULLS LAST, p.analyzed_at DESC))[1] AS top_title,
+        (array_agg(coalesce(p.display_title, p.title) ORDER BY p.score DESC NULLS LAST, p.analyzed_at DESC))[1] AS top_title,
         coalesce(
           (SELECT jsonb_agg(jsonb_build_object(
-            'id', r.id, 'title', r.title, 'score', r.score, 'tags', r.tags
+            'id', r.id, 'title', r.title, 'display_title', r.display_title,
+            'score', r.score, 'tags', r.tags
           ) ORDER BY r.rn)
            FROM ranked r WHERE r.day_local = p.day_local AND r.rn <= 3),
           '[]'::jsonb
@@ -202,6 +216,7 @@ export async function getDayGroups(daysBack: number): Promise<DayGroup[]> {
     topItems: (row.top_items ?? []).map((item) => ({
       id: Number(item.id),
       title: item.title,
+      displayTitle: item.display_title,
       score: Number(item.score ?? 0),
       tags: coerceTags(item.tags),
     })),
@@ -226,6 +241,7 @@ export async function getItemsForDay(
         ri.fetched_at::text,
         ra.analyzed_at::text,
         ra.tier1_reason,
+        ra.display_title,
         ra.summary,
         ra.impact_md,
         ra.score,
@@ -367,6 +383,7 @@ export async function getItemDetail(itemId: number): Promise<RadarItemDetail | n
         ri.fetched_at::text,
         ra.analyzed_at::text,
         ra.tier1_reason,
+        ra.display_title,
         ra.summary,
         ra.impact_md,
         ra.score,
@@ -633,7 +650,7 @@ export async function getFilteredTodayList(
   const day = dayOverride ?? todayInRadarTz();
   const rows = await query<DetailListRow>(
     `
-      SELECT ri.id, ri.title, ra.score
+      SELECT ri.id, coalesce(ra.display_title, ri.title) AS title, ra.score
       FROM radar_analyses ra
       JOIN radar_items ri ON ri.id = ra.radar_item_id
       WHERE ra.verdict = 'keep'

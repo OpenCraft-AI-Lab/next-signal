@@ -116,6 +116,13 @@ reading and manual triggering.
   post-hoc translation, so a mixed-language corpus is expected. dedup candidate
   retrieval is **not** locale-filtered (cross-language dedup is intentional;
   embeddings are multilingual).
+- The reader-facing **item title follows the locale**: tier-2 emits a
+  `display_title` (part of `Tier2Analysis`, generated in the run locale, kept in
+  sync across both `radar_tier2_impact.{zh,en}.md` variants) persisted to
+  `radar_analyses.display_title` on keep rows (nullable; added via `ADD COLUMN IF
+  NOT EXISTS`, no backfill). The `/radar` reader renders `display_title ??
+  radar_items.title`, and the detail page preserves the original feed title as a
+  secondary "original title" line — the raw `radar_items.title` is never overwritten.
 
 ## Specs and status
 

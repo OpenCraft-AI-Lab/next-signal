@@ -43,8 +43,9 @@ shared_context: false}` and a tight `max_tokens: 4096`; business tables use bare
 - No localization of user data (`goals.yaml` stays as authored; the locale governs
   output, not the goal definitions).
 - No locale filtering of dedup candidates or item selection.
-- No reader-side language filter UI in this change (the stored `locale` column
-  enables it later; building the filter is out of scope).
+- No reader-side language *filter/badge* UI in this change. The reader does show a
+  locale-aware `display_title` (in scope), but a control to filter or badge items by
+  their stored `locale` is out of scope; the `locale` column enables it later.
 - No new supported languages beyond `zh`/`en`.
 
 ## Decisions
@@ -137,6 +138,27 @@ analyze` generates English. `run(locale="zh")` / `--locale zh` still reproduces
 Chinese output. For single-language agents the default value is immaterial — any
 locale falls back to their unsuffixed base file.
 
+### D7: Reader title = a tier-2 `display_title`, feed title preserved
+
+The reader's prominent item title follows the locale via a new
+`Tier2Analysis.display_title` — a concise headline written from the item's content in
+the run locale, distinct from the 2-4 sentence `summary`. tier-2 already reads full
+content and is locale-aware, so the headline is nearly free and stays consistent with
+the summary (no separate translator step, no second place for the locale to drift). It
+is persisted to a nullable `radar_analyses.display_title` (added via
+`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, no backfill) and exists only on kept rows
+(tier-2 runs only on tier-1 keeps, and the reader shows only keeps). The reader renders
+`display_title ?? radar_items.title`, so unanalyzed / legacy rows fall back to the feed
+title. `radar_items.title` is never overwritten; the detail page surfaces it as a
+secondary source-title line so the localized headline never hides the source's own
+words. `display_title` is not re-localized per the UI cookie — like the rest of a row's
+content it renders in its own generation locale (consistent with the mixed-language
+corpus).
+
+**Alternative considered:** a dedicated headline agent translating the feed title.
+Rejected — an extra LLM round-trip, and a headline written from content beats a literal
+title translation.
+
 ## Risks / Trade-offs
 
 - **Mixed-language radar corpus** → Accepted per non-goal (no post-translation). The
@@ -167,7 +189,11 @@ locale falls back to their unsuffixed base file.
 4. CLI `--locale` (default `en`); dashboard forwards `paca_locale` into the spawn.
 5. Schema: `ALTER TABLE radar_analyses ADD COLUMN IF NOT EXISTS locale TEXT`,
    backfill `'zh'`; `insert_analysis(locale=)`; runner passes it.
-6. Docs + tests.
+6. Reader title: add `Tier2Analysis.display_title` + the `radar_tier2_impact.{zh,en}.md`
+   headline instruction; `ALTER TABLE radar_analyses ADD COLUMN IF NOT EXISTS
+   display_title TEXT` (no backfill); `insert_analysis(display_title=)`; the reader
+   renders `display_title ?? title` and preserves the feed title on detail.
+7. Docs + tests.
 
 **Rollback:** reverting the code restores goals-language behavior; the `locale`
 column can be left in place (unused) or dropped — no data loss either way since it

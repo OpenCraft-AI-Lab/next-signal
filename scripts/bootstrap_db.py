@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS radar_analyses (
     radar_item_id   BIGINT NOT NULL REFERENCES radar_items(id) ON DELETE CASCADE,
     verdict         TEXT NOT NULL,            -- 'drop' | 'keep'
     tier1_reason    TEXT,
+    display_title   TEXT,                     -- locale-aware reader headline (keep rows)
     summary         TEXT,
     impact_md       TEXT,
     score           INTEGER,
@@ -144,6 +145,12 @@ ALTER TABLE radar_analyses ADD COLUMN IF NOT EXISTS locale TEXT;
 UPDATE radar_analyses SET locale = 'zh' WHERE locale IS NULL;
 """
 
+# Idempotent migration for the reader-facing localized headline. No backfill:
+# a null display_title falls back to the source feed title at render.
+MIGRATE_RADAR_ANALYSES_DISPLAY_TITLE = """
+ALTER TABLE radar_analyses ADD COLUMN IF NOT EXISTS display_title TEXT;
+"""
+
 
 def main() -> int:
     url = os.environ.get("DATABASE_URL")
@@ -165,6 +172,7 @@ def main() -> int:
             cur.execute(CREATE_RADAR_PUSHED_TOPICS)
             cur.execute(CREATE_RADAR_ANALYSES)
             cur.execute(MIGRATE_RADAR_ANALYSES_LOCALE)
+            cur.execute(MIGRATE_RADAR_ANALYSES_DISPLAY_TITLE)
             cur.execute(CREATE_RADAR_RECAPS)
             cur.execute(CREATE_KNOWLEDGE_REVIEWS)
 

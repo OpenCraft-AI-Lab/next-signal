@@ -92,6 +92,11 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
   `radar_tier2_impact.zh.md` 和 `radar_tier2_impact.en.md`。
 - `radar_analyses.locale` 记录每行的生成语言；不做事后翻译，语料库按 locale 混合是预期
   行为。dedup 候选检索**不按 locale 过滤**（跨语言去重是有意为之，embedding 多语言）。
+- 面向读者的**条目标题随 locale**：tier-2 产出 `display_title`（属于 `Tier2Analysis`，
+  按运行 locale 生成，两份 `radar_tier2_impact.{zh,en}.md` 要同步），keep 行持久化到
+  `radar_analyses.display_title`（可空；用 `ADD COLUMN IF NOT EXISTS` 加列，不回填）。
+  `/radar` 阅读页渲染 `display_title ?? radar_items.title`，详情页把原始 feed 标题作为
+  次级"原标题"行保留——`radar_items.title` 永不被覆盖。
 
 ## 规范与状态
 

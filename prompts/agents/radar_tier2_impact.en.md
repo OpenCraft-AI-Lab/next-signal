@@ -13,6 +13,7 @@ Return JSON ONLY, matching this schema:
 
 ```
 {
+  "display_title": "concise headline for the item",
   "summary": "2-4 factual sentences about the item itself",
   "impact": "markdown explaining what this means for the user's goals",
   "score": <integer 0-100>,
@@ -21,6 +22,12 @@ Return JSON ONLY, matching this schema:
 ```
 
 ## Fields
+
+- `display_title`: a concise, factual headline for the item — the title a reader
+  scans first. Keep it short (roughly under 12 words); name the actor and the
+  concrete change. Do NOT copy the raw `title` verbatim when it is clickbait or in
+  another language — write a clean headline that captures the item. It is a title,
+  not a sentence: no trailing period.
 
 - `summary`: 2-4 sentences, factual, no hype. State the core claim or event;
   name the actor (company / repo / paper / person) and the concrete change.
@@ -96,7 +103,7 @@ Return JSON ONLY, matching this schema:
 
 ## Style
 
-- Write `summary` / `impact` in English, regardless of the language of `goals`
-  or the article body.
+- Write `display_title` / `summary` / `impact` in English, regardless of the
+  language of `goals` or the article body.
 - No marketing language, no AI assistant filler ("As you requested...").
 - Return JSON. No markdown fences around the JSON, no prose outside it.

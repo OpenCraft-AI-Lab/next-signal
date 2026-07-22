@@ -30,6 +30,10 @@ to follow the UI language.
 - `radar_analyses` gains a `locale` column recording the generation language of each
   row (provenance for the mixed-language corpus; enables a future reader
   badge/filter). Legacy rows backfill to `zh`.
+- The reader-facing item **title follows the locale**: tier-2 emits a concise
+  `display_title` in the run locale (added to `Tier2Analysis`), persisted to a new
+  `radar_analyses.display_title` column. The reader shows it (falling back to the raw
+  feed title) and preserves the original `radar_items.title` for reference.
 - No post-translation: content is generated once in the request locale and stored as
   is. The stored corpus becomes mixed-language by design.
 
@@ -41,13 +45,17 @@ to follow the UI language.
 ### Modified Capabilities
 - `info-radar-analysis`: output language is selected by request locale rather than
   goals-block language; pipeline threads a locale and persists it per analysis row;
-  prompts split into pure-language variants with bilingual tier-1 cue vocabulary.
+  prompts split into pure-language variants with bilingual tier-1 cue vocabulary;
+  tier-2 additionally emits a locale-aware `display_title` persisted on the analysis
+  row.
 - `core-agents`: agent construction accepts a locale that swaps the resolved
   instructions file for the same config, resolving a suffixed `<stem>.<locale>.md`
   variant and falling back to the unsuffixed base for single-language agents.
 - `core-cli`: `paca info-radar analyze` accepts `--locale <zh|en>` (default `en`).
 - `dashboard-radar-reader`: the Pull + Analyze action forwards the active UI locale
-  to the analyzer so generated content matches the dashboard language.
+  to the analyzer so generated content matches the dashboard language; the index and
+  detail views render the analysis `display_title` (falling back to the feed title),
+  and the detail view preserves the original feed title as a source-title line.
 
 ## Impact
 
@@ -63,8 +71,15 @@ to follow the UI language.
 - **Dashboard**: `dashboard/lib/actions/radar.ts` (`runPullAndAnalyze` forwards locale
   to the analyze spawn).
 - **Schema**: `scripts/bootstrap_db.py` (`radar_analyses.locale` via
-  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, backfill `zh`).
+  `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`, backfill `zh`; and
+  `radar_analyses.display_title` via the same idempotent `ADD COLUMN`, no backfill).
+- **Reader title (`display_title`)**: `src/paca/workflows/info_radar_analysis/schemas.py`
+  (`Tier2Analysis.display_title`), `prompts/agents/radar_tier2_impact.{zh,en}.md`
+  (headline instruction, kept in sync), `store.py` / `runner.py` (persist on the keep
+  path), `dashboard/lib/radar/queries.ts` + `dashboard/components/radar/day-group.tsx`
+  + `dashboard/app/radar/[id]/page.tsx` (render `display_title ?? title`; detail
+  preserves the feed title).
 - **Docs**: `docs/modules/info_filter.md` invariants (output language = request
-  locale; new column).
+  locale; new `locale` + `display_title` columns; feed title preserved).
 - No new dependencies. dedup candidate retrieval stays locale-agnostic
   (cross-language dedup is intended; embeddings are multilingual).

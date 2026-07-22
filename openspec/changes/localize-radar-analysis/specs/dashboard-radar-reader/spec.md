@@ -43,3 +43,56 @@ The dashboard top nav SHALL render a single primary `Pull + Analyze` button (mou
 
 - **WHEN** the dashboard has a latest analyze spawn timestamp in `radar-state.json`
 - **THEN** the analyze nav chip count is computed from `radar_analyses.analyzed_at >= lastAnalyzeAt`, so a new spawn initially shows `0` until rows are actually written
+
+### Requirement: Radar index page
+
+The dashboard SHALL render `/radar` showing analyzed `radar_items` grouped by `analyzed_at::date`, with today's group expanded by default and prior days collapsed. The page hero SHALL render `<RadarAlpaca />` (from foundation's `dashboard/components/brand/`) alongside the page title and a "N kept" subtitle. Item cards SHALL render the analysis `display_title` when present, falling back to the source `radar_items.title` when it is null (unanalyzed / legacy rows), so the prominent title follows the analysis run's locale.
+
+#### Scenario: today's items appear at the top
+
+- **WHEN** the operator visits `/radar`
+- **THEN** the page renders a section labelled with today's calendar date containing every `radar_analyses` row where `analyzed_at::date = today` and `verdict = 'keep'`, ordered per the current sort param
+
+#### Scenario: card title follows the analysis locale
+
+- **WHEN** a kept item has a non-null `display_title` generated under `locale="zh"`
+- **THEN** its card shows the Chinese `display_title` rather than the English source feed title
+
+#### Scenario: card falls back to the feed title
+
+- **WHEN** a shown item has a null `display_title`
+- **THEN** its card shows the raw `radar_items.title`
+
+#### Scenario: past days are grouped and collapsed
+
+- **WHEN** the operator visits `/radar`
+- **THEN** prior calendar days appear as collapsed sections below today's section, each showing the day, the kept-count, and the median score, expandable to reveal the items
+
+#### Scenario: drop verdicts are filtered out of the reading view
+
+- **WHEN** the operator visits `/radar`
+- **THEN** rows where `verdict = 'drop'` are NOT shown in either today's section or any past-day section — they only contribute to the tracker counters
+
+### Requirement: Radar detail page
+
+The dashboard SHALL render `/radar/[id]` for any `radar_items.id`, displaying the full analysis if one exists or a "not yet analyzed" placeholder if not. When an analysis `display_title` is present it SHALL be the page's prominent title, and the original `radar_items.title` SHALL be preserved and shown as a secondary source-title line so the localized headline never hides the source's own words.
+
+#### Scenario: analyzed item shows full analysis
+
+- **WHEN** the operator visits `/radar/<id>` for a `radar_items.id` with an existing `radar_analyses` row where `verdict='keep'`
+- **THEN** the page shows the analysis `display_title` as the heading (falling back to `radar_items.title` when null), the original feed `radar_items.title` as a secondary source-title line, source, `published_at`, tags, the `summary` text, the `impact_md` rendered as markdown via `react-markdown` (with `remark-gfm`, `rehype-raw`, `rehype-sanitize`), the `tier1_reason`, `content_status`, `dedup_status` (with the matched `topic_summary` if `duplicate`), and the source `radar_items.excerpt` plus an external link to `radar_items.url`
+
+#### Scenario: localized heading preserves the original title
+
+- **WHEN** a kept item has a Chinese `display_title` and an English feed `radar_items.title`
+- **THEN** the detail heading is the Chinese `display_title` and the English original title remains visible as the source-title line
+
+#### Scenario: unanalyzed item shows a placeholder
+
+- **WHEN** the operator visits `/radar/<id>` for a `radar_items.id` that has no `radar_analyses` row
+- **THEN** the page shows the raw `radar_items` fields (title / source / excerpt / url) and a "not yet analyzed" notice — no error
+
+#### Scenario: missing id returns 404
+
+- **WHEN** the operator visits `/radar/<id>` for an id that does not exist in `radar_items`
+- **THEN** the page returns a Next.js 404 response

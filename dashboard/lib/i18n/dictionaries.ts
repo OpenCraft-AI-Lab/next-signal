@@ -54,6 +54,7 @@ export const dictionaries = {
       detail: {
         back: "Back to radar",
         unanalyzed: "This radar item has not been analyzed yet.",
+        originalTitle: "Original title",
         summary: "Summary",
         impact: "Impact",
         tier1Reason: "Tier-1 reason",
@@ -413,6 +414,7 @@ export const dictionaries = {
       detail: {
         back: "返回雷达",
         unanalyzed: "这个雷达条目还没有完成分析。",
+        originalTitle: "原标题",
         summary: "摘要",
         impact: "影响",
         tier1Reason: "Tier-1 理由",

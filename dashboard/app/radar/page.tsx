@@ -226,7 +226,7 @@ export default async function RadarPage({
             {items.map((item) => (
               <article key={item.id} className="appendix-item">
                 <h3 className="appendix-h">
-                  {item.title}
+                  {item.displayTitle ?? item.title}
                   <span className="appendix-score">{item.score}</span>
                 </h3>
                 <div className="appendix-meta mono">
