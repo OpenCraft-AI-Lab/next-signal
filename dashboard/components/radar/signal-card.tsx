@@ -53,10 +53,12 @@ export function SignalCard({ item }: { item: RadarItem }) {
                   rel="noopener"
                   onClick={(event) => event.stopPropagation()}
                 >
-                  {item.title}
+                  {item.displayTitle ?? item.title}
                 </a>
               ) : (
-                <span className="cardtitle">{item.title}</span>
+                <span className="cardtitle">
+                  {item.displayTitle ?? item.title}
+                </span>
               )}
               <div className="row gap-8 wrap" style={{ rowGap: 5 }}>
                 <span

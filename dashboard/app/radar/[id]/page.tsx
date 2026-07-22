@@ -102,12 +102,20 @@ export default async function RadarDetailPage({
                       target="_blank"
                       rel="noopener"
                     >
-                      {item.title}{" "}
+                      {item.displayTitle ?? item.title}{" "}
                       <ExternalLink size={15} className="muted-2" />
                     </a>
                   ) : (
-                    <h1 className="detailtitle">{item.title}</h1>
+                    <h1 className="detailtitle">
+                      {item.displayTitle ?? item.title}
+                    </h1>
                   )}
+                  {item.displayTitle !== null &&
+                    item.displayTitle !== item.title && (
+                      <span className="mono muted-2" style={{ fontSize: 12 }}>
+                        {t.radar.detail.originalTitle}: {item.title}
+                      </span>
+                    )}
                   <div className="row gap-8 wrap" style={{ rowGap: 6 }}>
                     <span
                       className="mono"

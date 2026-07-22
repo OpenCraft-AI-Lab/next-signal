@@ -108,7 +108,7 @@ def fake_stages(monkeypatch):
     tier2_results: dict[int, object] = {}
     dedup_results: dict[int, object] = {}
 
-    def fake_run_batch(items, goals):  # noqa: ARG001
+    def fake_run_batch(items, goals, locale="zh"):  # noqa: ARG001
         key = frozenset(int(i["id"]) for i in items)
         if key not in batch_results:
             # Default: succeed with whatever per-item answers are configured,
@@ -127,7 +127,7 @@ def fake_stages(monkeypatch):
             raise r
         return list(r)
 
-    def fake_tier1(item, goals):  # noqa: ARG001
+    def fake_tier1(item, goals, locale="zh"):  # noqa: ARG001
         r = tier1_results[int(item["id"])]
         if isinstance(r, Exception):
             raise r
@@ -139,13 +139,13 @@ def fake_stages(monkeypatch):
             raise r
         return r
 
-    def fake_tier2(item, content, status, goals):  # noqa: ARG001
+    def fake_tier2(item, content, status, goals, locale="zh"):  # noqa: ARG001
         r = tier2_results[int(item["id"])]
         if isinstance(r, Exception):
             raise r
         return r
 
-    def fake_dedup(summary, **_):  # noqa: ARG001
+    def fake_dedup(summary, locale="zh", **_):  # noqa: ARG001
         r = dedup_results.pop("next")
         if isinstance(r, Exception):
             raise r
@@ -201,7 +201,7 @@ def test_tier2_keep_novel_inserts_topic(fake_store, fake_stages) -> None:
     fake_stages["batch"][frozenset({2})] = [Tier1Verdict(verdict="keep", reason="matches")]
     fake_stages["fetch"][2] = ("full body", "full")
     fake_stages["tier2"][2] = Tier2Analysis(
-        summary="s", impact="i", score=80, tags=["release"]
+        display_title="headline", summary="s", impact="i", score=80, tags=["release"]
     )
     fake_stages["dedup"]["next"] = dedup_mod.DedupOutcome(
         status="novel", matched_topic_id=None, embedding=[0.1] * 1024
@@ -219,13 +219,16 @@ def test_tier2_keep_novel_inserts_topic(fake_store, fake_stages) -> None:
     assert call["verdict"] == "keep"
     assert call["dedup_status"] == "novel"
     assert call["dedup_match_id"] == 101
+    assert call["display_title"] == "headline"
 
 
 def test_tier2_keep_duplicate_appends_to_topic(fake_store, fake_stages) -> None:
     fake_store["queue"].append(_item(3))
     fake_stages["batch"][frozenset({3})] = [Tier1Verdict(verdict="keep", reason="ok")]
     fake_stages["fetch"][3] = ("body", "full")
-    fake_stages["tier2"][3] = Tier2Analysis(summary="s", impact="i", score=50, tags=[])
+    fake_stages["tier2"][3] = Tier2Analysis(
+        display_title="t", summary="s", impact="i", score=50, tags=[]
+    )
     fake_stages["dedup"]["next"] = dedup_mod.DedupOutcome(
         status="duplicate", matched_topic_id=42, embedding=[0.0] * 1024
     )
@@ -252,7 +255,9 @@ def test_tier2_error_is_isolated_and_retries_next_run(fake_store, fake_stages) -
     fake_stages["fetch"][4] = ("body", "full")
     fake_stages["tier2"][4] = RuntimeError("LLM blew up")
     fake_stages["fetch"][5] = ("body", "full")
-    fake_stages["tier2"][5] = Tier2Analysis(summary="s", impact="i", score=70, tags=[])
+    fake_stages["tier2"][5] = Tier2Analysis(
+        display_title="t", summary="s", impact="i", score=70, tags=[]
+    )
     fake_stages["dedup"]["next"] = dedup_mod.DedupOutcome(
         status="novel", matched_topic_id=None, embedding=[0.0] * 1024
     )
@@ -272,7 +277,9 @@ def test_fetch_fallback_flows_through_tier2(fake_store, fake_stages) -> None:
     fake_store["queue"].append(_item(6))
     fake_stages["batch"][frozenset({6})] = [Tier1Verdict(verdict="keep", reason="r")]
     fake_stages["fetch"][6] = ("description-only body", "fallback")
-    fake_stages["tier2"][6] = Tier2Analysis(summary="s", impact="i", score=30, tags=[])
+    fake_stages["tier2"][6] = Tier2Analysis(
+        display_title="t", summary="s", impact="i", score=30, tags=[]
+    )
     fake_stages["dedup"]["next"] = dedup_mod.DedupOutcome(
         status="novel", matched_topic_id=None, embedding=[0.0] * 1024
     )

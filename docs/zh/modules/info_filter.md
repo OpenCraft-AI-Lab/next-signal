@@ -82,6 +82,21 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 - recap 过期（区间内又有新分析落库）只**标注**，绝不自动重算：一进页面就重算会把
   每次访问活跃区间变成一分钟本地推理。
 - 不要往 logger dump 整个 provider dict。
+- analysis 的**输出语言由请求 locale 决定**（`run(locale=)` / `analyze --locale`），
+  不再由 goals 语言决定。locale ∈ {`zh`, `en`}，默认 `en`；goals / 文章正文可以是任意
+  语言（只作输入），locale 只固定输出语言。每个 stage 有 `zh` / `en` 两份纯语言 prompt，
+  两种语言都带显式后缀（`prompts/agents/radar_*.zh.md` 和 `radar_*.en.md`；这些多语言
+  agent 没有无后缀 base，loader 按 `<stem>.<locale>.md` 解析）；tier-1 的 drop 类别 cue
+  词表在两份里都保持中英双语（同义惯用，不直译），因为任一 locale 都可能分析另一语言的
+  文章。tier-2 的两步打分 rubric 现在存在两份文件里——改 rubric 必须同步改
+  `radar_tier2_impact.zh.md` 和 `radar_tier2_impact.en.md`。
+- `radar_analyses.locale` 记录每行的生成语言；不做事后翻译，语料库按 locale 混合是预期
+  行为。dedup 候选检索**不按 locale 过滤**（跨语言去重是有意为之，embedding 多语言）。
+- 面向读者的**条目标题随 locale**：tier-2 产出 `display_title`（属于 `Tier2Analysis`，
+  按运行 locale 生成，两份 `radar_tier2_impact.{zh,en}.md` 要同步），keep 行持久化到
+  `radar_analyses.display_title`（可空；用 `ADD COLUMN IF NOT EXISTS` 加列，不回填）。
+  `/radar` 阅读页渲染 `display_title ?? radar_items.title`，详情页把原始 feed 标题作为
+  次级"原标题"行保留——`radar_items.title` 永不被覆盖。
 
 ## 规范与状态
 

@@ -37,6 +37,7 @@ def insert_analysis(
     radar_item_id: int,
     verdict: str,
     tier1_reason: str | None = None,
+    display_title: str | None = None,
     summary: str | None = None,
     impact_md: str | None = None,
     score: int | None = None,
@@ -44,16 +45,19 @@ def insert_analysis(
     content_status: str | None = None,
     dedup_status: str | None = None,
     dedup_match_id: int | None = None,
+    locale: str = "en",
 ) -> int | None:
     """Insert one radar_analyses row. Idempotent via UNIQUE(radar_item_id).
 
-    Returns the new row id, or ``None`` if a row already existed.
+    Returns the new row id, or ``None`` if a row already existed. ``locale``
+    records the language the row's content was generated in. ``display_title``
+    is the tier-2 locale-aware headline (keep rows only; null on drops).
     """
     sql = """
         INSERT INTO radar_analyses
-            (radar_item_id, verdict, tier1_reason, summary, impact_md, score,
-             tags, content_status, dedup_status, dedup_match_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+            (radar_item_id, verdict, tier1_reason, display_title, summary, impact_md,
+             score, tags, content_status, dedup_status, dedup_match_id, locale)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s)
         ON CONFLICT (radar_item_id) DO NOTHING
         RETURNING id
     """
@@ -65,6 +69,7 @@ def insert_analysis(
                     radar_item_id,
                     verdict,
                     tier1_reason,
+                    display_title,
                     summary,
                     impact_md,
                     score,
@@ -72,6 +77,7 @@ def insert_analysis(
                     content_status,
                     dedup_status,
                     dedup_match_id,
+                    locale,
                 ),
             )
             row = cur.fetchone()

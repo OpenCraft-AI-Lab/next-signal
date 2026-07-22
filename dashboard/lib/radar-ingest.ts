@@ -121,7 +121,28 @@ export async function stageFoloEntry(
   await mkdir(dir, { recursive: true });
   const filePath = path.join(dir, `radar-${itemId}-${randomUUID()}.html`);
   await writeFile(filePath, renderFoloEntryHtml(row, entry), "utf8");
+  // Provenance goes in a sibling `.meta.json` sidecar (structured data the
+  // pipeline reads into frontmatter), NOT as an English label block in the body.
+  await writeFile(
+    filePath.replace(/\.html$/, ".meta.json"),
+    JSON.stringify(foloEntryMetadata(row, entry)),
+    "utf8",
+  );
   return filePath;
+}
+
+export function foloEntryMetadata(
+  row: RadarIngestRow,
+  entry: FoloEntry,
+): Record<string, string> {
+  const sourceUrl = stringField(entry.url) || row.url || "";
+  const author = stringField(entry.author);
+  const publishedAt = stringField(entry.publishedAt);
+  const meta: Record<string, string> = {};
+  if (sourceUrl) meta.source_url = sourceUrl;
+  if (author) meta.author = author;
+  if (publishedAt) meta.published = publishedAt;
+  return meta;
 }
 
 export function renderFoloEntryHtml(
@@ -130,20 +151,7 @@ export function renderFoloEntryHtml(
 ): string {
   const title = stringField(entry.title) || row.title || `Radar item`;
   const sourceUrl = stringField(entry.url) || row.url || "";
-  const author = stringField(entry.author);
-  const publishedAt = stringField(entry.publishedAt);
   const content = stringField(entry.content);
-  const metadata = [
-    sourceUrl
-      ? `<p><strong>Source:</strong> <a href="${escapeAttr(sourceUrl)}">${escapeHtml(sourceUrl)}</a></p>`
-      : "",
-    author ? `<p><strong>Author:</strong> ${escapeHtml(author)}</p>` : "",
-    publishedAt
-      ? `<p><strong>Published:</strong> ${escapeHtml(publishedAt)}</p>`
-      : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
   return `<!doctype html>
 <html>
 <head>
@@ -154,7 +162,6 @@ export function renderFoloEntryHtml(
 <body>
   <article>
     <h1>${escapeHtml(title)}</h1>
-    ${metadata}
     ${content}
   </article>
 </body>

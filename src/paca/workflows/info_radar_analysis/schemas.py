@@ -54,6 +54,11 @@ class Tier1Batch(BaseModel):
 class Tier2Analysis(BaseModel):
     """Goal-grounded impact analysis on a single kept item."""
 
+    display_title: str = Field(
+        ...,
+        description="Concise reader-facing headline in the run locale, distinct from "
+        "the multi-sentence `summary`.",
+    )
     summary: str = Field(
         ...,
         description="2-4 sentence factual summary of the item's actual content.",

@@ -72,7 +72,9 @@ def _stub_editor(monkeypatch, *, calls: list | None = None, clean: str | None = 
                 return _FakeResponse(body)
             return _FakeResponse(json.dumps(frontmatter, ensure_ascii=False))
 
-    monkeypatch.setattr(artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name))
+    monkeypatch.setattr(
+        artifact_editor_mod, "build_from_name", lambda name, locale=None: FakeAgent(name)
+    )
 
 
 def _stub_classifier(monkeypatch, category: str = "knowledge/ai-ml") -> None:

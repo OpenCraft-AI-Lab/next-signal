@@ -45,11 +45,17 @@ _BATCH_SIZE = 10
 _DONE = object()
 
 
-def run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any]:
+def run(
+    *,
+    limit: int | None = None,
+    source: str | None = None,
+    locale: str = "en",
+) -> dict[str, Any]:
     """Process unseen radar_items through the two-tier analysis pipeline.
 
     Returns a counters dict summarizing the run. Always returns — never raises
-    — except for the one fatal precondition (no goals.yaml).
+    — except for the one fatal precondition (no goals.yaml). ``locale`` fixes
+    the generated OUTPUT language of every stage and is persisted per row.
     """
     goals = load_goals()  # fail-fast intentional: empty/missing → RuntimeError
 
@@ -69,7 +75,7 @@ def run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any
         try:
             for start in range(0, len(items), _BATCH_SIZE):
                 chunk = items[start : start + _BATCH_SIZE]
-                verdicts = _run_chunk(chunk, goals)
+                verdicts = _run_chunk(chunk, goals, locale)
                 for item, verdict in zip(chunk, verdicts):
                     work_queue.put((item, verdict))
         except Exception:  # noqa: BLE001 — stderr-only thread tracebacks vanish in non-TTY runs
@@ -96,7 +102,7 @@ def run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any
             break
         item, verdict = msg
         try:
-            _process_item(item, verdict, goals, counters)
+            _process_item(item, verdict, goals, counters, locale)
         except Exception as e:  # noqa: BLE001
             log.warning(
                 "item_unexpected_raise",
@@ -114,11 +120,11 @@ def run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any
 
 
 def _run_chunk(
-    chunk: list[dict[str, Any]], goals: list[Goal]
+    chunk: list[dict[str, Any]], goals: list[Goal], locale: str
 ) -> list[Tier1Verdict | None]:
     """Try the batched call; on any failure, fall back to per-item calls."""
     try:
-        return list(tier1.run_batch(chunk, goals))
+        return list(tier1.run_batch(chunk, goals, locale))
     except Exception as batch_err:  # noqa: BLE001
         log.warning(
             "tier1_batch_failed_falling_back_to_single",
@@ -128,7 +134,7 @@ def _run_chunk(
     out: list[Tier1Verdict | None] = []
     for item in chunk:
         try:
-            out.append(tier1.run(item, goals))
+            out.append(tier1.run(item, goals, locale))
         except Exception as e:  # noqa: BLE001
             log.warning(
                 "tier1_single_failed",
@@ -148,6 +154,7 @@ def _process_item(
     verdict: Tier1Verdict | None,
     goals: list[Goal],
     counters: dict[str, int],
+    locale: str,
 ) -> None:
     item_id = int(item["id"])
 
@@ -158,7 +165,10 @@ def _process_item(
 
     if verdict.verdict == "drop":
         analysis_store.insert_analysis(
-            radar_item_id=item_id, verdict="drop", tier1_reason=verdict.reason
+            radar_item_id=item_id,
+            verdict="drop",
+            tier1_reason=verdict.reason,
+            locale=locale,
         )
         analysis_store.mark_seen(item_id)
         counters["tier1_dropped"] += 1
@@ -174,7 +184,7 @@ def _process_item(
 
     # --- Tier 2 ------------------------------------------------------------
     try:
-        analysis = tier2.run(item, content, content_status, goals)
+        analysis = tier2.run(item, content, content_status, goals, locale)
     except Exception as e:  # noqa: BLE001
         # Symmetric with tier-1: do NOT persist or mark seen, so a transient
         # LLM failure retries next batch instead of freezing an empty analysis
@@ -189,13 +199,14 @@ def _process_item(
         counters["tier2_ok"] += 1
 
     # --- Dedup gate --------------------------------------------------------
-    outcome = dedup.run(analysis.summary)
+    outcome = dedup.run(analysis.summary, locale)
     if outcome.status == "duplicate":
         counters["dedup_duplicate"] += 1
         analysis_store.insert_analysis(
             radar_item_id=item_id,
             verdict="keep",
             tier1_reason=verdict.reason,
+            display_title=analysis.display_title,
             summary=analysis.summary,
             impact_md=analysis.impact,
             score=analysis.score,
@@ -203,6 +214,7 @@ def _process_item(
             content_status=content_status,
             dedup_status="duplicate",
             dedup_match_id=outcome.matched_topic_id,
+            locale=locale,
         )
         if outcome.matched_topic_id is not None:
             try:
@@ -232,6 +244,7 @@ def _process_item(
             radar_item_id=item_id,
             verdict="keep",
             tier1_reason=verdict.reason,
+            display_title=analysis.display_title,
             summary=analysis.summary,
             impact_md=analysis.impact,
             score=analysis.score,
@@ -239,6 +252,7 @@ def _process_item(
             content_status=content_status,
             dedup_status="novel",
             dedup_match_id=new_topic_id,
+            locale=locale,
         )
 
     analysis_store.mark_seen(item_id)

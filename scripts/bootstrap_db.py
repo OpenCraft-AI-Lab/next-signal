@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS radar_analyses (
     radar_item_id   BIGINT NOT NULL REFERENCES radar_items(id) ON DELETE CASCADE,
     verdict         TEXT NOT NULL,            -- 'drop' | 'keep'
     tier1_reason    TEXT,
+    display_title   TEXT,                     -- locale-aware reader headline (keep rows)
     summary         TEXT,
     impact_md       TEXT,
     score           INTEGER,
@@ -76,6 +77,7 @@ CREATE TABLE IF NOT EXISTS radar_analyses (
     content_status  TEXT,                     -- 'full' | 'fallback' | 'error' | NULL
     dedup_status    TEXT,                     -- 'novel' | 'duplicate' | NULL
     dedup_match_id  BIGINT REFERENCES radar_pushed_topics(id) ON DELETE SET NULL,
+    locale          TEXT,                     -- generation language: 'zh' | 'en'
     pushed_at       TIMESTAMPTZ,
     analyzed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (radar_item_id)
@@ -135,6 +137,33 @@ CREATE INDEX IF NOT EXISTS knowledge_reviews_due_idx
     WHERE next_due_at IS NOT NULL;
 """
 
+# Display-alias translation memory: maps a canonical English tag key to its
+# localized display label per locale. Populated once per unique (tag, locale) at
+# ingest, read at render. A business table (short-lived psycopg connections).
+CREATE_KNOWLEDGE_TAG_LABELS = """
+CREATE TABLE IF NOT EXISTS knowledge_tag_labels (
+    tag         TEXT NOT NULL,
+    locale      TEXT NOT NULL,             -- 'zh' | 'en'
+    label       TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tag, locale)
+);
+"""
+
+# Idempotent migration for deployments whose radar_analyses predates the
+# `locale` column (CREATE TABLE IF NOT EXISTS won't alter an existing table).
+# Backfill legacy rows to 'zh' — historically all analyses were Chinese.
+MIGRATE_RADAR_ANALYSES_LOCALE = """
+ALTER TABLE radar_analyses ADD COLUMN IF NOT EXISTS locale TEXT;
+UPDATE radar_analyses SET locale = 'zh' WHERE locale IS NULL;
+"""
+
+# Idempotent migration for the reader-facing localized headline. No backfill:
+# a null display_title falls back to the source feed title at render.
+MIGRATE_RADAR_ANALYSES_DISPLAY_TITLE = """
+ALTER TABLE radar_analyses ADD COLUMN IF NOT EXISTS display_title TEXT;
+"""
+
 
 def main() -> int:
     url = os.environ.get("DATABASE_URL")
@@ -155,8 +184,11 @@ def main() -> int:
             cur.execute(CREATE_RADAR_ITEMS)
             cur.execute(CREATE_RADAR_PUSHED_TOPICS)
             cur.execute(CREATE_RADAR_ANALYSES)
+            cur.execute(MIGRATE_RADAR_ANALYSES_LOCALE)
+            cur.execute(MIGRATE_RADAR_ANALYSES_DISPLAY_TITLE)
             cur.execute(CREATE_RADAR_RECAPS)
             cur.execute(CREATE_KNOWLEDGE_REVIEWS)
+            cur.execute(CREATE_KNOWLEDGE_TAG_LABELS)
 
     print(f"bootstrap complete on {db_name}")
     return 0

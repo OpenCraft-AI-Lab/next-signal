@@ -18,6 +18,7 @@ from typing import Any
 
 from paca.agents.loader import build_from_name
 from paca.agents.structured import run_structured
+from paca.core.config import DEFAULT_LOCALE
 from paca.workflows.stages.knowledge_ingest.artifact import KnowledgeArtifact
 from paca.workflows.stages.knowledge_ingest.schemas import FrontmatterDraft
 
@@ -95,16 +96,24 @@ def _run_editor(
     return cleaned
 
 
-def write_frontmatter(artifact: KnowledgeArtifact) -> KnowledgeArtifact:
-    """Run the frontmatter agent under FrontmatterDraft; set the fields."""
+def write_frontmatter(
+    artifact: KnowledgeArtifact, *, locale: str = DEFAULT_LOCALE
+) -> KnowledgeArtifact:
+    """Run the frontmatter agent under FrontmatterDraft; set the fields.
+
+    `locale` selects the pure-language prompt variant so `title` / `summary` are
+    generated in the request locale. The pre-LLM title is preserved as
+    `source_title` before `title` is replaced with the localized one.
+    """
     if not artifact.markdown.strip():
         raise RuntimeError("frontmatter step received empty markdown")
+    artifact.source_title = artifact.title or artifact.value
     agent_name = (
         "knowledge_github_summary"
         if artifact.source_type == "github"
         else "knowledge_frontmatter"
     )
-    agent = build_from_name(agent_name)
+    agent = build_from_name(agent_name, locale)
     agent_input = json.dumps(
         {
             "source_type": artifact.source_type,

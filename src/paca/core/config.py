@@ -13,6 +13,7 @@ of truth for the hot-reload mechanism.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Literal
 
@@ -20,6 +21,14 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from paca.core.paths import CONFIGS_DIR, PROMPTS_DIR
+
+log = logging.getLogger(__name__)
+
+# System default locale, used when a caller builds an agent without naming one.
+# Prompt files resolve ``<stem>.<locale><ext>`` first (e.g. radar_x.en.md,
+# radar_x.zh.md) and fall back to the unsuffixed ``<stem><ext>`` for
+# single-language agents. See core-agents spec.
+DEFAULT_LOCALE = "en"
 
 # Reject unknown YAML keys across every config schema. Typo'd keys (e.g.
 # `instuctions:` instead of `instructions:`) must fail loudly rather than
@@ -113,12 +122,34 @@ class AgentConfig(BaseModel):
     add_datetime_to_context: bool = False
     extra: dict[str, Any] = Field(default_factory=dict)
 
-    def resolved_instructions(self) -> str:
+    def resolved_instructions(self, locale: str = DEFAULT_LOCALE) -> str:
         if self.instructions:
             return self.instructions
         if self.instructions_file:
-            return (PROMPTS_DIR / self.instructions_file).read_text(encoding="utf-8")
+            return _read_instructions_file(self.instructions_file, locale)
         return ""
+
+
+def _read_instructions_file(rel_path: str, locale: str) -> str:
+    """Read a prompt file, preferring the ``<stem>.<locale><ext>`` variant.
+
+    Multi-language agents ship one file per locale (``radar_x.zh.md`` /
+    ``radar_x.en.md``); single-language agents ship only the unsuffixed
+    ``radar_x.md``, used as the fallback when no locale variant exists.
+    ``instructions_file`` names the logical base stem — for a multi-language
+    agent no unsuffixed file exists on disk, only the suffixed variants.
+    Missing both the variant and the base is a loud error.
+    """
+    base = PROMPTS_DIR / rel_path
+    variant = base.parent / f"{base.stem}.{locale}{base.suffix}"
+    if variant.exists():
+        return variant.read_text(encoding="utf-8")
+    if base.exists():
+        return base.read_text(encoding="utf-8")
+    raise FileNotFoundError(
+        f"no instructions file for {rel_path!r} (locale={locale!r}): "
+        f"tried {variant.name} and {base.name}"
+    )
 
 
 def load_agent(name: str) -> AgentConfig:

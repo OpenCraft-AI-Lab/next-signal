@@ -330,12 +330,20 @@ def knowledge_ingest_cmd(
     progress: bool = typer.Option(
         False, help="Emit one JSON event per pipeline step to stdout (JSONL)."
     ),
+    locale: str = typer.Option(
+        "en",
+        "--locale",
+        help="Language of generated content (title/summary) and the recorded locale: zh or en.",
+    ),
 ) -> None:
     """Ingest one URL or file as a durable markdown artifact."""
     import json
     import sys
 
     from paca.workflows.knowledge_ingest import ingest_one
+
+    if locale not in ("zh", "en"):
+        raise typer.BadParameter("--locale must be 'zh' or 'en'")
 
     on_progress = None
     if progress:
@@ -346,7 +354,9 @@ def knowledge_ingest_cmd(
             sys.stdout.write(json.dumps(event, ensure_ascii=False) + "\n")
             sys.stdout.flush()
 
-    result = ingest_one(value, ingest=ingest, category=category, on_progress=on_progress)
+    result = ingest_one(
+        value, ingest=ingest, category=category, on_progress=on_progress, locale=locale
+    )
 
     if progress:
         # Final line is the result object — N event lines + 1 result line = valid JSONL.
@@ -424,11 +434,17 @@ def info_radar_analyze(
     source: str | None = typer.Option(
         None, "--source", help="Restrict to one collector source name."
     ),
+    locale: str = typer.Option(
+        "en", "--locale", help="Output language of generated analysis: zh or en."
+    ),
 ) -> None:
     """Run the two-tier analysis pipeline over unseen radar_items."""
     from paca.workflows.info_radar_analysis import run as run_analysis
 
-    counters = run_analysis(limit=limit, source=source)
+    if locale not in ("zh", "en"):
+        raise typer.BadParameter("--locale must be 'zh' or 'en'")
+
+    counters = run_analysis(limit=limit, source=source, locale=locale)
     parts = [f"{k}={v}" for k, v in counters.items()]
     typer.echo("info-radar analyze: " + " ".join(parts))
 

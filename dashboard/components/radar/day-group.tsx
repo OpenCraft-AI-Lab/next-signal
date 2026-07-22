@@ -89,7 +89,7 @@ export async function DayGroup({ day }: { day: DayGroupData }) {
               >
                 <ScoreChip value={item.score} size="sm" />
                 <span style={{ fontSize: 13.5, flex: 1 }} className="elip">
-                  {item.title}
+                  {item.displayTitle ?? item.title}
                 </span>
                 {item.tags[0] && (
                   <span className="mono muted-2" style={{ fontSize: 11 }}>

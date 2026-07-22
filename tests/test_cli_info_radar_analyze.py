@@ -10,9 +10,10 @@ from paca.interfaces import cli
 def test_analyze_prints_counters(monkeypatch) -> None:
     captured = {}
 
-    def fake_run(*, limit=None, source=None):
+    def fake_run(*, limit=None, source=None, locale="zh"):
         captured["limit"] = limit
         captured["source"] = source
+        captured["locale"] = locale
         return {
             "items_total": 5,
             "tier1_kept": 3,
@@ -37,14 +38,16 @@ def test_analyze_prints_counters(monkeypatch) -> None:
     assert "dedup_novel=2" in result.output
     assert captured["limit"] == 5
     assert captured["source"] is None
+    assert captured["locale"] == "en"
 
 
 def test_analyze_forwards_source_filter(monkeypatch) -> None:
     captured = {}
 
-    def fake_run(*, limit=None, source=None):
+    def fake_run(*, limit=None, source=None, locale="zh"):
         captured["limit"] = limit
         captured["source"] = source
+        captured["locale"] = locale
         return {"items_total": 0}
 
     import paca.workflows.info_radar_analysis as pkg
@@ -56,6 +59,30 @@ def test_analyze_forwards_source_filter(monkeypatch) -> None:
     assert result.exit_code == 0
     assert captured["source"] == "folo_x"
     assert "items_total=0" in result.output
+
+
+def test_analyze_forwards_locale(monkeypatch) -> None:
+    captured = {}
+
+    def fake_run(*, limit=None, source=None, locale="zh"):
+        captured["locale"] = locale
+        return {"items_total": 0}
+
+    import paca.workflows.info_radar_analysis as pkg
+
+    monkeypatch.setattr(pkg, "run", fake_run)
+
+    result = CliRunner().invoke(cli.app, ["info-radar", "analyze", "--locale", "en"])
+
+    assert result.exit_code == 0, result.output
+    assert captured["locale"] == "en"
+
+
+def test_analyze_rejects_bad_locale() -> None:
+    result = CliRunner().invoke(cli.app, ["info-radar", "analyze", "--locale", "fr"])
+
+    assert result.exit_code != 0
+    assert "locale" in result.output.lower()
 
 
 def test_subscriptions_prints_json(monkeypatch) -> None:

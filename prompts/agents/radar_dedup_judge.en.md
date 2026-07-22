@@ -38,5 +38,5 @@ false duplicates silently swallow new information.
 - If `is_duplicate=false`, set `matched_topic_id=null`.
 - `reason` is one short sentence stating what the match (or mismatch) is.
 
-Return JSON. No markdown fences, no prose outside the JSON object. Match the
-language of the input summaries.
+Return JSON. No markdown fences, no prose outside the JSON object. Write
+`reason` in English, regardless of the language of the input summaries.

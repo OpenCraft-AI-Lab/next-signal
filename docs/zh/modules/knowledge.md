@@ -22,8 +22,9 @@ reconciliation，`store.py` 放 Postgres I/O）。
 |---|---|---|
 | `knowledge_artifact_editor` | local | ingest 的 clean 步：正文清洗 / whisper 纠错（DB-free 转换 agent） |
 | `knowledge_github_cleaner` | local | github repo 专用 clean 步：只对 `## README` 段做激进精简（去 badge / 安装命令 / sponsor 等），结构化 signal section 原样保留 |
-| `knowledge_frontmatter` | local | ingest 的 enrich 步：产出 summary/tags/freshness（`FrontmatterDraft` schema，DB-free） |
-| `knowledge_github_summary` | local | github repo 专用 enrich 步：summary 按 does/value/maturity/ecosystem 四个角度组织，复用 `FrontmatterDraft` schema |
+| `knowledge_frontmatter` | local | ingest 的 enrich 步：产出 title/summary/tags/freshness（`FrontmatterDraft` schema，DB-free）。locale-aware：`.zh.md` / `.en.md` 变体按 ingest locale 生成 title/summary |
+| `knowledge_github_summary` | local | github repo 专用 enrich 步：summary 按 does/value/maturity/ecosystem 四个角度组织，复用 `FrontmatterDraft` schema。locale-aware（`.zh.md` / `.en.md`） |
+| `knowledge_tag_translator` | local_structured | best-effort：把英文 tag key 翻成本地化显示标签（`TagLabel` schema），按 `(tag, locale)` 缓存进 `knowledge_tag_labels` |
 | `knowledge_classifier` | local | ingest 时按 taxonomy 选 wiki 分类目录（DB-free 转换 agent） |
 
 ## 工具
@@ -98,7 +99,7 @@ ingest 是写入侧，回顾是读取侧。每篇 wiki 文档在 `knowledge_revi
   因此以 120 天以上老内容为主的语料会冒一次头就安静下来；让退休文档重新入列是另一个
   常青轮换功能，而不是把阶段列表加长。
 - **卡片内容** —— 卡片直接复用文档自己的 frontmatter `summary`（入库时写进 frontmatter 和
-  `## 总结` 那段的收尾摘要），所以回顾层**不调 LLM**、行里也不存生成文本。手写、没有 `summary`
+  canonical `## Summary` 那段的收尾摘要、渲染时本地化），所以回顾层**不调 LLM**、行里也不存生成文本。手写、没有 `summary`
   的文档回退到正文首段。
 - **对账（reconciliation）** —— `paca knowledge review` 遍历 wiki，把未知文档入列
   （按曲线 seed），把文件已删的行移除。wiki 根缺失或空时直接拒绝，而不是把 "没有文件" 读成
@@ -118,9 +119,22 @@ ingest 是写入侧，回顾是读取侧。每篇 wiki 文档在 `knowledge_revi
 - re-ingest manifest 只在成功索引后才前进，否则后续不重试、KB search 会 stale。
 - 直接 ingest 和 re-ingest 必须从 wiki-relative path 推出同一个 GBrain-safe slug；
   非 ASCII 路径要补稳定 hash 后缀避免 GBrain page 撞车。
-- wiki 文件名由标题派生，frontmatter 记 `digest`（来源 hash）作为同源标识：同源 re-ingest
-  原地覆盖（幂等更新）；同名标题但不同来源时新文件追加 `-<digest[:8]>` 后缀，绝不静默
-  覆盖别人的文章（两种目录布局间的撞车也算）。
+- wiki 文件名由**来源标题**（`source_title`，LLM 之前的原标题）派生，**不是**本地化后的
+  `title`——这样同一来源在不同 locale 下保持同一个稳定 slug 和 GBrain 标识。frontmatter 记
+  `digest`（来源 hash）作为同源标识：同源 re-ingest 原地覆盖（幂等更新）；同名标题但不同来源
+  时新文件追加 `-<digest[:8]>` 后缀，绝不静默覆盖别人的文章（两种目录布局间的撞车也算）。
+- **本地化按条目走，存储保持 canonical。** 存下来的 `.md` 与 locale 无关：frontmatter 的
+  KEY 是英文、枚举 token 是英文（`status: clean`、`freshness`、`source_type`、`converter`）、
+  tag KEY 是英文、`## Summary` / `## Related` 标题也是 canonical 英文。随 locale 变的 LLM 文本
+  ——`title` 和 `summary`——按 ingest 的 `--locale` 生成，并记进 `locale` frontmatter 字段；
+  LLM 之前的原标题保留为 `source_title`。来源信息（`source_url` / `published` / `author`）以
+  结构化 frontmatter 存储，radar 入库时从暂存的 `<stem>.meta.json` sidecar 读取（不再把英文
+  标签块烤进正文）。dashboard 按条目自己的 `locale` 本地化每一个标签——frontmatter 的
+  key/value 标签、两个标题、以及 tag 显示别名（来自 `knowledge_tag_labels`，由
+  `knowledge_tag_translator` 按 `(tag, locale)` 生成一次、best-effort）——所以每个条目都整体
+  以它自己的语言渲染，与 UI cookie 无关。切换 UI 语言不会重译已有条目；换个 locale 重新入库
+  才会重生成文本。两份 `knowledge_frontmatter.{zh,en}.md`（和
+  `knowledge_github_summary.{zh,en}.md`）prompt 变体要结构同步。
 - `knowledge_artifact_editor` 失败不能产出 deterministic fallback 内容。
 - WeChat artifact 走 per-article 目录布局（`<category>/<slug>/<slug>.md` + 同目录 `images/`）；
   `gbrain_slug_for_path` 折叠这层重复目录，保证 GBrain slug 跟平铺布局产出相同。

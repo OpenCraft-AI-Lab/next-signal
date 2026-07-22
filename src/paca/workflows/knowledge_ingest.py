@@ -20,6 +20,7 @@ from agno.workflow import Step, Workflow
 from agno.workflow.types import OnError, StepInput, StepOutput
 
 from paca.core import paths
+from paca.core.config import DEFAULT_LOCALE
 from paca.integrations.gbrain import gbrain_ingest, gbrain_slug_for_path
 from paca.workflows.stages.knowledge_ingest import KnowledgeArtifact
 from paca.workflows.stages.knowledge_ingest.artifact_editor import clean_body, write_frontmatter
@@ -245,6 +246,11 @@ def _ingest_enabled(inp: StepInput) -> bool:
     return bool(data.get("ingest", True))
 
 
+def _locale(inp: StepInput) -> str:
+    data = inp.additional_data or {}
+    return str(data.get("locale") or DEFAULT_LOCALE)
+
+
 def _artifact_from(inp: StepInput) -> KnowledgeArtifact:
     artifact = inp.previous_step_content
     if isinstance(artifact, KnowledgeArtifact):
@@ -291,7 +297,7 @@ def clean_step(inp: StepInput) -> StepOutput:
 
 
 def enrich_step(inp: StepInput) -> StepOutput:
-    return StepOutput(content=write_frontmatter(_artifact_from(inp)))
+    return StepOutput(content=write_frontmatter(_artifact_from(inp), locale=_locale(inp)))
 
 
 def classify_step(inp: StepInput) -> StepOutput:
@@ -305,7 +311,7 @@ def classify_step(inp: StepInput) -> StepOutput:
 
 
 def persist_step(inp: StepInput) -> StepOutput:
-    artifact = persist(_artifact_from(inp), ingest=_ingest_enabled(inp))
+    artifact = persist(_artifact_from(inp), ingest=_ingest_enabled(inp), locale=_locale(inp))
     if artifact.ingest_result and artifact.ingest_result.get("ok"):
         _mark_ingested(artifact)
     return StepOutput(content=artifact)
@@ -326,18 +332,25 @@ def ingest_one(
     ingest: bool = True,
     category: str | None = None,
     on_progress: Callable[[dict[str, Any]], None] | None = None,
+    locale: str = DEFAULT_LOCALE,
 ) -> dict[str, Any]:
     """Ingest one URL or staged file into the wiki and optionally GBrain.
 
     `category` pins the destination wiki folder (skipping LLM classification);
     it is validated up front so a bad value fails before any fetch work.
     `on_progress` receives a `{step, status}` event around each pipeline step.
+    `locale` (zh|en) sets the language of generated structural headings.
     """
     if category is not None:
         _validate_category_override(category)
     run_output = build().run(
         input=value,
-        additional_data={"ingest": ingest, "category": category, "on_progress": on_progress},
+        additional_data={
+            "ingest": ingest,
+            "category": category,
+            "on_progress": on_progress,
+            "locale": locale,
+        },
     )
     return _build_result(_final_artifact(run_output), ingest_requested=ingest)
 

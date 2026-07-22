@@ -20,6 +20,9 @@ def _wiki_dir(tmp_path, monkeypatch):
     # either to assert on real behavior.
     monkeypatch.setattr(persist_mod, "gbrain_query", lambda q, limit=None: {"ok": True, "stdout": ""})
     monkeypatch.setattr(persist_mod, "write_related_section", lambda md_path, wiki_paths: None)
+    # Tag-label translation is a best-effort DB + LLM side effect; stub it so
+    # persist unit tests stay offline (a zh ingest would otherwise call OMLX).
+    monkeypatch.setattr(persist_mod, "ensure_tag_labels", lambda tags, locale: None)
     return tmp_path
 
 
@@ -72,10 +75,30 @@ def test_persist_writes_wiki_file_and_frontmatter() -> None:
     assert fm["status"] == "clean"
 
 
+def test_persist_writes_locale_and_source_title() -> None:
+    artifact = _ready()
+    artifact.source_title = "Original Source Title"
+    result = persist(artifact, locale="zh")
+    fm = _frontmatter(result.clean_path)
+    assert fm["locale"] == "zh"
+    assert fm["source_title"] == "Original Source Title"
+
+
 def test_persist_appends_summary_section() -> None:
+    # Default locale is English (paca.core.config.DEFAULT_LOCALE = "en").
     result = persist(_ready())
     text = result.clean_path.read_text(encoding="utf-8")
-    assert "## 总结\n\na dense factual summary." in text
+    assert "## Summary\n\na dense factual summary." in text
+
+
+def test_persist_summary_heading_is_canonical_english() -> None:
+    # The stored heading is canonical English regardless of the ingest locale; the
+    # dashboard localizes it at render by the artifact's `locale`. This keeps the
+    # .md stable across locales and avoids baking the UI language into storage.
+    result = persist(_ready(), locale="zh")
+    text = result.clean_path.read_text(encoding="utf-8")
+    assert "## Summary\n\na dense factual summary." in text
+    assert "## 总结" not in text
 
 
 def test_persist_uses_editor_freshness_tier() -> None:

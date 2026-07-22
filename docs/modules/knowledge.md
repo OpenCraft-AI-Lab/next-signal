@@ -23,8 +23,9 @@ and GBrain provides indexing and hybrid search.
 |---|---|---|
 | `knowledge_artifact_editor` | local | Ingest's clean step: body cleanup / whisper correction (DB-free transformation agent) |
 | `knowledge_github_cleaner` | local | GitHub-repo-specific clean step: aggressively trims only the `## README` section (badges, install commands, sponsor blocks); structured signal sections are preserved verbatim |
-| `knowledge_frontmatter` | local | Ingest's enrich step: produces summary/tags/freshness (`FrontmatterDraft` schema, DB-free) |
-| `knowledge_github_summary` | local | GitHub-repo-specific enrich step: organizes the summary around does/value/maturity/ecosystem, reusing the `FrontmatterDraft` schema |
+| `knowledge_frontmatter` | local | Ingest's enrich step: produces title/summary/tags/freshness (`FrontmatterDraft` schema, DB-free). Locale-aware: `.zh.md` / `.en.md` prompt variants generate title/summary in the ingest locale |
+| `knowledge_github_summary` | local | GitHub-repo-specific enrich step: organizes the summary around does/value/maturity/ecosystem, reusing the `FrontmatterDraft` schema. Locale-aware (`.zh.md` / `.en.md`) |
+| `knowledge_tag_translator` | local_structured | Best-effort: translates an English tag key to a localized display label (`TagLabel` schema), cached in `knowledge_tag_labels` per `(tag, locale)` |
 | `knowledge_classifier` | local | Picks the wiki category directory from the taxonomy at ingest time (DB-free transformation agent) |
 
 ## Tools
@@ -116,7 +117,8 @@ Ebbinghaus curve so captured material is refreshed before it decays.
   once and then quiets down; re-enrolling retired docs would be a separate
   evergreen-rotation feature, not a wider stage list.
 - **Card content** — the card reuses the doc's own frontmatter `summary` (the
-  closing summary written to frontmatter and the `## 总结` section at ingest), so
+  closing summary written to frontmatter and the canonical `## Summary` section at
+  ingest, localized at render), so
   the review layer makes **no LLM call** and stores no generated text. A
   hand-created doc with no `summary` falls back to its first body paragraph.
 - **Reconciliation** — `paca knowledge review` walks the wiki, enrolls
@@ -150,11 +152,29 @@ LLM work.
 - Direct ingest and re-ingest must derive the same GBrain-safe slug from the
   wiki-relative path. Non-ASCII paths get a stable hash suffix so GBrain pages
   cannot collide.
-- Wiki filenames derive from the title, and frontmatter records a `digest` (a
-  source hash) as the same-origin identity: a same-origin re-ingest overwrites in
-  place (idempotent update), while an identical title from a different source
-  gets a new file with a `-<digest[:8]>` suffix. Never silently overwrite someone
-  else's article — including collisions across the two directory layouts.
+- Wiki filenames derive from the **source title** (`source_title`, the pre-LLM
+  original), NOT the localized `title` — so the same source keeps one stable slug
+  and GBrain identity across locales. Frontmatter records a `digest` (a source
+  hash) as the same-origin identity: a same-origin re-ingest overwrites in place
+  (idempotent update), while an identical title from a different source gets a new
+  file with a `-<digest[:8]>` suffix. Never silently overwrite someone else's
+  article — including collisions across the two directory layouts.
+- **Localization is per-item; storage stays canonical.** The stored `.md` is
+  locale-independent: English frontmatter KEYS, English enum tokens (`status: clean`,
+  `freshness`, `source_type`, `converter`), English tag KEYS, and canonical
+  `## Summary` / `## Related` headings. The locale-bound LLM prose — `title` and
+  `summary` — is generated in the ingest `--locale` and recorded in a `locale`
+  frontmatter field; the pre-LLM title is kept as `source_title`. Provenance
+  (`source_url` / `published` / `author`) is structured frontmatter, seeded for radar
+  ingests from a staged `<stem>.meta.json` sidecar (never an English label block in
+  the body). The dashboard localizes every per-item label — frontmatter key/value
+  labels, the two headings, and tag DISPLAY aliases (from `knowledge_tag_labels`,
+  generated once per `(tag, locale)` via `knowledge_tag_translator`, best-effort) —
+  by the artifact's own `locale`, so each item renders whole in its language
+  regardless of the UI cookie. A UI language switch never retranslates existing
+  items; re-ingesting under the other locale regenerates the prose. The two
+  `knowledge_frontmatter.{zh,en}.md` (and `knowledge_github_summary.{zh,en}.md`)
+  prompt variants must stay structurally in sync.
 - A `knowledge_artifact_editor` failure must not produce deterministic fallback
   content.
 - WeChat artifacts use a per-article directory layout

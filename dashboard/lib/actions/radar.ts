@@ -39,7 +39,7 @@ const execFileAsync = promisify(execFile);
  * stderr go to the shared dashboard-actions.log; we do NOT parse them —
  * progress is derived from the `radar_analyses` rows the analyzer writes.
  */
-async function spawnAnalyzeTracked(): Promise<void> {
+async function spawnAnalyzeTracked(locale: Locale): Promise<void> {
   const logPath = path.join(
     os.homedir(),
     ".next-signal",
@@ -47,10 +47,11 @@ async function spawnAnalyzeTracked(): Promise<void> {
   );
   await mkdir(path.dirname(logPath), { recursive: true });
   const handle = await open(logPath, "a");
+  const args = ["run", "paca", "info-radar", "analyze", "--locale", locale];
   await handle.write(
-    `[${new Date().toISOString()}] [radar-analyze] spawn: uv run paca info-radar analyze\n`,
+    `[${new Date().toISOString()}] [radar-analyze] spawn: uv ${args.join(" ")}\n`,
   );
-  const child = spawn("uv", ["run", "paca", "info-radar", "analyze"], {
+  const child = spawn("uv", args, {
     cwd: REPO_ROOT,
     env: { ...process.env },
     stdio: ["ignore", handle.fd, handle.fd],
@@ -86,7 +87,8 @@ export async function ingestToWiki(
   itemId: number,
   localeValue?: Locale,
 ): Promise<{ ok: boolean; message: string }> {
-  const t = getDictionary(normalizeLocale(localeValue));
+  const locale = normalizeLocale(localeValue);
+  const t = getDictionary(locale);
   const rows = await query<RadarIngestRow>(
     "SELECT source, source_id, url, title FROM radar_items WHERE id = $1 LIMIT 1",
     [itemId],
@@ -103,14 +105,15 @@ export async function ingestToWiki(
   // Folo radar rows are resolved to a staged HTML file first because the
   // timeline row only has a short preview. Other sources continue through the
   // normal URL ingest path after URL validation.
-  startIngestJob(ingestValue, { source: "radar" });
+  startIngestJob(ingestValue, { source: "radar", locale });
   return { ok: true, message: t.actions.ingestStarted };
 }
 
 export async function runPullAndAnalyze(
   localeValue?: Locale,
 ): Promise<{ ok: boolean; message: string }> {
-  const t = getDictionary(normalizeLocale(localeValue));
+  const locale = normalizeLocale(localeValue);
+  const t = getDictionary(locale);
   // Snapshot max(fetched_at) BEFORE pull so we can count how many rows
   // pull actually inserted — pull is idempotent via UNIQUE(source,
   // source_id), so a no-op click writes zero rows and max(fetched_at)
@@ -158,7 +161,7 @@ export async function runPullAndAnalyze(
 
   await recordAnalyzeStart(total);
   try {
-    await spawnAnalyzeTracked();
+    await spawnAnalyzeTracked(locale);
   } catch (err) {
     // Spawn failed synchronously (missing uv, EACCES) — undo the running marker.
     await recordAnalyzeFinish();

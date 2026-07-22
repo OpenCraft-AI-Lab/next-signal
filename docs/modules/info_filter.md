@@ -101,6 +101,28 @@ reading and manual triggering.
   auto-regenerated: regenerating on load would turn every visit to a live range
   into a minute of local inference.
 - Never dump a whole provider dict into the logger.
+- Analysis **output language is driven by the request locale** (`run(locale=)` /
+  `analyze --locale`), no longer by the goals language. locale ∈ {`zh`, `en`},
+  default `en`; goals / article body may be in any language (input only) — the
+  locale fixes only the output language. Each stage has `zh` / `en` pure-language
+  prompts, both explicitly suffixed (`prompts/agents/radar_*.zh.md` and
+  `radar_*.en.md`; no unsuffixed base for these multi-language agents — the loader
+  resolves `<stem>.<locale>.md`); tier-1's drop-category cue vocabulary stays
+  bilingual in both variants (idiomatic, not literal) because either locale may
+  analyze an article in the other language. The tier-2 two-step scoring rubric now
+  lives in two files — a rubric change must update both `radar_tier2_impact.zh.md`
+  and `radar_tier2_impact.en.md`.
+- `radar_analyses.locale` records each row's generation language; there is no
+  post-hoc translation, so a mixed-language corpus is expected. dedup candidate
+  retrieval is **not** locale-filtered (cross-language dedup is intentional;
+  embeddings are multilingual).
+- The reader-facing **item title follows the locale**: tier-2 emits a
+  `display_title` (part of `Tier2Analysis`, generated in the run locale, kept in
+  sync across both `radar_tier2_impact.{zh,en}.md` variants) persisted to
+  `radar_analyses.display_title` on keep rows (nullable; added via `ADD COLUMN IF
+  NOT EXISTS`, no backfill). The `/radar` reader renders `display_title ??
+  radar_items.title`, and the detail page preserves the original feed title as a
+  secondary "original title" line — the raw `radar_items.title` is never overwritten.
 
 ## Specs and status
 

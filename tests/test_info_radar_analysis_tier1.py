@@ -40,7 +40,7 @@ def _stub_run_structured(monkeypatch, response):
 
 
 def _stub_agent(monkeypatch) -> None:
-    monkeypatch.setattr(tier1, "build_from_name", lambda name: object())
+    monkeypatch.setattr(tier1, "build_from_name", lambda name, locale="zh": object())
 
 
 def test_run_batch_returns_verdicts_in_input_order(monkeypatch) -> None:

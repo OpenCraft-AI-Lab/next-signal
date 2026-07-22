@@ -41,7 +41,7 @@ def _stub_agent(monkeypatch, payload) -> None:
         def run(self, agent_input, **kwargs):
             return _FakeResponse(text)
 
-    monkeypatch.setattr(artifact_editor_mod, "build_from_name", lambda name: FakeAgent())
+    monkeypatch.setattr(artifact_editor_mod, "build_from_name", lambda name, locale=None: FakeAgent())
 
 
 # --- clean_body -----------------------------------------------------------
@@ -87,7 +87,7 @@ def test_clean_body_keeps_transcript_scaffold(monkeypatch) -> None:
             seen.append(json.loads(agent_input)["markdown"])
             return _FakeResponse("cleaned spoken body.")
 
-    monkeypatch.setattr(artifact_editor_mod, "build_from_name", lambda name: FakeAgent())
+    monkeypatch.setattr(artifact_editor_mod, "build_from_name", lambda name, locale=None: FakeAgent())
 
     result = clean_body(
         _artifact(source_type="bilibili", markdown="# Vid\n\n## Transcript\n\nspoken body.")
@@ -111,7 +111,7 @@ def test_clean_body_github_routes_to_github_cleaner(monkeypatch) -> None:
             return _FakeResponse("Tight condensed README.")
 
     monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name)
+        artifact_editor_mod, "build_from_name", lambda name, locale=None: FakeAgent(name)
     )
 
     body = (
@@ -147,7 +147,7 @@ def test_clean_body_non_github_uses_default_cleaner(monkeypatch) -> None:
             return _FakeResponse(json.loads(agent_input)["markdown"])
 
     monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name)
+        artifact_editor_mod, "build_from_name", lambda name, locale=None: FakeAgent(name)
     )
 
     clean_body(_artifact(source_type="web", markdown="# Hello\n\nA body."))
@@ -166,7 +166,7 @@ def test_clean_body_github_collapse_below_floor_raises(monkeypatch) -> None:
             return _FakeResponse("x")  # single char — way below 20% floor
 
     monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name)
+        artifact_editor_mod, "build_from_name", lambda name, locale=None: FakeAgent(name)
     )
 
     long_readme = "a" * 3000
@@ -233,7 +233,7 @@ def test_write_frontmatter_github_routes_to_github_summary(monkeypatch) -> None:
             )
 
     monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name)
+        artifact_editor_mod, "build_from_name", lambda name, locale=None: FakeAgent(name)
     )
 
     write_frontmatter(_artifact(source_type="github", markdown="# owner/repo\n\nbody"))
