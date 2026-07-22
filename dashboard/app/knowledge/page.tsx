@@ -2,6 +2,7 @@ import { ActiveIngests } from "@/components/knowledge/active-ingests";
 import { IngestForm } from "@/components/knowledge/ingest-form";
 import { ReindexButton } from "@/components/knowledge/reindex-button";
 import { ResizableSidebar } from "@/components/knowledge/resizable-sidebar";
+import { ReviewSection } from "@/components/knowledge/review-section";
 import { SearchResults } from "@/components/knowledge/search-results";
 import { SidebarTree } from "@/components/knowledge/sidebar-tree";
 import { MarkdownText } from "@/components/radar/markdown-text";
@@ -9,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { searchKnowledge } from "@/lib/actions/knowledge";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/server";
+import { getDueReviews } from "@/lib/knowledge/review";
 import { listCategories, type WikiCategoryOption } from "@/lib/taxonomy";
 import { getWikiDoc, listWikiTree } from "@/lib/wiki";
 
@@ -25,10 +27,13 @@ export default async function KnowledgePage({
   const q = (params.q ?? "").trim();
   const docId = params.doc;
 
-  const [tree, hits, active] = await Promise.all([
+  const [tree, hits, active, reviews] = await Promise.all([
     listWikiTree(),
     q ? searchKnowledge(q) : Promise.resolve([]),
     docId ? getWikiDoc(docId) : Promise.resolve(null),
+    // Degrade to an empty review section if Postgres is unreachable, so the rest
+    // of the page (tree / search / preview, all filesystem + GBrain) still works.
+    getDueReviews().catch(() => ({ cards: [], total: 0 })),
   ]);
 
   // Degrade to auto-classify-only if the taxonomy can't be read, so the rest
@@ -58,6 +63,8 @@ export default async function KnowledgePage({
           <ReindexButton />
         </div>
 
+        <ReviewSection reviews={reviews} t={t} />
+
         <div className="card" style={{ padding: 16, marginBottom: 18 }}>
           <div className="col gap-12">
             <IngestForm categories={categories} />
@@ -84,7 +91,11 @@ export default async function KnowledgePage({
             <div className={q ? "knowmain" : "knowmain knowmain-single"}>
               <SearchResults hits={hits} q={q} selectedSlug={docId} />
 
-              <div className="card" style={{ padding: 18, alignSelf: "start" }}>
+              <div
+                id="doc-preview"
+                className="card"
+                style={{ padding: 18, alignSelf: "start", scrollMarginTop: 80 }}
+              >
                 {active ? (
                   <ActivePreview doc={active} t={t} />
                 ) : (

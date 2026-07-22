@@ -121,6 +121,8 @@ uv run paca knowledge ingest <url|staged-file>        # ingest into the knowledg
 #   --progress                   emit one JSON event per step (used by the dashboard progress panel)
 uv run paca knowledge gbrain-search "query"           # search the local GBrain
 uv run paca knowledge gbrain-ingest <file|dir>        # import markdown into GBrain
+uv run paca knowledge review                          # reconcile the wiki against knowledge_reviews
+                                                      # (enroll new docs, unenroll gone ones; fixed Ebbinghaus curve)
 uv run paca info-radar pull [--source NAME]           # run each source CLI, write radar_items
 uv run paca info-radar sweep                          # delete radar_items rows older than 30 days
 uv run paca info-radar analyze [--limit N] [--source NAME]

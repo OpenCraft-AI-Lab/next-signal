@@ -356,6 +356,23 @@ def knowledge_ingest_cmd(
         typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
+@knowledge_app.command("review")
+def knowledge_review_cmd() -> None:
+    """Reconcile the wiki against knowledge_reviews (enroll new docs, unenroll gone ones)."""
+    from paca.workflows.knowledge_review import run as run_review
+
+    try:
+        result = run_review()
+    except RuntimeError as e:
+        typer.echo(f"knowledge review: {e}", err=True)
+        raise typer.Exit(code=1) from e
+
+    typer.echo(
+        f"knowledge review: enrolled={result['enrolled']} "
+        f"unenrolled={result['unenrolled']} due={result['due']}"
+    )
+
+
 @app.command("run-workflow")
 def run_workflow(name: str = typer.Argument(..., help="Workflow config name.")) -> None:
     """Run one workflow immediately via its ``extra.run_now`` entry point.
