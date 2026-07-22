@@ -19,7 +19,7 @@ feature either reads Postgres directly or spawns a one-shot `paca` CLI child.
 | Route | Function | Detailed behavior |
 |---|---|---|
 | `/radar` | info-radar reader: today's tracker, filtering and sorting, Pull + Analyze (with live progress), range Recap panel, per-item Ingest to wiki | [info_filter.md](./info_filter.md), dashboard/README |
-| `/knowledge` | wiki tree + file management, ANN search, preview, Re-index, URL ingest form + live progress panel | [knowledge.md](./knowledge.md) |
+| `/knowledge` | spaced-repetition review section (due cards + Seen / Refresh), wiki tree + file management, ANN search, preview, Re-index, URL ingest form + live progress panel | [knowledge.md](./knowledge.md) |
 | `/goals` | edits `configs/info_radar/goals.yaml` (mirrors the Python loader contract, atomic write) | dashboard/README |
 | `/subscriptions` | read-only Folo subscription inventory | dashboard/README |
 
@@ -76,15 +76,18 @@ dashboard/
   in any build if you navigate to it directly. When you add a token or a UI
   primitive, add it to that page in the same change: it is how the next agent
   discovers what already exists instead of inventing a parallel button.
-- `/knowledge`'s re-index uses POST, not a GET query.
+- `/knowledge`'s re-index uses POST, not a GET query. The review "Seen" control
+  is likewise a POST server action that advances the curve in-request — a GET
+  could let a prefetch advance it; the review section itself never writes state
+  during render (enrollment happens only through the detached `--sync` refresh).
 - Paths parsed inside a server action must pass traversal validation (see the
   precedent in `lib/actions/knowledge.ts`).
 
 ## Specs and status
 
 Specs: [`openspec/specs/dashboard-shell/`](../../openspec/specs/dashboard-shell/),
-`dashboard-radar-reader`, `dashboard-knowledge-ingest`, `dashboard-goals`,
-`dashboard-folo-subscriptions`.
+`dashboard-radar-reader`, `dashboard-knowledge-ingest`,
+`dashboard-knowledge-review`, `dashboard-goals`, `dashboard-folo-subscriptions`.
 
 Current status: all four page families are in place. `pnpm test` runs the focused
 `lib/` tests (wiki / taxonomy / goals / radar-ingest), and `pnpm typecheck` is

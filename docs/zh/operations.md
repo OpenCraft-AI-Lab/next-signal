@@ -104,6 +104,8 @@ uv run paca knowledge ingest <url|staged-file>        # ingest 到知识库
 #   --progress                   每步输出一行 JSON 事件（dashboard 入库进度面板用）
 uv run paca knowledge gbrain-search "query"           # 搜索本地 GBrain
 uv run paca knowledge gbrain-ingest <file|dir>        # 导入 markdown 到 GBrain
+uv run paca knowledge review                          # 对照 wiki 与 knowledge_reviews
+                                                      # （入列新文档、移除已删的；固定艾宾浩斯曲线）
 uv run paca info-radar pull [--source NAME]           # 跑各 source CLI，写 radar_items
 uv run paca info-radar sweep                          # 删 radar_items 中超 30 天的行
 uv run paca info-radar analyze [--limit N] [--source NAME]

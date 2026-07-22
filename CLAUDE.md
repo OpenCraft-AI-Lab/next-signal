@@ -112,6 +112,7 @@ CLI 子命令：
 - `paca knowledge ingest <url|file>` — 路由输入、保存 raw / clean markdown、可选导入 GBrain
   （`--category <taxonomy-path>` 指定落点跳过自动分类；`--progress` 每步输出一行 JSON 事件，dashboard 入库进度面板用）
 - `paca knowledge gbrain-search|gbrain-ingest` — 通过本地 GBrain CLI 搜索 / 导入 markdown
+- `paca knowledge review` — 对照 wiki 与 `knowledge_reviews`（入列新文档、移除文件已删的行）；回顾卡片直接用文档 frontmatter 的 `summary`，不调 LLM（固定艾宾浩斯曲线）
 - `paca info-radar pull [--source NAME]` — 跑一次 info-radar 各 source 的 CLI，写入 `radar_items`
 - `paca info-radar sweep` — 删除 30 天前的 `radar_items` 行
 - `paca info-radar analyze [--limit N] [--source NAME]` — 跑 info-radar analysis 两层 pipeline，写 `radar_analyses`
@@ -235,7 +236,8 @@ prepend 到**每个 agent** 的 instructions 头部。house rules / 用户 profi
 - **agno 自管的表**（sessions / memory / knowledge / traces）→ `paca.core.db.get_db()` 单例，
   绝不要自己 `PostgresDb(...)`。URL 走 `database_url(for_sqlalchemy=True)`，自动改 scheme 到 psycopg v3。
   agno 会自动 provision 这些表，**不要**重复定义
-- **我们自己的业务表**（`radar_items` / `radar_analyses` / `radar_pushed_topics`）→ 裸
+- **我们自己的业务表**（`radar_items` / `radar_analyses` / `radar_pushed_topics` /
+  `radar_recaps` / `knowledge_reviews`）→ 裸
   `psycopg.connect(database_url())`（同步 short-lived 连接）；
   DDL 在 `scripts/bootstrap_db.py`，运行时读写在对应 collector / workflow 模块里
 

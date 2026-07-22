@@ -66,7 +66,8 @@ embedder 调用也占同一配额（本地 LLM 和 embedding 共抢一块 GPU）
 - **agno 自管表**（sessions / memory / knowledge / traces）→ `paca.core.db.get_db()` 单例。
   URL 走 `database_url(for_sqlalchemy=True)`，自动把 scheme 改写成
   `postgresql+psycopg://`（psycopg v3）。agno 自动建表，不要重复定义。
-- **业务表**（`radar_items` / `radar_analyses` / `radar_pushed_topics` / `radar_recaps`）→ 裸
+- **业务表**（`radar_items` / `radar_analyses` / `radar_pushed_topics` / `radar_recaps` /
+  `knowledge_reviews`）→ 裸
   `psycopg.connect(database_url())` 的同步 short-lived 连接；DDL 集中在
   `scripts/bootstrap_db.py`，运行时读写在对应模块的 store / tool 里。
 

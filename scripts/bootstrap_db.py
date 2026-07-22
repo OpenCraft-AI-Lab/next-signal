@@ -112,6 +112,29 @@ CREATE TABLE IF NOT EXISTS radar_recaps (
 );
 """
 
+# paca.workflows.knowledge_review: one row per wiki doc, scheduling it back onto
+# the reader's screen along a fixed Ebbinghaus curve. `doc_path` is the
+# wiki-root-relative path — the same identity the ingest manifest uses — so
+# reconciliation, not a foreign key, keeps the table and the filesystem tree in
+# sync (the wiki is not a table). `next_due_at IS NULL` means the doc advanced
+# past the final stage and has retired. The partial index serves the due query.
+# The card body reuses the doc's frontmatter `summary` (already written at
+# ingest), so there is no recall-generation state on this row.
+CREATE_KNOWLEDGE_REVIEWS = """
+CREATE TABLE IF NOT EXISTS knowledge_reviews (
+    id                   BIGSERIAL PRIMARY KEY,
+    doc_path             TEXT NOT NULL UNIQUE,
+    captured_at          DATE NOT NULL,
+    stage                INTEGER NOT NULL DEFAULT 0,
+    next_due_at          DATE,                  -- NULL = retired past the final stage
+    last_reviewed_at     TIMESTAMPTZ,
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS knowledge_reviews_due_idx
+    ON knowledge_reviews (next_due_at)
+    WHERE next_due_at IS NOT NULL;
+"""
+
 
 def main() -> int:
     url = os.environ.get("DATABASE_URL")
@@ -133,6 +156,7 @@ def main() -> int:
             cur.execute(CREATE_RADAR_PUSHED_TOPICS)
             cur.execute(CREATE_RADAR_ANALYSES)
             cur.execute(CREATE_RADAR_RECAPS)
+            cur.execute(CREATE_KNOWLEDGE_REVIEWS)
 
     print(f"bootstrap complete on {db_name}")
     return 0

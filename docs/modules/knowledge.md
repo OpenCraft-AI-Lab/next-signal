@@ -14,6 +14,8 @@ and GBrain provides indexing and hybrid search.
 `src/paca/integrations/knowledge/` — OpenCLI (WeChat) / Bilibili / GitHub adapters.
 `src/paca/workflows/knowledge_ingest.py` — the centralized workflow factory.
 `src/paca/workflows/stages/knowledge_ingest/` — workflow-private pipeline stages.
+`src/paca/workflows/knowledge_review/` — the spaced-repetition review scheduler
+(curve + reconciliation in `__init__.py`, Postgres I/O in `store.py`).
 
 ## Agents
 
@@ -73,6 +75,7 @@ Agents in any module can reference these tools by name.
 - Clean wiki: `~/Projects/digitalpaca-wiki/`
 - Raw archive: `~/Projects/digitalpaca-wiki-raw/`
 - Re-ingest manifest: `~/.next-signal/knowledge_ingest_manifest.json`
+- Review schedule: `knowledge_reviews` table (Postgres)
 - Index: GBrain's own local storage
 
 ## How to use it
@@ -83,6 +86,7 @@ uv run paca knowledge ingest <url> --category knowledge/ai-ml   # pick the desti
 uv run paca knowledge ingest <url> --progress                   # one JSON event per pipeline step, plus a final result JSON line
 uv run paca knowledge gbrain-search "query"
 uv run paca run-workflow knowledge_ingest            # re-ingest changed files + refresh every Related block
+uv run paca knowledge review                         # reconcile the wiki against knowledge_reviews (enroll new / unenroll gone)
 ```
 
 `--category` must be a path that exists in `configs/knowledge_taxonomy.yaml`;
@@ -92,8 +96,51 @@ staged under `PACA_AGENT_TMP_DIR`; `/radar`'s Folo ingest respects that boundary
 too, writing the full-text HTML into that directory first and then handing the
 file path to the generic knowledge pipeline.
 
+## Knowledge review (spaced repetition)
+
+Ingest is the write side; review is the read side. Every wiki doc gets one row in
+`knowledge_reviews`, scheduled back onto the reader's screen along a fixed
+Ebbinghaus curve so captured material is refreshed before it decays.
+
+- **Curve** — stages at **1, 3, 7, 15, 30, 60, 120 days** after the doc's
+  `captured_at`; `next_due_at = captured_at + STAGES[stage]`, always anchored to
+  the capture date, never to when the reader clicked. No recall rating, no ease
+  factor — "seen" is a single acknowledgement.
+- **Fast-forward** — seeding an existing corpus anchors each doc at its real
+  `captured_at` and jumps it to the first stage not yet elapsed, so a doc captured
+  100 days ago lands at the 120-day stage rather than dumping six overdue reviews.
+  The same `max(stage + 1, first-not-elapsed)` rule applies on advance, so a late
+  review never produces an already-overdue card.
+- **Retirement** — advancing past the final stage sets `next_due_at = NULL` and
+  the doc stops surfacing. A corpus mostly older than 120 days therefore surfaces
+  once and then quiets down; re-enrolling retired docs would be a separate
+  evergreen-rotation feature, not a wider stage list.
+- **Card content** — the card reuses the doc's own frontmatter `summary` (the
+  closing summary written to frontmatter and the `## 总结` section at ingest), so
+  the review layer makes **no LLM call** and stores no generated text. A
+  hand-created doc with no `summary` falls back to its first body paragraph.
+- **Reconciliation** — `paca knowledge review` walks the wiki, enrolls
+  unknown docs (seeded per the curve), and unenrolls docs whose files are gone.
+  It refuses to act on a missing or empty wiki rather than reading "no files" as
+  "everything deleted". `captured_at` is resolved from frontmatter with the same
+  `captured_at` → `updated_at` → `created_at` → mtime precedence the dashboard
+  wiki view uses.
+
+Delivery is a section at the top of `/knowledge` (above the ingest form), capped
+at five cards longest-overdue first with a remainder count. Clicking a card opens
+the doc's full text in the page's preview pane and scrolls to it (`#doc-preview`),
+so a review is a re-read of the source, not just a reminder — opening never
+advances the stage. "Seen" is a POST server action that advances the stage
+in-request (a GET could let a prefetch advance the curve); the refresh control
+spawns the `--sync` job detached, since reconciliation plus recall generation is
+LLM work.
+
 ## Invariants
 
+- Review state lives entirely in `knowledge_reviews`; the review layer never
+  writes a wiki markdown file, including frontmatter. `doc_path` (the
+  wiki-relative path) is the identity, kept consistent with the filesystem by
+  reconciliation rather than a foreign key.
 - A GBrain ingest failure must never lose the artifact: the clean wiki and raw
   files stay on disk and the workflow fails loud. The run is not marked
   successful; once GBrain is fixed, direct ingest or the weekly sync backfills the
@@ -173,11 +220,14 @@ Obsidian Git plugin (every 30 min)
 ## Specs and status
 
 Specs: [`openspec/specs/knowledge-pipeline/`](../../openspec/specs/knowledge-pipeline/),
-`knowledge-search-tool`, `knowledge-reindex`, `dashboard-knowledge-ingest`.
+`knowledge-search-tool`, `knowledge-reindex`, `knowledge-review`,
+`dashboard-knowledge-ingest`, `dashboard-knowledge-review`.
 
 Current status: the artifact pipeline, GBrain ingest/search, the weekly
-re-ingest workflow baseline, the `paca doctor` GBrain health check, and the
-redesigned dashboard `/knowledge` page are all in place. The dashboard provides
+re-ingest workflow baseline, the `paca doctor` GBrain health check, the
+spaced-repetition review layer (`knowledge_reviews` table, the fixed
+Ebbinghaus curve, `paca knowledge review`, and the `/knowledge` review section),
+and the redesigned dashboard `/knowledge` page are all in place. The dashboard provides
 the wiki tree, ANN search, a preview pane, and a `Re-index` trigger; interface
 copy goes through dashboard i18n (defaults to English, switchable to Chinese),
 while wiki document content itself is never translated.

@@ -17,7 +17,7 @@
 | 路由 | 功能 | 详细行为见 |
 |---|---|---|
 | `/radar` | info-radar 阅读器：今日 tracker、过滤排序、Pull + Analyze（带实时进度）、区间 Recap 面板、单条 Ingest to wiki | [info_filter.md](./info_filter.md)、dashboard/README |
-| `/knowledge` | wiki tree + 文件管理、ANN search、预览、Re-index、URL 入库表单 + 实时进度面板 | [knowledge.md](./knowledge.md) |
+| `/knowledge` | 间隔重复回顾区块（到期卡片 + Seen / Refresh）、wiki tree + 文件管理、ANN search、预览、Re-index、URL 入库表单 + 实时进度面板 | [knowledge.md](./knowledge.md) |
 | `/goals` | 编辑 `configs/info_radar/goals.yaml`（镜像 Python loader 契约，原子写） | dashboard/README |
 | `/subscriptions` | Folo 订阅只读盘点 | dashboard/README |
 
@@ -61,14 +61,16 @@ dashboard/
   渲染（`components/nav.tsx`），部署出去的 dashboard 看不到；路由本身没拦，任何 build
   下直接访问 `/design` 都能打开。新增 token 或 UI primitive 时同一个 change 里补进这页——
   下一个 agent 靠它发现已有件，而不是另造一个按钮。
-- `/knowledge` 的 re-index 用 POST，不要 GET query。
+- `/knowledge` 的 re-index 用 POST，不要 GET query。回顾的 "Seen" 控件同样是 POST server
+  action，在请求内推进曲线——GET 会让 prefetch 推进它；回顾区块本身在渲染时绝不写状态
+  （入列只经 detached 的 `--sync` 刷新发生）。
 - server action 里解析的路径要过穿越校验（见 `lib/actions/knowledge.ts` 先例）。
 
 ## 规范与状态
 
 规范：[`openspec/specs/dashboard-shell/`](../../../openspec/specs/dashboard-shell/)、
-`dashboard-radar-reader`、`dashboard-knowledge-ingest`、`dashboard-goals`、
-`dashboard-folo-subscriptions`。
+`dashboard-radar-reader`、`dashboard-knowledge-ingest`、`dashboard-knowledge-review`、
+`dashboard-goals`、`dashboard-folo-subscriptions`。
 
 当前状态：四个页面族全部就位；`pnpm test` 跑 `lib/` 聚焦测试（wiki / taxonomy /
 goals / radar-ingest），`pnpm typecheck` 全绿。
