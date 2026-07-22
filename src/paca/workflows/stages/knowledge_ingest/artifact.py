@@ -34,6 +34,10 @@ class KnowledgeArtifact:
     category: str
 
     title: str = ""
+    # The original, pre-LLM source title, captured before the frontmatter agent
+    # replaces `title` with a localized one. Preserved in frontmatter and used to
+    # derive the wiki slug so the same source keeps a stable identity across locales.
+    source_title: str | None = None
     markdown: str = ""
     raw_path: Path | None = None
     assets_dir: Path | None = None
@@ -54,6 +58,7 @@ class KnowledgeArtifact:
             "created_at": self.created_at,
             "category": self.category,
             "title": self.title,
+            "source_title": self.source_title,
             "markdown": self.markdown,
             "raw_path": str(self.raw_path) if self.raw_path is not None else None,
             "assets_dir": str(self.assets_dir) if self.assets_dir is not None else None,

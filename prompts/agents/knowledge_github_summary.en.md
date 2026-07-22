@@ -25,14 +25,14 @@ Output schema:
 
 ### title
 
-Use the repo's owner/repo identifier as-is (e.g. `astral-sh/uv`). The wiki filename
-is derived from this; do not invent a Chinese title or marketing tagline.
+Use the repo's owner/repo identifier as-is (e.g. `astral-sh/uv`). Do not invent a
+title or marketing tagline.
 
 ### summary
 
-A single text field organized around FOUR perspectives, in this order, as one cohesive
-block. The reader should be able to decide in 15 seconds whether this repo is worth
-revisiting. 150–300 English words or 250–500 Chinese characters total.
+A single English text field organized around FOUR perspectives, in this order, as one
+cohesive block. The reader should be able to decide in 15 seconds whether this repo is
+worth revisiting. 150–300 English words total.
 
 1. **Does** — one sentence on what the repo does. Concrete, no hype.
 2. **Value** — why bookmark it: the unique angle, the pain it solves, how it differs
@@ -55,9 +55,9 @@ Format the four perspectives as a cohesive paragraph or short block; do not just
 output four labeled lines. The structure should be readable as prose first,
 parseable as four perspectives second. `summary` must never be empty.
 
-Write the summary in Simplified Chinese when the user's wiki is Chinese-leaning;
-default to English for repos with English-only content. Preserve technical terms
-and proper nouns (e.g. token, ViT, MoE, DeepSeek, Kubernetes, Postgres) unchanged.
+Write the summary in English, regardless of the language of the packet. Preserve
+technical terms and proper nouns (e.g. token, ViT, MoE, DeepSeek, Kubernetes,
+Postgres) unchanged.
 
 ### tags
 

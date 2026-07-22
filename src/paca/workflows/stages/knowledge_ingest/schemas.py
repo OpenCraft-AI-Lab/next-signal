@@ -82,6 +82,22 @@ class FrontmatterDraft(BaseModel):
         }
 
 
+class TagLabel(BaseModel):
+    """Output contract for the knowledge_tag_translator agent."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    label: str
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def _clean_label(cls, value: Any) -> str:
+        text = str(value or "").strip().lstrip("#").strip()
+        if not text:
+            raise ValueError("label must not be empty")
+        return text
+
+
 def category_model(valid_paths: list[str]) -> type[BaseModel]:
     """Build the knowledge_classifier output schema for the current taxonomy.
 

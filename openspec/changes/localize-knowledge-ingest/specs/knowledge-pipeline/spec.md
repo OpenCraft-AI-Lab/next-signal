@@ -62,7 +62,7 @@ The CLI command `paca knowledge ingest <url|file>` SHALL detect the source type 
 
 ### Requirement: Artifacts record their locale and preserve the source title
 
-Each ingested artifact SHALL record a `locale` frontmatter field (the request locale, `zh` | `en`) identifying the language its generated content was produced in, and a `source_title` frontmatter field preserving the pre-LLM source title. The wiki filename / slug SHALL derive from `source_title`, NOT from the localized `title`, so the same source ingested under different locales keeps a stable slug and GBrain identity. `FrontmatterDraft` SHALL carry `source_title`.
+Each ingested artifact SHALL record a `locale` frontmatter field (the request locale, `zh` | `en`) identifying the language its generated content was produced in, and a `source_title` frontmatter field preserving the pre-LLM source title. The wiki filename / slug SHALL derive from `source_title`, NOT from the localized `title`, so the same source ingested under different locales keeps a stable slug and GBrain identity. The pre-LLM source title SHALL be captured on the `KnowledgeArtifact` (before the frontmatter agent replaces `title`); it is NOT a `FrontmatterDraft` field, because the LLM must not echo the source title back.
 
 #### Scenario: locale and source title are persisted
 

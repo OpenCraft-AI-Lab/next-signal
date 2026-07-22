@@ -48,6 +48,23 @@ def test_knowledge_frontmatter_loads_as_db_free_agent() -> None:
     assert "Return JSON only" in cfg.resolved_instructions()
 
 
+def test_knowledge_frontmatter_has_locale_variants() -> None:
+    cfg = config.load_agent("knowledge_frontmatter")
+    zh = cfg.resolved_instructions("zh")
+    en = cfg.resolved_instructions("en")
+    assert zh != en
+    assert "简体中文" in zh
+    assert "in English" in en
+
+
+def test_knowledge_tag_translator_loads_with_locale_variants() -> None:
+    cfg = config.load_agent("knowledge_tag_translator")
+    assert cfg.name == "knowledge_tag_translator"
+    assert cfg.model_profile == "local_structured"
+    assert cfg.extra["db"] is False
+    assert cfg.resolved_instructions("zh") != cfg.resolved_instructions("en")
+
+
 def test_workflow_yaml_loads_with_exposure() -> None:
     cfg = config.load_workflow("knowledge_ingest")
     assert cfg.name == "knowledge_ingest"

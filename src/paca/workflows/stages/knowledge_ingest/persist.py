@@ -24,6 +24,7 @@ from paca.workflows.stages.knowledge_ingest.related_section import (
     resolve_slugs_to_wiki_paths,
     write_related_section,
 )
+from paca.workflows.stages.knowledge_ingest.tag_labels import ensure_tag_labels
 from paca.workflows.stages.knowledge_ingest.taxonomy import load_taxonomy
 
 
@@ -37,9 +38,12 @@ def persist(
     artifact_edit = artifact.artifact_edit
 
     body = _append_summary_section(
-        artifact.markdown, str(artifact_edit.get("summary") or "").strip(), locale
+        artifact.markdown, str(artifact_edit.get("summary") or "").strip()
     )
-    artifact_slug = _artifact_slug(artifact.title, artifact.source_type, artifact.digest)
+    # Slug from the ORIGINAL source title (not the localized `title`) so the same
+    # source keeps a stable wiki/GBrain identity across locales.
+    slug_title = artifact.source_title or artifact.title
+    artifact_slug = _artifact_slug(slug_title, artifact.source_type, artifact.digest)
     category_dir = paths.WIKI_DIR / artifact.category
     # Title-derived slugs can collide across DIFFERENT sources (same title,
     # different article). Re-ingesting the SAME source must keep overwriting
@@ -55,7 +59,7 @@ def persist(
     else:
         clean_path = category_dir / f"{artifact_slug}.md"
     gbrain_slug = _gbrain_slug(clean_path)
-    frontmatter = _build_frontmatter(artifact, artifact_edit)
+    frontmatter = _build_frontmatter(artifact, artifact_edit, locale)
 
     clean_path.parent.mkdir(parents=True, exist_ok=True)
     if artifact.assets_dir is not None and artifact.assets_dir.is_dir():
@@ -64,6 +68,10 @@ def persist(
     artifact.markdown = body
     artifact.clean_path = clean_path
     artifact.frontmatter = frontmatter
+
+    # Best-effort: ensure a localized display alias exists for each tag key so the
+    # dashboard can render tags in the artifact's locale. Never fails the ingest.
+    ensure_tag_labels(list(artifact_edit.get("tags") or []), locale)
 
     if ingest:
         artifact.ingest_result = gbrain_ingest(str(clean_path), slug=gbrain_slug)
@@ -128,7 +136,7 @@ def _same_source(existing_path, artifact: KnowledgeArtifact) -> bool:
 
 
 def _build_frontmatter(
-    artifact: KnowledgeArtifact, artifact_edit: dict[str, Any]
+    artifact: KnowledgeArtifact, artifact_edit: dict[str, Any], locale: str
 ) -> dict[str, Any]:
     source_url = artifact.value if urlparse(artifact.value).scheme in {"http", "https"} else None
     captured_at = artifact.metadata.get("captured_at") or artifact.created_at
@@ -136,17 +144,25 @@ def _build_frontmatter(
     freshness = _resolve_freshness(artifact, taxonomy)
     return {
         "title": artifact.title or f"{artifact.source_type}-{artifact.digest}",
+        "source_title": artifact.source_title,
         "source_type": artifact.source_type,
         "source_url": source_url,
         "digest": artifact.digest,
         "raw_path": str(artifact.raw_path) if artifact.raw_path else None,
         "created_at": artifact.created_at,
         "captured_at": captured_at,
+        # Generation language of the LLM content (title/summary). The dashboard
+        # keys every per-item chrome label off this, so each item renders whole
+        # in its own language regardless of the viewer's UI locale.
+        "locale": locale,
         "summary": artifact_edit["summary"],
         "tags": artifact_edit["tags"],
         "freshness": freshness,
         "review_by": _review_by(freshness, captured_at, taxonomy),
         "status": "clean",
+        # Provenance (source_url / published / author) seeded from a staging
+        # sidecar flows through here; a metadata source_url overrides the
+        # URL-derived one above (staged inputs are file paths, not the URL).
         **{k: v for k, v in artifact.metadata.items() if _keep_metadata(k, v)},
     }
 
@@ -184,16 +200,14 @@ def _render(frontmatter: dict[str, Any], markdown: str) -> str:
     return f"---\n{yaml_text}\n---\n\n{markdown.strip()}\n"
 
 
-_SUMMARY_HEADINGS = {"zh": "总结", "en": "Summary"}
-
-
-def _append_summary_section(markdown: str, summary: str, locale: str = DEFAULT_LOCALE) -> str:
-    # Match either language so a re-ingest (possibly in the other locale) or a
-    # source that already carries a summary heading never double-appends.
+def _append_summary_section(markdown: str, summary: str) -> str:
+    # Canonical English heading in the stored file; the dashboard localizes it at
+    # render by the artifact's `locale`. The dedup guard matches either language so
+    # a re-ingest (or a source that already carries a summary heading, including a
+    # historical `## 总结`) never double-appends.
     if not summary or re.search(r"(?m)^##\s+(?:总结|Summary)\s*$", markdown):
         return markdown
-    heading = _SUMMARY_HEADINGS.get(locale, _SUMMARY_HEADINGS[DEFAULT_LOCALE])
-    return f"{markdown.rstrip()}\n\n## {heading}\n\n{summary}"
+    return f"{markdown.rstrip()}\n\n## Summary\n\n{summary}"
 
 
 def _artifact_slug(title: str, source_type: str, digest: str) -> str:

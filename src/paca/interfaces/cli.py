@@ -331,7 +331,9 @@ def knowledge_ingest_cmd(
         False, help="Emit one JSON event per pipeline step to stdout (JSONL)."
     ),
     locale: str = typer.Option(
-        "en", "--locale", help="Language of generated structural headings: zh or en."
+        "en",
+        "--locale",
+        help="Language of generated content (title/summary) and the recorded locale: zh or en.",
     ),
 ) -> None:
     """Ingest one URL or file as a durable markdown artifact."""

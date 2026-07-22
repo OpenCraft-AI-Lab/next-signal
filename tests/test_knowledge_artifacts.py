@@ -69,7 +69,9 @@ def _stub_editor(
                 )
             )
 
-    monkeypatch.setattr(artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name))
+    monkeypatch.setattr(
+        artifact_editor_mod, "build_from_name", lambda name, locale=None: FakeAgent(name)
+    )
 
 
 def _frontmatter(path: str) -> dict:
@@ -127,7 +129,11 @@ def test_ingest_markdown_file_writes_clean_and_raw(wiki_paths, monkeypatch) -> N
     assert "## Summary\n\na dense factual summary." in text
 
 
-def test_ingest_markdown_file_uses_editor_title_for_filename(wiki_paths, monkeypatch) -> None:
+def test_ingest_slug_from_source_title_not_localized_title(wiki_paths, monkeypatch) -> None:
+    # The wiki filename derives from the ORIGINAL source title (locale-stable), NOT
+    # the editor's localized `title`. Both land in frontmatter: `title` localized,
+    # `source_title` the preserved original — so the same source keeps one file
+    # across locales.
     _stub_editor(monkeypatch, title="OMLX 使用笔记")
     source = paths.AGENT_TMP_DIR / "note.md"
     source.parent.mkdir(parents=True)
@@ -135,8 +141,39 @@ def test_ingest_markdown_file_uses_editor_title_for_filename(wiki_paths, monkeyp
 
     result = ingest_one(str(source), ingest=False)
 
-    assert Path(result["markdown_path"]).name == "OMLX 使用笔记.md"
-    assert _frontmatter(result["markdown_path"])["title"] == "OMLX 使用笔记"
+    assert Path(result["markdown_path"]).name == "note.md"
+    fm = _frontmatter(result["markdown_path"])
+    assert fm["title"] == "OMLX 使用笔记"
+    assert fm["source_title"] == "note"
+
+
+def test_sidecar_seeds_provenance_metadata(tmp_path) -> None:
+    from paca.workflows.stages.knowledge_ingest.artifact import KnowledgeArtifact
+    from paca.workflows.stages.knowledge_ingest.fetch import _apply_sidecar_metadata
+
+    staged = tmp_path / "radar-1-abc.html"
+    staged.write_text("<html></html>", encoding="utf-8")
+    (tmp_path / "radar-1-abc.meta.json").write_text(
+        json.dumps(
+            {
+                "source_url": "https://example.com/a",
+                "author": "Jane",
+                "published": "2026-01-01",
+            }
+        ),
+        encoding="utf-8",
+    )
+    artifact = KnowledgeArtifact(
+        value=str(staged),
+        source_type="markitdown",
+        digest="d",
+        created_at="t",
+        category="temp-inbox",
+    )
+    _apply_sidecar_metadata(artifact, str(staged))
+    assert artifact.metadata["source_url"] == "https://example.com/a"
+    assert artifact.metadata["author"] == "Jane"
+    assert artifact.metadata["published"] == "2026-01-01"
 
 
 def test_ingest_local_file_rejects_paths_outside_agent_tmp(wiki_paths) -> None:

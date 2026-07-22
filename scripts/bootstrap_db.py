@@ -137,6 +137,19 @@ CREATE INDEX IF NOT EXISTS knowledge_reviews_due_idx
     WHERE next_due_at IS NOT NULL;
 """
 
+# Display-alias translation memory: maps a canonical English tag key to its
+# localized display label per locale. Populated once per unique (tag, locale) at
+# ingest, read at render. A business table (short-lived psycopg connections).
+CREATE_KNOWLEDGE_TAG_LABELS = """
+CREATE TABLE IF NOT EXISTS knowledge_tag_labels (
+    tag         TEXT NOT NULL,
+    locale      TEXT NOT NULL,             -- 'zh' | 'en'
+    label       TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tag, locale)
+);
+"""
+
 # Idempotent migration for deployments whose radar_analyses predates the
 # `locale` column (CREATE TABLE IF NOT EXISTS won't alter an existing table).
 # Backfill legacy rows to 'zh' — historically all analyses were Chinese.
@@ -175,6 +188,7 @@ def main() -> int:
             cur.execute(MIGRATE_RADAR_ANALYSES_DISPLAY_TITLE)
             cur.execute(CREATE_RADAR_RECAPS)
             cur.execute(CREATE_KNOWLEDGE_REVIEWS)
+            cur.execute(CREATE_KNOWLEDGE_TAG_LABELS)
 
     print(f"bootstrap complete on {db_name}")
     return 0

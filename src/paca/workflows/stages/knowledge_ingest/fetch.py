@@ -202,8 +202,34 @@ def fetch(value: str, *, category: str) -> KnowledgeArtifact:
     category = validate_category(category)
     source_type = detect_source_type(value)
     artifact = _FETCHERS[source_type](value, category=category)
+    _apply_sidecar_metadata(artifact, value)
     artifact.markdown = _normalize_spacing(artifact.markdown)
     return artifact
+
+
+def _apply_sidecar_metadata(artifact: KnowledgeArtifact, value: str) -> None:
+    """Seed provenance from a staged ``<stem>.meta.json`` sidecar, if present.
+
+    The dashboard's radar "Ingest to wiki" staging writes source_url / published /
+    author next to the staged HTML (structured data) instead of baking an English
+    label block into the body. Best-effort: a missing / malformed sidecar is
+    ignored, and an existing metadata key is never overwritten.
+    """
+    if _is_url(value):
+        return
+    sidecar = Path(value).expanduser().with_suffix(".meta.json")
+    if not sidecar.is_file():
+        return
+    try:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(data, dict):
+        return
+    for key in ("source_url", "published", "author"):
+        val = data.get(key)
+        if val and not artifact.metadata.get(key):
+            artifact.metadata[key] = str(val)
 
 
 def _normalize_spacing(markdown: str) -> str:

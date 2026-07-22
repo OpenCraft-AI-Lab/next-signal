@@ -297,7 +297,7 @@ def clean_step(inp: StepInput) -> StepOutput:
 
 
 def enrich_step(inp: StepInput) -> StepOutput:
-    return StepOutput(content=write_frontmatter(_artifact_from(inp)))
+    return StepOutput(content=write_frontmatter(_artifact_from(inp), locale=_locale(inp)))
 
 
 def classify_step(inp: StepInput) -> StepOutput:
