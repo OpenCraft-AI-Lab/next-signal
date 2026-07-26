@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-import { RadarAlpaca } from "@/components/brand/radar-alpaca";
+import { RadarEmblem } from "@/components/brand/radar-mark";
 import { DayGroup } from "@/components/radar/day-group";
 import { FilterBar } from "@/components/radar/filter-bar";
 import { MarkdownText } from "@/components/radar/markdown-text";
@@ -128,7 +128,7 @@ export default async function RadarPage({
           }}
         >
           <div className="row gap-16" style={{ alignItems: "center" }}>
-            <RadarAlpaca size={72} />
+            <RadarEmblem size={72} />
             <div>
               <h1 className="page-title">
                 {t.radar.title}{" "}

@@ -6,7 +6,7 @@ Provide the local dashboard reader for `info-radar`: browse kept analysis output
 ## Requirements
 ### Requirement: Radar index page
 
-The dashboard SHALL render `/radar` showing analyzed `radar_items` grouped by `analyzed_at::date`, with today's group expanded by default and prior days collapsed. The page hero SHALL render `<RadarAlpaca />` (from foundation's `dashboard/components/brand/`) alongside the page title and a "N kept" subtitle.
+The dashboard SHALL render `/radar` showing analyzed `radar_items` grouped by `analyzed_at::date`, with today's group expanded by default and prior days collapsed. The page hero SHALL render `<RadarEmblem />` (from foundation's `dashboard/components/brand/radar-mark.tsx`) alongside the page title and a "N kept" subtitle.
 
 #### Scenario: today's items appear at the top
 
@@ -22,6 +22,11 @@ The dashboard SHALL render `/radar` showing analyzed `radar_items` grouped by `a
 
 - **WHEN** the operator visits `/radar`
 - **THEN** rows where `verdict = 'drop'` are NOT shown in either today's section or any past-day section — they only contribute to the tracker counters
+
+#### Scenario: the hero emblem is the radar mark
+
+- **WHEN** the operator visits `/radar`
+- **THEN** the hero renders the 72px `RadarEmblem` with its sweep running, and no alpaca mark appears anywhere on the page
 
 ### Requirement: Today's run tracker
 

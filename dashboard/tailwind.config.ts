@@ -38,6 +38,15 @@ const config: Config = {
         red: "var(--red)",
         amber: "var(--amber)",
         purple: "var(--purple)",
+        "brand-spark-radar": "var(--brand-spark-radar)",
+        "brand-spark-kb": "var(--brand-spark-kb)",
+      },
+      // the brand tile gradients are gradients, not colours — they belong to
+      // background-image so `bg-brand-grad-signal` resolves
+      backgroundImage: {
+        "brand-grad-signal": "var(--brand-grad-signal)",
+        "brand-grad-radar": "var(--brand-grad-radar)",
+        "brand-grad-kb": "var(--brand-grad-kb)",
       },
       fontFamily: {
         sans: ["var(--font-sans)"],

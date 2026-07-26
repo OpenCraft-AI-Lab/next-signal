@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- Vanguard mark on the signal gradient. Colours are baked: a favicon is
+       rasterised outside the document and cannot read CSS variables, so this
+       is the one brand asset that does not follow the theme tokens.
+       Geometry is the `nav` tier, which is the tier authored for 16px. -->
+  <defs>
+    <linearGradient id="signalGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8b3ce0"/>
+      <stop offset="100%" stop-color="#5b1d9c"/>
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#signalGrad)"/>
+  <g transform="translate(4 4)">
+    <g fill="none" stroke="#ffffff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 11 L14 11 L14 18" opacity="0.5"/>
+      <path d="M12 4.8 L20 4.8 L20 12.8"/>
+    </g>
+    <circle cx="5.6" cy="18.6" r="2.7" fill="#ffffff"/>
+  </g>
+</svg>

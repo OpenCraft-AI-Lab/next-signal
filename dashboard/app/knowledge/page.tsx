@@ -1,3 +1,4 @@
+import { KnowledgeEmblem } from "@/components/brand/knowledge-mark";
 import { ActiveIngests } from "@/components/knowledge/active-ingests";
 import { IngestForm } from "@/components/knowledge/ingest-form";
 import { ReindexButton } from "@/components/knowledge/reindex-button";
@@ -52,13 +53,16 @@ export default async function KnowledgePage({
           className="row"
           style={{
             justifyContent: "space-between",
-            alignItems: "flex-end",
+            alignItems: "center",
             marginBottom: 18,
           }}
         >
-          <div>
-            <h1 className="page-title">{t.knowledge.title}</h1>
-            <p className="page-sub">{t.knowledge.subtitle}</p>
+          <div className="row gap-16" style={{ alignItems: "center" }}>
+            <KnowledgeEmblem size={72} />
+            <div>
+              <h1 className="page-title">{t.knowledge.title}</h1>
+              <p className="page-sub">{t.knowledge.subtitle}</p>
+            </div>
           </div>
           <ReindexButton />
         </div>

@@ -3,8 +3,9 @@
 import { Check, ExternalLink, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-import { Alpaca } from "@/components/brand/alpaca";
-import { RadarAlpaca } from "@/components/brand/radar-alpaca";
+import { KnowledgeEmblem, KnowledgeMark } from "@/components/brand/knowledge-mark";
+import { RadarEmblem, RadarMark } from "@/components/brand/radar-mark";
+import { SignalEmblem, SignalMark } from "@/components/brand/signal-mark";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -174,6 +175,25 @@ function Tokens() {
           </div>
         </Card>
       </div>
+
+      <Card pad>
+        <div className="sec-head">
+          <h2 className="sec-title">Brand</h2>
+          <span className="sec-sub">
+            mark sparks &amp; badge gradients · independent of the semantic ramp
+          </span>
+        </div>
+        <div className="dsgrid">
+          <Swatch varName="--brand-spark-radar" label="radar spark · the catch" />
+          <Swatch varName="--brand-spark-kb" label="kb spark · the index" />
+        </div>
+        <hr className="hr" style={{ margin: "18px 0 14px" }} />
+        <div className="dsgrid">
+          <Swatch varName="--brand-grad-signal" label="next-signal tile" />
+          <Swatch varName="--brand-grad-radar" label="info-radar tile" />
+          <Swatch varName="--brand-grad-kb" label="knowledge-base tile" />
+        </div>
+      </Card>
 
       <Card pad>
         <div className="sec-head">
@@ -469,6 +489,30 @@ function Components() {
           </div>
         </Card>
       </div>
+
+      <Card pad>
+        <div className="sec-head">
+          <h2 className="sec-title">Menu surface</h2>
+          <span className="sec-sub">
+            popover panel · `bg-elevated` + `shadow-menu` + `data-[highlighted]:bg-hover`
+          </span>
+        </div>
+        {/* Static replica of the language picker's panel. It is a composition of
+            existing token utilities rather than a components/ui primitive, so
+            this is the only place the next person can see the recipe. */}
+        <div className="row gap-16" style={{ alignItems: "flex-start" }}>
+          <div className="min-w-[8.5rem] overflow-hidden rounded-lg bg-elevated p-1 shadow-menu">
+            <div className="flex items-center justify-between gap-4 rounded-md bg-hover px-2.5 py-1.5 text-[13.5px] text-text">
+              English
+              <Check size={13} className="text-accent" />
+            </div>
+            <div className="flex items-center justify-between gap-4 rounded-md px-2.5 py-1.5 text-[13.5px] text-text">
+              中文
+            </div>
+          </div>
+          <Spec>used by LanguageToggle (Radix Select)</Spec>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -598,55 +642,95 @@ function MarkCell({
   );
 }
 
+/** One family, shown at every tier it ships. */
+function BrandFamily({
+  name,
+  field,
+  emblem,
+  icon,
+  nav,
+  gradient,
+  badge,
+}: {
+  name: string;
+  field: string;
+  emblem: React.ReactNode;
+  icon: React.ReactNode;
+  nav: React.ReactNode;
+  gradient: string;
+  badge: React.ReactNode;
+}) {
+  return (
+    <Card pad>
+      <div className="sec-head">
+        <h2 className="sec-title">{name}</h2>
+        <span className="sec-sub">{field}</span>
+      </div>
+      <div className="markgrid">
+        <MarkCell label="Emblem" sub="64–192px · animated · transparent">
+          {emblem}
+        </MarkCell>
+        <MarkCell label="Icon" sub="24–48px · full detail">
+          {icon}
+        </MarkCell>
+        <MarkCell label="Nav" sub="15–20px · reduced detail">
+          {nav}
+        </MarkCell>
+        <MarkCell label="Badge" sub="icon tier on the brand gradient">
+          <span
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: 14,
+              background: gradient,
+              color: "#fff",
+              display: "grid",
+              placeItems: "center",
+              boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.15)",
+            }}
+          >
+            {badge}
+          </span>
+        </MarkCell>
+      </div>
+    </Card>
+  );
+}
+
 function Brand() {
-  // Per D8: ship only the production marks. No multi-variant grid here.
+  // /design is the only regression net for the marks — every family is shown at
+  // every tier here so a broken one is visible somewhere.
   return (
     <div className="col gap-16">
-      <Card pad>
-        <div className="sec-head">
-          <h2 className="sec-title">Alpaca glyph</h2>
-          <span className="sec-sub">production mark · inherits accent</span>
-        </div>
-        <div className="markgrid">
-          <MarkCell label="A · Geometric" sub="current · filled">
-            <Alpaca size={50} color="var(--accent)" eye="var(--bg-inset)" />
-          </MarkCell>
-        </div>
-        <hr className="hr" style={{ margin: "18px 0 14px" }} />
-        <div
-          className="row"
-          style={{
-            justifyContent: "space-between",
-            alignItems: "flex-end",
-            flexWrap: "wrap",
-            gap: 16,
-          }}
-        >
-          <div className="row gap-16" style={{ alignItems: "flex-end" }}>
-            {[16, 20, 24, 32, 44].map((s) => (
-              <div key={s} className="col" style={{ alignItems: "center", gap: 7 }}>
-                <Alpaca size={s} color="var(--text)" eye="var(--bg)" />
-                <Spec>{s}px</Spec>
-              </div>
-            ))}
-          </div>
-          <span className="mono" style={{ fontSize: 11, color: "var(--text-4)" }}>
-            geometric glyph · size ramp
-          </span>
-        </div>
-      </Card>
+      <BrandFamily
+        name="next-signal"
+        field="linear field · parent mark"
+        gradient="var(--brand-grad-signal)"
+        emblem={<SignalEmblem size={88} />}
+        icon={<SignalMark size={44} color="var(--accent)" />}
+        nav={<SignalMark size={18} variant="nav" color="var(--text)" />}
+        badge={<SignalMark size={32} />}
+      />
 
-      <Card pad>
-        <div className="sec-head">
-          <h2 className="sec-title">Radar emblem</h2>
-          <span className="sec-sub">production mark · animated sweep</span>
-        </div>
-        <div className="markgrid">
-          <MarkCell label="Sweep" sub="animated radar + centered alpaca">
-            <RadarAlpaca size={88} />
-          </MarkCell>
-        </div>
-      </Card>
+      <BrandFamily
+        name="info-radar"
+        field="polar field · module mark"
+        gradient="var(--brand-grad-radar)"
+        emblem={<RadarEmblem size={88} gradientId="dsRadarFamily" />}
+        icon={<RadarMark size={44} color="var(--accent)" />}
+        nav={<RadarMark size={18} variant="nav" color="var(--text)" />}
+        badge={<RadarMark size={32} spark="#7bf4ff" />}
+      />
+
+      <BrandFamily
+        name="knowledge-base"
+        field="network field · module mark"
+        gradient="var(--brand-grad-kb)"
+        emblem={<KnowledgeEmblem size={88} />}
+        icon={<KnowledgeMark size={44} color="var(--accent)" />}
+        nav={<KnowledgeMark size={18} variant="nav" color="var(--text)" spark="currentColor" />}
+        badge={<KnowledgeMark size={32} spark="#ffb4e6" />}
+      />
 
       <Card pad>
         <div className="sec-head">
@@ -660,8 +744,8 @@ function Brand() {
           <Button>
             <ExternalLink size={14} /> Open
           </Button>
-          <RadarAlpaca size={56} />
-          <Badge kind="accent">paca</Badge>
+          <RadarEmblem size={56} gradientId="dsRadarInContext" />
+          <Badge kind="accent">next-signal</Badge>
         </div>
       </Card>
     </div>

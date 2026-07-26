@@ -82,6 +82,42 @@ dashboard. The route itself is not blocked — `/design` still resolves in any
 build if you navigate to it directly, which is the escape hatch for inspecting a
 production build.
 
+### Brand marks
+
+Three families live under [`components/brand/`](./components/brand/), all built
+from one atom — a node — plus one connective form each:
+
+| Family | Module | Field | Connective form |
+| --- | --- | --- | --- |
+| next-signal (parent) | `signal-mark.tsx` | linear | chevron |
+| info-radar | `radar-mark.tsx` | polar | wedge |
+| knowledge-base | `knowledge-mark.tsx` | network | link |
+
+Each module exports a flat **mark** and an animated **emblem**. Detail is a
+function of size, and the tier is an explicit prop — never inferred from `size`:
+
+```tsx
+<RadarMark size={44} />                  // icon tier: rings, crosshairs, wedge, blip
+<RadarMark size={16} variant="nav" />    // nav tier: ring, wedge, core
+<RadarEmblem size={72} />                // emblem: + bearing ticks, sweep, 3 blips
+```
+
+Violet (`--accent`) carries structure in all three. Each module mark spends
+exactly one secondary colour on the element that *is* its job — the caught blip,
+the index hub — from `--brand-spark-radar` / `--brand-spark-kb`. Those are
+independent of the semantic verdict ramp on purpose: brand hue and status hue
+must stay separately changeable.
+
+Emblems are transparent, take every colour from tokens (so one asset serves both
+themes), and stay server components — motion comes from the `.brand-*` hooks in
+`app/globals.css`, where each radar blip's delay is *derived* from its bearing
+(`t = (bearing - 45) / 90`) rather than hand-tuned. Every emblem also has a
+composed still under `prefers-reduced-motion: reduce`.
+
+The one exception to token colouring is [`app/icon.svg`](./app/icon.svg), the
+favicon: it is rasterised outside the document and cannot read CSS variables, so
+its colours are baked.
+
 ### Consuming a design mock
 
 New pages usually start from a Claude Design mock (an HTML/JSX prototype).
@@ -102,9 +138,13 @@ point at those, never at a mock file.
 
 ## UI language
 
-Dashboard UI chrome defaults to **English** and can be switched to Chinese from
-the nav language button. The selected locale is stored in the `paca_locale`
-cookie (`en` / `zh`), and `app/layout.tsx` sets the matching document `lang`.
+Dashboard UI chrome defaults to **English** and can be switched from the nav
+language picker, whose trigger shows the *current* locale and whose menu lists
+every available one. Locale names there are self-labelled and never translated
+(`English`, `中文`) — the menu has to be readable to someone who cannot read the
+language the UI is currently in. The selected locale is stored in the
+`paca_locale` cookie (`en` / `zh`), and `app/layout.tsx` sets the matching
+document `lang`.
 
 Translations live in [`lib/i18n/dictionaries.ts`](./lib/i18n/dictionaries.ts).
 Only interface copy is localized: labels, buttons, empty states, toasts,

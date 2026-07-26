@@ -77,6 +77,39 @@ design system 的事实源是应用内的 [`/design`](./app/design) 展示路由
 路由本身没有拦截 —— 任何 build 下直接访问 `/design` 都能打开，这是检查生产构建时
 的逃生口。
 
+### 品牌 mark
+
+三个族都在 [`components/brand/`](./components/brand/) 下，全部由同一个原子
+（node）加上各自唯一的连接形态构成：
+
+| 族 | 模块 | 场 | 连接形态 |
+| --- | --- | --- | --- |
+| next-signal（父品牌） | `signal-mark.tsx` | 线性场 | chevron |
+| info-radar | `radar-mark.tsx` | 极坐标场 | wedge |
+| knowledge-base | `knowledge-mark.tsx` | 网络场 | link |
+
+每个模块导出一个扁平 **mark** 和一个带动画的 **emblem**。细节量随尺寸变化，
+而档位是显式 prop —— 绝不从 `size` 推断：
+
+```tsx
+<RadarMark size={44} />                  // icon 档：双环、十字线、扇形、blip
+<RadarMark size={16} variant="nav" />    // nav 档：单环、扇形、核心
+<RadarEmblem size={72} />                // emblem：再加方位刻度、扫描、3 个 blip
+```
+
+紫色（`--accent`）在三个 mark 里都承担结构。每个模块 mark 只花一种次要颜色，
+且只用在「这个模块在干的事」本身上 —— 捕获到的 blip、索引 hub —— 取自
+`--brand-spark-radar` / `--brand-spark-kb`。它们刻意独立于语义 verdict 色阶：
+品牌色和状态色必须能各自独立修改。
+
+emblem 是透明底、颜色全部走 token（所以明暗两套主题共用一份资产），并且保持
+server component —— 动效来自 `app/globals.css` 里的 `.brand-*` 钩子，其中每个
+雷达 blip 的延迟是由方位角**推导**出来的（`t = (bearing - 45) / 90`），不是手调
+的。每个 emblem 在 `prefers-reduced-motion: reduce` 下都有一张构好图的静态帧。
+
+唯一不走 token 的是 [`app/icon.svg`](./app/icon.svg)（favicon）：它在文档之外被
+栅格化，读不到 CSS 变量，所以颜色是写死的。
+
 ### 怎么消化一份 design mock
 
 新页面通常从一份 Claude Design mock（HTML/JSX 原型）开始。把 mock 当作**临时的、
@@ -93,8 +126,10 @@ design system 的事实源是应用内的 [`/design`](./app/design) 展示路由
 
 ## 界面语言
 
-dashboard 的界面文案**默认英文**，可以通过 nav 上的语言按钮切换到中文。选择存在
-`paca_locale` cookie 里（`en` / `zh`），`app/layout.tsx` 会设置对应的文档 `lang`。
+dashboard 的界面文案**默认英文**，通过 nav 上的语言选择器切换：触发器显示**当前**
+语言，菜单列出所有可选语言。菜单里的语言名一律自称、绝不翻译（`English`、`中文`）
+—— 语言菜单必须让读不懂当前界面语言的人也能看懂。选择存在 `paca_locale` cookie 里
+（`en` / `zh`），`app/layout.tsx` 会设置对应的文档 `lang`。
 
 翻译文本在 [`lib/i18n/dictionaries.ts`](./lib/i18n/dictionaries.ts)。**只有界面文案
 被本地化**：标签、按钮、空状态、toast、相对时间和日期显示。用户/数据内容 —— 文章

@@ -21,8 +21,6 @@ export const dictionaries = {
     },
     language: {
       label: "Language",
-      next: "中文",
-      title: "Switch to Chinese",
     },
     theme: {
       toggle: "Toggle theme",
@@ -381,8 +379,6 @@ export const dictionaries = {
     },
     language: {
       label: "语言",
-      next: "EN",
-      title: "切换到英文",
     },
     theme: {
       toggle: "切换主题",

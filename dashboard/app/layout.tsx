@@ -11,7 +11,7 @@ import { getLocale } from "@/lib/i18n/server";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "paca · local dashboard",
+  title: "next-signal · local dashboard",
 };
 
 export default async function RootLayout({
