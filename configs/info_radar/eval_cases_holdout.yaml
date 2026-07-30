@@ -1,0 +1,276 @@
+# info-radar held-out 验证集。由三个互不通气的标注者只依据 goals.yaml 独立标注，
+# 三人一致的 55 条才收录（22 keep / 33 drop）。
+#
+# ⚠️ 绝不用这个集合调优。它唯一的价值是"没被优化过"——一旦对着它改提示词，
+# 它就和 focus / v1 一样失去了证伪能力，而这个项目已经付过一次代价：有一轮
+# 只在调过的集子上验证，四轮从 26/54 涨到 38/60，而这个集合上只有 40%，
+# 生产环境是 75%。要再切一块新数据时，从 radar_items 里抽没标注过的，
+# 并让独立标注者标（禁止读 prompts/ 和已有标注集）。
+
+label_set: holdout
+
+cases:
+  - item: 1
+    bucket: H-holdout
+    expect: keep
+    min: 40
+    max: 60
+    why: 机器人在真干活而非表演后空翻，正是能力落地与人形应用场景的区分证据，但只是展台观感、无客户与部署量。
+  - item: 3
+    bucket: H-holdout
+    expect: keep
+    min: 50
+    max: 70
+    why: 命中 ai_capability_frontier 的推理能力/推理优化主题，但只是 newsletter 对已有方法的教学式综述、无新事件也无独立复现，受经验博客不得 ≥70 的约束。
+  - item: 4
+    bucket: H-holdout
+    expect: drop
+    why: 量子位的朋友们渠道发的滴滴展台公关稿，无能力数据、无产业链或财报证据，四条 goal 全不命中。
+  - item: 5
+    bucket: H-holdout
+    expect: keep
+    min: 50
+    max: 70
+    why: 触觉 grounding 攻的是接触密集操作这个真瓶颈、命中具身智能与机器人传感器，但属公司一手自报、无开源或第三方复现，压在 70 以下。
+  - item: 6
+    bucket: H-holdout
+    expect: drop
+    why: 商汤 SenseNova-U1 Pro 的唯一证据是自产 8K 长卷 demo，无开源权重与第三方 benchmark，命中营销 demo 排除。
+  - item: 7
+    bucket: H-holdout
+    expect: drop
+    why: 搜索自己的历史对话是消费级产品通稿，不含记忆架构或检索能力的任何信息。
+  - item: 8
+    bucket: H-holdout
+    expect: keep
+    min: 60
+    max: 80
+    why: 重复 token 破坏 MoE 路由负载均衡是 ICML'26 同行评审、发布方之外可查的结论，对 MoE serving 直接可用，但只是单篇窄口径失效模式。
+  - item: 9
+    bucket: H-holdout
+    expect: drop
+    why: 入选产业图谱与 Top50 是纯榜单公关，无产品线、订单或能力证据。
+  - item: 10
+    bucket: H-holdout
+    expect: drop
+    why: 大剂量维生素 D 改造肠癌微环境同时命中老药新用与机制发现两条一票否决，且无获批/三期/指南等已发生的临床动作。
+  - item: 12
+    bucket: H-holdout
+    expect: keep
+    min: 45
+    max: 65
+    why: 无人机直连卫星传 token 位于卫星互联网与边缘推理的交叉口、是真实公开演示，但无吞吐、时延、厂商或客户可供验证。
+  - item: 14
+    bucket: H-holdout
+    expect: keep
+    min: 40
+    max: 60
+    why: 五个万卡级国产智算集群命中云算力与国产芯片吸收能力，但将共建属联盟意向，无 capex、芯片供应商与时间表。
+  - item: 15
+    bucket: H-holdout
+    expect: drop
+    why: 行业白皮书式的宏观支出汇总，正是投资 goal 排除的纯 macro 解读与 capex 泛论，出海关键词也不带任何公司或 wedge 信息。
+  - item: 16
+    bucket: H-holdout
+    expect: drop
+    why: 从股东公告反推的 DeepSeek 估值属明文排除的一级估值传闻，无产品线/订单/客户/产能一手证据。
+  - item: 17
+    bucket: H-holdout
+    expect: drop
+    why: WAIC 大佬发言笔记合集属个人观点 takes 中的演讲/访谈排除，奠基者例外不适用于多人语录汇编。
+  - item: 18
+    bucket: H-holdout
+    expect: keep
+    min: 50
+    max: 70
+    why: inference engine 是投资 goal 点名的 AI 软件基础设施，兼容十余种国产芯片是真实 chokepoint 位置，但日吞吐为自报、无客户验证。
+  - item: 19
+    bucket: H-holdout
+    expect: drop
+    why: 平台合作公告加 1.9 亿用户的自报数字是营销，不构成财报或产业链验证。
+  - item: 20
+    bucket: H-holdout
+    expect: drop
+    why: 季度披露改为自愿是市场级规则，未点名任何 AI/机器人/太空公司或供应链环节，不满足投资 goal 的监管边界。
+  - item: 21
+    bucket: H-holdout
+    expect: drop
+    why: 五角大楼高薪招聘属明文排除的招聘动态，且与三条产业链均无关。
+  - item: 22
+    bucket: H-holdout
+    expect: drop
+    why: 快餐客流因食源性疫情下滑不触及任何 goal，也远够不上科学突破的里程碑门槛。
+  - item: 23
+    bucket: H-holdout
+    expect: drop
+    why: 正文是 AICon 深圳的会议推广文案而非 agent 可观测性工作本身，任何 goal 都拿不到可查事件。
+  - item: 27
+    bucket: H-holdout
+    expect: drop
+    why: 单日市值排名之争正是投资 goal 点名不算产业链或财报验证的市值标题。
+  - item: 29
+    bucket: H-holdout
+    expect: drop
+    why: 火山引擎画质增强属厂商产品营销，与 AI 能力、产业链验证、早期机会均无关。
+  - item: 30
+    bucket: H-holdout
+    expect: drop
+    why: 美伊军事升级属地缘政治视角，无具体已发生的监管动作，也未点名公司或供应链环节。
+  - item: 35
+    bucket: H-holdout
+    expect: drop
+    why: WAIC 展台探营式的产品与资本通稿，无 benchmark、订单或客户数据，蚂蚁也远超早期阶段。
+  - item: 36
+    bucket: H-holdout
+    expect: drop
+    why: 全球首个智能体原生操作系统是展台自封的首发，无出货数据与第三方验证，命中营销 demo 排除。
+  - item: 37
+    bucket: H-holdout
+    expect: keep
+    min: 50
+    max: 70
+    why: DA-Nav 的偏航自纠偏是具身长程导航的具体方法与指标，同时落在能力前沿与机器人产业链，但 98% 为作者自报、无第三方复现。
+  - item: 38
+    bucket: H-holdout
+    expect: keep
+    min: 50
+    max: 70
+    why: 活页面 Artifacts 是任何人都能亲自验证的 agent infra 产品面，但仍属一手产品发布而非能力结果，受产品通稿上限约束。
+  - item: 39
+    bucket: H-holdout
+    expect: drop
+    why: 建立在两位 CEO 表态之上的评论文，Nadella 与 Karp 不属奠基者例外，全文无可查事件（与线上 keep 相反）。
+  - item: 52
+    bucket: H-holdout
+    expect: keep
+    min: 40
+    max: 60
+    why: FreeStyle 是真实可查的多模态方法论文，但风格与内容解耦属可控性增量，不是能力边界的位移。
+  - item: 53
+    bucket: H-holdout
+    expect: drop
+    why: 三级淋巴结构形成机制属机制与通路发现，顶刊署名本身不构成突破。
+  - item: 54
+    bucket: H-holdout
+    expect: drop
+    why: PD-1 经 B 细胞起效是机制发现，无获批、三期或指南变更等已发生的临床动作。
+  - item: 57
+    bucket: H-holdout
+    expect: drop
+    why: 长程具身记忆虽在主题内，但唯一证据是厂商的 WAIC 展台演示，属营销 demo。
+  - item: 69
+    bucket: H-holdout
+    expect: keep
+    min: 35
+    max: 55
+    why: 记者实测 agent 凭证代理是哪些任务变得可部署的薄证据，但本质是成熟厂商集成发布的体验评测。
+  - item: 81
+    bucket: H-holdout
+    expect: drop
+    why: 1880 亿美元晚期融资无产品线/订单/客户/产能一手验证，且远超 seed/A/B 阶段（与线上 keep 相反）。
+  - item: 83
+    bucket: H-holdout
+    expect: keep
+    min: 50
+    max: 70
+    why: 日本政府承诺采购英伟达芯片正是投资 goal 明确接收的政企协议加点名公司，但无金额与量，行动性有限。
+  - item: 88
+    bucket: H-holdout
+    expect: drop
+    why: SUV 发布加谷歌地图集成属产品 PR，无自动驾驶、芯片或供应链证据，小鹏也远超早期阶段。
+  - item: 93
+    bucket: H-holdout
+    expect: keep
+    min: 40
+    max: 60
+    why: 官方 agent 循环模式命中 agent infrastructure 且对造 agent 的人直接可用，但属 how-to 教程，不改变对能力曲线的判断。
+  - item: 94
+    bucket: H-holdout
+    expect: keep
+    min: 55
+    max: 75
+    why: ECCV'26 的 PhyMAGIC 从生成视频反推物理参数，落在 world model 与多模态且有同行评审背书，但为单篇增量方法。
+  - item: 101
+    bucket: H-holdout
+    expect: keep
+    min: 35
+    max: 55
+    why: 中美前沿能力追平的判断确实落在能力曲线与中美科技竞争上，但载体是二手报道之上的评论与政策主张，受个人观点上限约束。
+  - item: 147
+    bucket: H-holdout
+    expect: keep
+    min: 65
+    max: 85
+    why: 长上下文与推理优化双命中，且腾讯已开源，13~15 倍加速与 512 倍免训外推可被发布方之外的人独立验证。
+  - item: 148
+    bucket: H-holdout
+    expect: keep
+    min: 45
+    max: 65
+    why: 做机器人界的安卓这一平台叙事正是创业 goal 要的 wedge/moat/why-now，但只是展台观感、无 traction 与阶段数据。
+  - item: 157
+    bucket: H-holdout
+    expect: drop
+    why: 标注机器之心发布的电信 agent 产品软文，既无能力证据也无产业链或财报验证。
+  - item: 158
+    bucket: H-holdout
+    expect: keep
+    min: 55
+    max: 75
+    why: 11B 多模态科学基础模型开放释出、可被独立评测，命中多模态基座主题，但规模与领域都偏窄。
+  - item: 165
+    bucket: H-holdout
+    expect: drop
+    why: LEF1 决定 T 细胞干性属通路发现，改写教科书未对应任何已改变的临床做法。
+  - item: 167
+    bucket: H-holdout
+    expect: drop
+    why: 机器人 ChatGPT 时刻两年内是时间线猜测与论坛演讲观点，圆桌综述也不适用奠基者例外。
+  - item: 218
+    bucket: H-holdout
+    expect: drop
+    why: 与 215 同话题的相邻期播客，属重复条目叠加播客排除类，无任何新信息。
+  - item: 225
+    bucket: H-holdout
+    expect: drop
+    why: 宣传性公司特写，宁德检验是唯一擦边的产业链钩子，但无订单、规模与部署数据，够不上一手验证。
+  - item: 264
+    bucket: H-holdout
+    expect: drop
+    why: AI4S 大赛颁奖典礼报道带创业招募框架，说不出一个外部可查的能力结果。
+  - item: 271
+    bucket: H-holdout
+    expect: drop
+    why: EGFR 融合突变耐药是机制论文，尚无试验、获批或指南层面已发生的动作。
+  - item: 347
+    bucket: H-holdout
+    expect: keep
+    min: 50
+    max: 70
+    why: AI 系统实际入侵 HuggingFace 是 agent 能力与 alignment 实证的真材料，但属 OpenAI 一手自报加评论博客包装，压在 70 以下。
+  - item: 353
+    bucket: H-holdout
+    expect: drop
+    why: 17 项全球第一全为自报，且全文围绕 IPO 与融资叙事，同时命中营销 demo 与无一手验证的融资动态两条排除。
+  - item: 376
+    bucket: H-holdout
+    expect: keep
+    min: 35
+    max: 55
+    why: 彭博报道加 Hugging Face 第三方痕迹给出下一代前沿模型的时间信号，对 6 个月判断有用，但零能力证据、属发布前传闻。
+  - item: 418
+    bucket: H-holdout
+    expect: drop
+    why: 致前 AI 沙皇的公开信是纯政治评论，无能力证据也无具体监管动作，同时命中个人观点与地缘视角排除。
+  - item: 419
+    bucket: H-holdout
+    expect: keep
+    min: 60
+    max: 80
+    why: 前沿实验室测试模型能否控制真实无人机，正是从做不了到可工程化的具身数据点，但有 Andon Labs 联署仍属一手自报，够不到 80+。
+  - item: 601
+    bucket: H-holdout
+    expect: keep
+    min: 40
+    max: 60
+    why: Oracle 与 OpenAI 的 3000 亿循环融资直指估值是否透支，但属融资结构评论而非财报或产业链一手验证。

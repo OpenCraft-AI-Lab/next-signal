@@ -1,0 +1,444 @@
+# info-radar 打分评测集 —— 人工标注的 gold labels。
+#
+# 用 `scripts/radar_eval.py` 回放真实 tier1 / tier2 流程，衡量提示词改动的效果。
+# `item` 是 radar_items.id。`expect` 是期望 verdict；keep 时 min/max 给出期望
+# 分数区间（评测取多次重复的均值落区间内算通过）。
+#
+# 六个桶各有各的作用，缺一不可：
+#   A-false-drop    生产环境错杀的行业信号 —— 改动要救回来
+#   B-under-scored  生产环境留下但压到 65 以下（dashboard 默认不显示）的
+#   C-true-negative 生产环境正确丢掉的噪音 —— 防止改过头，这是最重要的一桶
+#   D-true-positive 生产环境正确给高分的 —— 防止改动把好的一起拉下来
+#   E-over-scored   窄领域论文/日报，分数应该低于行业大事
+#   F-consistency   同一事件的分裂判决，应当收敛
+
+label_set: v1
+
+cases:
+  # ---------------------------------------------------------------------
+  # A —— 被 tier1 错杀的行业信号（tier1 drop 是流水线里唯一不可逆的损失）
+  # ---------------------------------------------------------------------
+  - item: 644
+    bucket: A-false-drop
+    expect: keep
+    min: 75
+    max: 100
+    why: AMD MI455X + Helios 进入全面生产，台上站着 OpenAI/Meta/微软。点名产品线、
+      制程节点、量产阶段、关键客户——正是 goal 2 的 chokepoint 与关键客户披露。
+      仅因标题有"炸场"被判通稿。
+
+  - item: 346
+    bucket: A-false-drop
+    expect: keep
+    min: 75
+    max: 100
+    why: 谷歌云收入 +82%，capex 指引上调至 $1950-2050 亿。一手财报分部收入 + 指引，
+      是全集里关于 AI 基建投入最大的单一数据点，tier1 prompt 明文豁免却仍被丢。
+
+  - item: 645
+    bucket: A-false-drop
+    expect: keep
+    min: 58
+    max: 85
+    why: 蚂蚁 Ling-3.0-Flash 原生混合推理模型发布，直击 goal 1 的 reasoning 与 MoE
+      话题。在只有标题的阶段要求"第三方 benchmark"是不可能满足的闭环。
+
+  - item: 415
+    bucket: A-false-drop
+    expect: keep
+    min: 70
+    max: 92
+    why: 前沿实验室旗舰发布 + 价格腰斩，直接改变 token 经济性。与 513 同一事件，
+      513 拿了 78 分，本条被丢——判决取决于读到哪个标题。
+
+  - item: 416
+    bucket: A-false-drop
+    expect: keep
+    min: 65
+    max: 88
+    why: 第一手实测且给出负面发现，是全集里最接近 goals 要求的"独立复现"的内容。
+      因文中提到发布前有截图流出被判"传闻"。
+
+  - item: 134
+    bucket: A-false-drop
+    expect: keep
+    min: 65
+    max: 88
+    why: Kimi K3 上线 48 小时容量打满、会员停售。这是需求侧的硬证据（推理算力被真实
+      需求吃穿），不是热度软文。
+
+  - item: 152
+    bucket: A-false-drop
+    expect: keep
+    min: 58
+    max: 82
+    why: 月之暗面新模型加剧美国芯片股抛售——不是行情报价，是 AI capex 论点在公开
+      市场被重新定价，直击 goal 2 的中美竞争与竞争格局。
+
+  - item: 149
+    bucket: A-false-drop
+    expect: keep
+    min: 52
+    max: 80
+    why: 同一事件的解释性报道，交代了市场在担心什么。比纯价格波动多一层结构。
+
+  - item: 420
+    bucket: A-false-drop
+    expect: keep
+    min: 58
+    max: 82
+    why: 黄仁勋首次发推力挺 K3 开源。NVIDIA 创始人对开放权重表态，是竞争格局信号，
+      且属 goals 里"亲手决定这件事的人"的范畴。
+
+  - item: 59
+    bucket: A-false-drop
+    expect: keep
+    min: 70
+    max: 92
+    why: 上海 AI Lab 397B 参数科学智能体基座。一个顶级实验室的开源大模型发布，仅因
+      RSS 标题带 `| WAIC 2026` 后缀被当成"活动预告"。
+
+  - item: 13
+    bucket: A-false-drop
+    expect: keep
+    min: 52
+    max: 78
+    why: 后摩智能 M50 存算一体端侧推理芯片。国产推理芯片，goal 2 明确关心，同样被
+      WAIC 后缀误伤。
+
+  - item: 40
+    bucket: A-false-drop
+    expect: keep
+    min: 52
+    max: 78
+    why: 国产桌面超算本地跑 150B 模型。端侧推理算力门槛下降，goal 1 的"从做不了到
+      可部署"。
+
+  - item: 625
+    bucket: A-false-drop
+    expect: keep
+    min: 58
+    max: 85
+    why: 长鑫科技 DRAM IPO（15 年来中国最大 IPO）。存储是 HBM 上游，goal 2 明确
+      列出，且这是已发生的一手财务事件而非估值传闻。
+
+  - item: 435
+    bucket: A-false-drop
+    expect: keep
+    min: 62
+    max: 88
+    why: 国家芯片委员会的国产替代指令，点名了具体主管与在执行的产业政策。goals 里
+      "具体、已发生的监管动作"正是要留的那类。
+
+  - item: 67
+    bucket: A-false-drop
+    expect: keep
+    min: 45
+    max: 75
+    why: 澜起科技遭韩国检方突击搜查。澜起是 HBM 与 CPU 之间的内存接口供应商，外国
+      监管动作打在供应链具体环节上，不是单纯股价新闻。
+
+  - item: 442
+    bucket: A-false-drop
+    expect: keep
+    min: 52
+    max: 80
+    why: 触觉传感器走向量产 + 一目科技估值破百亿。量产是产业链验证，不是纯估值叙事；
+      触觉数据是具身智能的关键缺口。
+
+  # ---------------------------------------------------------------------
+  # B —— 留下了但压在 65 以下，dashboard 默认看不见
+  # ---------------------------------------------------------------------
+  - item: 11
+    bucket: B-under-scored
+    expect: keep
+    min: 70
+    max: 92
+    why: Kimi K3 空降登顶 Arena。第三方公开榜单第一名，正是 rubric 自己 85-100 档
+      写的东西，却因"单一第三方平台"被降到 58。
+
+  - item: 51
+    bucket: B-under-scored
+    expect: keep
+    min: 70
+    max: 92
+    why: Kimi K3 发布本体。全窗口最重要的开源权重发布，只拿到 65（恰好卡在
+      dashboard 默认阈值上），而窄领域论文均值 79.9。
+
+  - item: 256
+    bucket: B-under-scored
+    expect: keep
+    min: 62
+    max: 88
+    why: 贝莱德牵头为 Meta 得州数据中心融资 120 亿美元。goal 2 明确列出"云算力/
+      数据中心/电力基建（与 AI capex 相关）"，58 分等于看不见。
+
+  - item: 25
+    bucket: B-under-scored
+    expect: keep
+    min: 62
+    max: 88
+    why: SpaceX 洽谈为五角大楼 AI 项目提供算力。同时命中太空、算力、政企合同三项，
+      却只有 52。
+
+  - item: 132
+    bucket: B-under-scored
+    expect: keep
+    min: 62
+    max: 88
+    why: 中国存储芯片破局者深度报道。产业链结构分析而非行情，52 分偏低。
+
+  - item: 407
+    bucket: B-under-scored
+    expect: keep
+    min: 58
+    max: 85
+    why: 黄仁勋首度公开呼吁支持开放权重模型。属 goals 的高信号个人（他亲手决定
+      NVIDIA 的路线），不该按普通观点文压到 58。
+
+  - item: 361
+    bucket: B-under-scored
+    expect: keep
+    min: 52
+    max: 80
+    why: 谷歌 AI 搜索抽走流量、内容方酝酿断供。AI 对内容分发商业模式的真实冲击，
+      goal 3 关心的范式变化。
+
+  - item: 251
+    bucket: B-under-scored
+    expect: keep
+    min: 52
+    max: 80
+    why: 低价中国模型为何反而利好英伟达、美光。推理需求弹性的产业链推理，比单纯
+      行情高一层。
+
+  - item: 267
+    bucket: B-under-scored
+    expect: keep
+    min: 55
+    max: 82
+    why: 摩尔线程用国产 GPU 训出世界模型。国产算力 + world model 双命中。
+
+  - item: 454
+    bucket: B-under-scored
+    expect: keep
+    min: 52
+    max: 80
+    why: 何小鹏专访：从造车转向机器人。CEO 亲述战略转向，是 goal 2 的技术路线之争，
+      被当成普通访谈压到 35。
+
+  # ---------------------------------------------------------------------
+  # C —— 正确丢掉的噪音。改动绝不能把这些放进来（最重要的一桶）
+  # ---------------------------------------------------------------------
+  - item: 203
+    bucket: C-true-negative
+    expect: drop
+    why: 金价大跌逢低买入。大宗商品行情，与三个 goal 无关。
+
+  - item: 385
+    bucket: C-true-negative
+    expect: drop
+    why: 中国抄底黄金、金价反弹。同上。
+
+  - item: 639
+    bucket: C-true-negative
+    expect: drop
+    why: 中东博弈推高金价重创美元。宏观地缘 + 大宗，无产业链落点。
+
+  - item: 468
+    bucket: C-true-negative
+    expect: drop
+    why: 美联储主席人选与议息预测。纯 macro，goals 明确不关心。
+
+  - item: 327
+    bucket: C-true-negative
+    expect: drop
+    why: 伊朗危机与加息概率。宏观情绪，无具体公司或供应链动作。
+
+  - item: 472
+    bucket: C-true-negative
+    expect: drop
+    why: 科技股跌势 + 布油破百。纯指数与油价，无基本面。
+
+  - item: 641
+    bucket: C-true-negative
+    expect: drop
+    why: 股票跨市场溢价泡沫警告。纯估值情绪文。
+
+  - item: 44
+    bucket: C-true-negative
+    expect: drop
+    why: 韩国股市崩盘、散户平仓。与 AI/机器人/太空产业链无关。
+
+  - item: 270
+    bucket: C-true-negative
+    expect: drop
+    why: 国家队 600 亿托市。纯资金面。
+
+  - item: 410
+    bucket: C-true-negative
+    expect: drop
+    why: 韩国芯片掌门离婚案宣判。八卦，无产业实质。
+
+  - item: 317
+    bucket: C-true-negative
+    expect: drop
+    why: 同一离婚案的前序报道。八卦。
+
+  - item: 244
+    bucket: C-true-negative
+    expect: drop
+    why: Java 生态例行更新。通用后端工具链，非 AI 基础设施。
+
+  - item: 440
+    bucket: C-true-negative
+    expect: drop
+    why: 同上，另一期 Java 新闻。
+
+  - item: 2
+    bucket: C-true-negative
+    expect: drop
+    why: 万兴科技 WAIC 展台首秀。真正的展台软文——注意这条必须留在 drop，而 59/13/40
+      必须翻成 keep，才说明新规则是按事件而不是按"标题里有没有 WAIC"判的。
+
+  - item: 339
+    bucket: C-true-negative
+    expect: drop
+    why: 折叠屏 iPhone 外观传闻。无信源的未发布产品猜测。
+
+  - item: 316
+    bucket: C-true-negative
+    expect: drop
+    why: 中国车企欧洲 6 月销量激增。裸的总量数字，没有产品线/供应链/客户结构。
+
+  - item: 447
+    bucket: C-true-negative
+    expect: drop
+    why: 清华镜像错觉艺术生成器（CVPR'26）。这是一篇顶会论文，但与三个 goal 无关。
+      用来验证改动不是简单地"把论文一律降权/行业一律升权"，而是按 goal 相关性判。
+
+  # ---------------------------------------------------------------------
+  # D —— 正确的高分。改动不能把它们一起拉下来
+  # ---------------------------------------------------------------------
+  - item: 354
+    bucket: D-true-positive
+    expect: keep
+    min: 75
+    max: 100
+    why: OpenAI 承认模型为偷答案突破沙盒攻入生产系统。已发生的实证安全事件。
+
+  - item: 65
+    bucket: D-true-positive
+    expect: keep
+    min: 70
+    max: 95
+    why: Stripe 发布 agent 基准测试并指出校验短板。第三方机构的真实 benchmark。
+
+  - item: 263
+    bucket: D-true-positive
+    expect: keep
+    min: 70
+    max: 95
+    why: 伯克利/UIUC/NUS 智能体安全体检，恶意插件 100% 得手。多机构 + 可复现结论。
+
+  - item: 648
+    bucket: D-true-positive
+    expect: keep
+    min: 70
+    max: 95
+    why: Cursor 用 agent 群仅凭手册重造 SQLite。工业界的能力边界实测。
+
+  - item: 611
+    bucket: D-true-positive
+    expect: keep
+    min: 72
+    max: 100
+    why: 陶哲轩谈数学与 AI 的新危机。goals 明确豁免的高信号个人本人发言。
+
+  - item: 217
+    bucket: D-true-positive
+    expect: keep
+    min: 62
+    max: 90
+    why: 台积电 2027 起涨价最高 10%。一手供应链定价权信号。
+
+  # ---------------------------------------------------------------------
+  # E —— 窄领域论文与日报，应该低于行业大事
+  # ---------------------------------------------------------------------
+  - item: 506
+    bucket: E-over-scored
+    expect: keep
+    max: 70
+    why: 红外主导目标检测（ECCV'26）。单实验室窄任务论文，现在 78 分高过 Kimi K3
+      发布，属于用顶会身份换高分。
+
+  - item: 507
+    bucket: E-over-scored
+    expect: keep
+    max: 70
+    why: MonkeyOCRv2 文档重建。同上，与三个 goal 的决策相关性有限。
+
+  - item: 210
+    bucket: E-over-scored
+    expect: keep
+    max: 48
+    why: LWiAI 播客第 252 期。聚合日报，按平均信息密度打分，不按最强单条。
+
+  - item: 213
+    bucket: E-over-scored
+    expect: keep
+    max: 48
+    why: Last Week in AI 第 250 期。同上。
+
+  # ---------------------------------------------------------------------
+  # F —— 同一事件的分裂判决，应当收敛
+  # ---------------------------------------------------------------------
+  - item: 513
+    bucket: F-consistency
+    expect: keep
+    min: 68
+    max: 92
+    why: Opus 5 实测（生产 78 分）。与 415/416 是同一事件的三条报道，三条应当同为
+      keep 且分数接近；现在是 78 / drop / drop。
+
+  # ---------------------------------------------------------------------
+  # G —— science_breakthrough goal 的两侧。这个 goal 的风险是把整个生物医学
+  # feed（奇点网，23 条，目前全 drop）放进来，所以正反两组必须同时过才算成立。
+  # ---------------------------------------------------------------------
+  - item: 438
+    bucket: G-science-keep
+    expect: keep
+    min: 70
+    max: 95
+    why: 中国籍学者首次荣获菲尔兹奖。领域最高奖项，与 611（陶哲轩同场表态）是
+      同一事件的两侧，现在被判"与 AI 技术栈及投资目标无直接关联"丢掉。
+
+  - item: 55
+    bucket: G-science-keep
+    expect: keep
+    min: 65
+    max: 92
+    why: 《自然·医学》封面，神经假体让完全性四肢瘫痪患者恢复手部运动**和触觉**。
+      人类第一次做到，且是已在患者身上验证的器械，不是机制推测。
+
+  - item: 428
+    bucket: G-science-drop
+    expect: drop
+    why: 二甲双胍"或可"克服肠癌化疗耐药。典型的机制发现 + 推测性结论，顶刊署名
+      不改变它不是突破这一点。新 goal 必须继续丢掉它。
+
+  - item: 56
+    bucket: G-science-drop
+    expect: drop
+    why: 《科学》器官衰老"或可"逆转。斯坦福 + 顶刊 + 听起来很重磅，但结论仍是
+      "清除衰老中性粒细胞或可逆转"，停留在推测阶段。最容易被新 goal 误伤的一条。
+
+  - item: 484
+    bucket: G-science-drop
+    expect: drop
+    why: 心脏"小大脑"是关键中枢。基础生物学机制发现，无临床或工程验证。
+
+  - item: 516
+    bucket: G-science-drop
+    expect: drop
+    why: BMJ 减重药与生活质量的 meta 分析。单篇荟萃分析，属常规科研产出。

@@ -62,9 +62,25 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 - Tier-1 batch 输出结构不匹配时回退到单 item；任一 item 失败不能阻断整批。
 - Tier-1 / Tier-2 失败的 item 不写 analysis row、不写 `seen_at`——留给下一轮重试
   （`radar_analyses` 唯一键 + 无 reanalyze 命令，写空行会把瞬时失败永久冻结）。
-- Tier-2 打分是"定档 base 分 + 三维度 ±3 档内调节"两步 rubric（prompt 定义）；
-  `opinion` tag 的 ≤65 上限由代码层 clamp 兜底（`stages/tier2.py::_apply_ceilings`），
-  goals 列名的高信号个人由 prompt 引导打 `frontier-voice` tag 豁免。
+- Tier-2 的 `score` 衡量的是**后果**——这件事该多大程度改变读者的判断或行动——
+  明确不是证据质量。方法论严谨度（消融、对抗测试、顶会接收）写进 `impact` 作为
+  多信它数字的理由，本身绝不加分。rubric 是：先做一个机械问句"外部现在立刻能
+  拿到什么"给非论文条目定底分，再对锚点表（带具体分数的参照点）微调，并有一条
+  硬次序约束——旗舰发布高于单实验室窄任务论文，与谁更严谨无关。`opinion` tag 的
+  ≤65 上限由代码层 clamp 兜底（`stages/tier2.py::_apply_ceilings`），goals 列名的
+  高信号个人由 prompt 引导打 `frontier-voice` tag 豁免。
+- 不设比采样波动更细的档内数值调节。此前的"三维度 ±3"机制已删除：它最多能挪
+  ±9 分，而这正好是 `local_structured` 温度下同条重跑的波动幅度；且 36% 的实测
+  分数落在它的算术算不出来的值上——模型压根没在执行它。
+- Tier-2 prompt 明确告诉 agent：feed 里的条目比它的训练数据新，且都是真实发生的。
+  没有这句时，没听说过的模型名和看起来在未来的日期会被判成造假——有一次前沿模型
+  发布被打上 `misinformation`，三遍分别给了 0 / 15 / 15 分。
+- `content_status` 反映的是"有没有拿到真正的正文"，不是"响应是否非空"。正文在
+  做任何长度判断和截断之前先摊平成纯文本（某个源实测 91% 是标签，导致 16k 上限
+  只送进约 1,400 字真文），摊平后不足 200 字符的一律报 `fallback`——付费墙媒体的
+  导语不是文章。tier-2 prompt 有配套的一句：正文薄时缺的是篇幅不是证据；没有这句
+  时如实标注实测掉 5.3 分，因为按证据分档的 rubric 会把"没有细节"读成"没有证据"。
+  **两者必须一起上。**
 - Dedup embedding 失败时 conservatively 走 novel，不静默丢 item。
 - recap 的身份是 `(since, until, min_score, novel_only)`。重复请求走缓存；
   regenerate 是原地 upsert，不追加新行。
@@ -82,6 +98,44 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 - recap 过期（区间内又有新分析落库）只**标注**，绝不自动重算：一进页面就重算会把
   每次访问活跃区间变成一分钟本地推理。
 - 不要往 logger dump 整个 provider dict。
+
+## 调优与评测
+
+打分行为靠测量,不靠手感。`scripts/radar_eval.py` 拿 `radar_items` 的人工标注子集
+回放真实的 tier-1 / tier-2 流程,写入 `radar_eval_cases` / `radar_eval_runs` /
+`radar_eval_results`。这三张表由脚本自己的 `init` 子命令创建,**刻意不由**
+`scripts/bootstrap_db.py` 建——它们不承载任何运行时行为。dedup gate 被跳过,因为
+它写的是共享的生产状态,且不影响 verdict 与 score。
+
+正文在 `load` 时快照冻结并在每次 run 中重放,所以变体之间的差异可归因于提示词,
+而不是 folocli 当天答不答得上来。每次 run 记录 `prompt_digest`——两个提示词加
+`goals.yaml` 的哈希——任何一组数字都能追溯到产生它的那份文本。
+
+`configs/info_radar/` 下有三个标注集:
+
+| 集合 | 条数 | 用途 |
+| --- | --- | --- |
+| `eval_cases.yaml` | 60 | 对抗性,堆满已知失败案例 |
+| `eval_cases_focus.yaml` | 36 | 只在决策边界上 |
+| `eval_cases_holdout.yaml` | 55 | 独立标注——**绝不用它调优** |
+
+holdout 集由三个 agent 标注,它们只读 `goals.yaml`,被明确禁止读 `prompts/` 和任何
+已有标注集,且只保留三人一致的条目。这是唯一有理由称得上无偏的一个集合。有一次
+调优只在自己调过的集子上验证,四轮从 26/54 涨到 38/60,而 holdout 上只有 40%,
+生产环境是 75%。
+
+流程铁律以及每条背后的实测数字,在 `.claude/skills/radar-prompt-tuning/SKILL.md`。
+改任何 radar 提示词之前先读它。
+
+**已测量并否决,不看记录不要重试**:把 tier-1 的 drop 类别从"按标题措辞"改成
+"按事件类型"。它在对抗集上看着是明确的胜利、护栏桶全程没退步,但在 holdout 上
+误留从 4 条涨到 16 条、通过率从 75% 掉到 40%。**护栏本身是失败的原因**:那 17 条
+是金价、美联储评论、名人离婚和 Java 更新,从来没失败过,所以什么都没测出来。
+真实的 drop 分布是"看起来像发布的厂商通稿"和"看起来像突破的机制论文"。
+
+另外一条:主指标的选择比它看起来更重要。分桶通过率被当主指标用了七轮,而它和
+读者的实际体验并不对齐。真正对齐的是扫描 dashboard 阈值、在每个切点上数可见
+信号与漏出噪音——一条拿 35 分的误留,根本到不了读者眼前。
 
 ## 规范与状态
 

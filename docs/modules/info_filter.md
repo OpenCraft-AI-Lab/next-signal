@@ -72,11 +72,35 @@ reading and manual triggering.
   them for the next run. (Given the unique key on `radar_analyses` and the
   absence of a reanalyze command, writing an empty row would freeze a transient
   failure permanently.)
-- Tier-2 scoring is a two-step rubric defined in the prompt: anchor a base score,
-  then adjust within ±3 bands across three dimensions. The ≤65 ceiling for the
-  `opinion` tag is backstopped in code
-  (`stages/tier2.py::_apply_ceilings`), and high-signal individuals named in the
-  goals are exempted via a prompt-driven `frontier-voice` tag.
+- Tier-2 `score` measures **consequence** — how much an item should change the
+  reader's judgment or actions — explicitly not evidence quality. Methodological
+  rigor (ablations, adversarial tests, conference acceptance) is reported in
+  `impact` as a reason to trust the numbers and never raises the score on its own.
+  The rubric is: a mechanical "what can an outsider obtain right now?" step that
+  sets a floor for non-paper items, then an anchor table of named score points
+  with an explicit ordering constraint (a flagship release outranks a single-lab
+  narrow-task paper regardless of rigor). The ≤65 ceiling for the `opinion` tag is
+  backstopped in code (`stages/tier2.py::_apply_ceilings`), and high-signal
+  individuals named in the goals are exempted via a prompt-driven `frontier-voice`
+  tag.
+- No within-band numeric adjustment finer than the sampling spread. A previous
+  three-axis ±3 mechanism was removed: it could move a score by at most ±9, which
+  is the run-to-run spread at the `local_structured` temperature, and 36% of
+  observed scores landed on values its arithmetic cannot produce — the model was
+  never executing it.
+- The tier-2 prompt tells the agent that feed items postdate its training data and
+  are real. Without this, unfamiliar model names and future-looking dates get
+  scored as fabrication — one frontier launch was tagged `misinformation` and
+  scored 0 / 15 / 15 across three repeats.
+- `content_status` reflects whether a real article body was obtained, not merely a
+  non-empty response. Feed bodies are flattened to plain text before any length
+  test or truncation (one feed measured 91% markup, so the 16k cap was delivering
+  ~1,400 characters of prose), and a body under 200 characters of flattened text
+  reports `fallback` — a paywalled publisher's lede is not an article. The tier-2
+  prompt has a companion clause telling the agent that thin content is missing
+  length, not evidence; without it, honest labelling measured −5.3 points because
+  an evidence-graded rubric reads absent detail as absent evidence. **The two must
+  ship together.**
 - When dedup embedding fails, treat the item conservatively as novel — never
   silently drop it.
 - A recap is identified by `(since, until, min_score, novel_only)`. A repeat
@@ -101,6 +125,53 @@ reading and manual triggering.
   auto-regenerated: regenerating on load would turn every visit to a live range
   into a minute of local inference.
 - Never dump a whole provider dict into the logger.
+
+## Tuning and evaluation
+
+Scoring behaviour is measured, not adjusted by feel. `scripts/radar_eval.py`
+replays the real tier-1 and tier-2 stages over hand-labelled subsets of
+`radar_items` and writes to `radar_eval_cases` / `radar_eval_runs` /
+`radar_eval_results`. Those tables are created by the script's own `init`
+subcommand and deliberately **not** by `scripts/bootstrap_db.py` — they carry no
+runtime behaviour. The dedup gate is skipped, because it writes shared production
+state and does not affect verdict or score.
+
+Article content is snapshotted at `load` time and replayed, so a variant
+comparison is attributable to the prompt rather than to whether folocli answered
+that day. Each run records a `prompt_digest` — a hash of both prompts plus
+`goals.yaml` — so a set of numbers always traces to the text that produced it.
+
+Three label sets live in `configs/info_radar/`:
+
+| set | items | purpose |
+| --- | --- | --- |
+| `eval_cases.yaml` | 60 | adversarial; stacked with known failures |
+| `eval_cases_focus.yaml` | 36 | decision boundary only |
+| `eval_cases_holdout.yaml` | 55 | independently labelled — **never tune against this** |
+
+The holdout set was labelled by three agents that read only `goals.yaml`, were
+forbidden from reading `prompts/` or any existing label set, and only unanimous
+items were kept. It is the only set with a claim to being unbiased. The one time
+tuning was validated solely on the sets it was tuned against, four rounds climbed
+from 26/54 to 38/60 while measuring 40% on holdout against production's 75%.
+
+Process rules, with the measurement that justifies each, are in
+`.claude/skills/radar-prompt-tuning/SKILL.md`. Read it before editing any radar
+prompt.
+
+**Measured and rejected — do not retry without reading the record:** rewriting
+the tier-1 drop categories around event type rather than headline diction. It
+looked like a clear win on the adversarial set and its guardrail bucket never
+regressed, but on holdout it raised false keeps from 4 to 16 and cut the pass rate
+from 75% to 40%. The guardrail was the failure: 17 items of gold prices, Fed
+commentary, celebrity divorce and Java release notes, which never failed and so
+measured nothing. The real drop distribution is vendor PR that looks like a launch
+and mechanism papers that look like breakthroughs.
+
+Also note that the primary metric matters more than it looks: bucket pass rates
+were used for seven rounds and did not align with the reader's experience. What
+did align was sweeping the dashboard threshold and counting visible signal versus
+leaked noise at each cut point — a false keep scoring 35 never reaches the reader.
 
 ## Specs and status
 

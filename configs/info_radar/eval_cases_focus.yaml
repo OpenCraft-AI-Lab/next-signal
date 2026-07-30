@@ -1,0 +1,262 @@
+# info-radar 聚焦集 —— 只针对两个原始问题：产业信号被过滤、论文分数过高。
+#
+# 相对上一版的 60 条，砍掉了所有"一眼就该丢"的条目（金价、美联储、原油、离婚
+# 八卦、Java 更新等），只留 4 条当廉价理智检查。剩下的每一条都在决策边界上。
+#
+# 关键指标不是通过率，而是**倒挂率**：IND-surface × PAP-low 的每一对里，
+# 产业条目的分数是否 ≥ 论文条目。这个指标不受绝对分数漂移影响，直接对应
+# "MonkeyOCRv2 该不该压着 Kimi K3"。
+#
+# 刻意排除的条目：13（后摩 M50 亮相 WAIC）。它和 36（STEPX Neo 亮相）在标题层
+# 结构相同——具名产品 + 展会 + 无数字。我没有把握说其中一条该留一条该丢，
+# 所以两条都不该被我用来给规则打分。
+
+label_set: focus
+
+cases:
+  # -------------------------------------------------------------------
+  # IND-surface —— 产业信号，必须浮出且高于论文默认档（58）
+  # -------------------------------------------------------------------
+  - item: 644
+    bucket: IND-surface
+    expect: keep
+    min: 70
+    max: 95
+    why: AMD MI455X 进入全面生产，台上站着 OpenAI/Meta/微软。具名产品线 + 制程节点
+      + 量产阶段 + 关键客户，是 chokepoint 竞争格局的一手事件。
+
+  - item: 51
+    bucket: IND-surface
+    expect: keep
+    min: 70
+    max: 95
+    why: Kimi K3 开源权重发布。外部拿得到东西（权重可下载），且是窗口内最重要的
+      能力事件——锚点表里"旗舰模型发布 = 88"就是为这类条目定的。
+
+  - item: 11
+    bucket: IND-surface
+    expect: keep
+    min: 68
+    max: 92
+    why: Kimi K3 空降登顶 Arena。第三方公开榜单名次，不是发布方自报。
+
+  - item: 134
+    bucket: IND-surface
+    expect: keep
+    min: 62
+    max: 88
+    why: 上线 48 小时容量打满、会员停售。需求侧硬证据（推理算力被真实需求吃穿），
+      对应锚点"真实产业动作 = 68"。
+
+  - item: 645
+    bucket: IND-surface
+    expect: keep
+    min: 62
+    max: 88
+    why: 蚂蚁 Ling-3.0-Flash 原生混合推理模型发布，直击 reasoning 与 MoE 主题。
+
+  - item: 346
+    bucket: IND-surface
+    expect: keep
+    min: 70
+    max: 95
+    why: 谷歌云收入 +82%，capex 指引上调至 1950-2050 亿美元。一手财报披露到分部
+      收入与指引层面，对应锚点 82。
+
+  - item: 59
+    bucket: IND-surface
+    expect: keep
+    min: 65
+    max: 92
+    why: 上海 AI Lab 397B 参数开源模型。标题里有明确参数量（397B），是数字而非
+      自封形容词，收紧后的实质优先规则应当留下它。
+
+  - item: 40
+    bucket: IND-surface
+    expect: keep
+    min: 58
+    max: 85
+    why: 国产桌面超算本地跑 150B 模型。同样带明确数字（150B），端侧推理门槛下降。
+
+  - item: 420
+    bucket: IND-surface
+    expect: keep
+    min: 58
+    max: 85
+    why: 黄仁勋首次发推力挺 K3 开源。NVIDIA 创始人对开放权重表态，属 goals 里
+      "亲手决定这件事的人"，且是竞争格局信号。
+
+  - item: 256
+    bucket: IND-surface
+    expect: keep
+    min: 62
+    max: 88
+    why: 贝莱德牵头为 Meta 数据中心融资 120 亿美元。有具名金额与参与方，命中
+      AI capex 与电力基建。注意这是 fallback 短讯——薄不该扣分。
+
+  - item: 25
+    bucket: IND-surface
+    expect: keep
+    min: 60
+    max: 85
+    why: SpaceX 洽谈为五角大楼提供算力。同时命中太空、算力、政企合同三项。
+
+  - item: 152
+    bucket: IND-surface
+    expect: keep
+    min: 58
+    max: 82
+    why: 月之暗面新模型加剧美国芯片股抛售。归因指向具名公司的具名模型，是 AI capex
+      论点在公开市场被重新定价，不是无主的行情波动。
+
+  # -------------------------------------------------------------------
+  # PAP-low —— 论文，可以留但必须低于产业信号（论文默认档 58）
+  # -------------------------------------------------------------------
+  - item: 507
+    bucket: PAP-low
+    expect: keep
+    max: 62
+    why: MonkeyOCRv2 文档重建。消融做得干净、开源，但没有作者之外的人复现或采用。
+      这是"论文默认档 58"的典型样本。现在 78-88 分，压着 Kimi K3 的 65。
+
+  - item: 506
+    bucket: PAP-low
+    expect: keep
+    max: 62
+    why: 红外主导目标检测（ECCV'26）。单实验室窄任务，与四个 goal 的决策相关性有限。
+
+  - item: 94
+    bucket: PAP-low
+    expect: keep
+    max: 62
+    why: 从生成模型中主动寻找物理证据（ECCV'26）。方法论文，无外部使用者。
+
+  - item: 447
+    bucket: PAP-low
+    expect: keep
+    max: 55
+    why: 清华镜像错觉艺术生成器 + 3D 打印（CVPR'26）。真顶会论文，但与四个 goal
+      全部无关——用来验证改动不是"论文一律降权"而是按 goal 相关性判。
+
+  # -------------------------------------------------------------------
+  # PAP-drop —— 机制类论文，独立标注者一致判 drop
+  # -------------------------------------------------------------------
+  - item: 165
+    bucket: PAP-drop
+    expect: drop
+    why: 《细胞》转录因子 LEF1 决定 T 细胞干性。"改写教科书 / 首次发现"是修辞，
+      受试对象非人体、说不出已发生的临床动作。v4 给了 87 分。
+
+  - item: 10
+    bucket: PAP-drop
+    expect: drop
+    why: 补充维生素 D 改变肠癌微环境。临床相关性研究，非获批疗法或三期成功。
+
+  - item: 54
+    bucket: PAP-drop
+    expect: drop
+    why: PD-1 抑制剂激活 B 细胞机制。肿瘤免疫机制发现。
+
+  - item: 53
+    bucket: PAP-drop
+    expect: drop
+    why: 破解肿瘤内免疫"结界"之谜。"填补空白"式机制研究。
+
+  # -------------------------------------------------------------------
+  # NEG-vendor —— 硬负例。放宽 tier-1 必然冒的风险，这一桶塌了就是放过头
+  # -------------------------------------------------------------------
+  - item: 36
+    bucket: NEG-vendor
+    expect: drop
+    why: STEPX Neo 搭载"全球首个智能体原生操作系统"亮相 WAIC。具名产品但只有自封
+      最高级、无数字无权重无 API——展台亮相的标准形态。与 59/40 的区别就是有没有数字。
+
+  - item: 35
+    bucket: NEG-vendor
+    expect: drop
+    why: 蚂蚁集团 WAIC 展示三层布局。纯定位叙述，无 artifact 无数字。
+
+  - item: 157
+    bucket: NEG-vendor
+    expect: drop
+    why: TeleAgent 星辰超级智能体"不搞极客玩具那一套"。营销话术。
+
+  - item: 2
+    bucket: NEG-vendor
+    expect: drop
+    why: 万兴科技 WAIC 展台首秀。真正的展台软文。
+
+  - item: 23
+    bucket: NEG-vendor
+    expect: drop
+    why: AICon 深圳会议促销稿包着一个可观测性话题，交付物是活动广告。
+
+  - item: 29
+    bucket: NEG-vendor
+    expect: drop
+    why: 火山引擎视频画质增强。云产品通稿，与 AI 能力边界无关。
+
+  - item: 7
+    bucket: NEG-vendor
+    expect: drop
+    why: ChatGPT 能搜自己的历史对话。纯产品功能更新，无能力边界变化。v4 给了 75 分。
+
+  - item: 353
+    bucket: NEG-vendor
+    expect: drop
+    why: 标题宣称甩出 5 个模型、17 项全球第一。全是自封第一，无第三方榜单无权重。
+
+  # -------------------------------------------------------------------
+  # HI-keep —— 真高价值，改动不能把它们一起拉下来
+  # -------------------------------------------------------------------
+  - item: 354
+    bucket: HI-keep
+    expect: keep
+    min: 72
+    max: 100
+    why: OpenAI 承认模型突破沙盒攻入生产系统。已发生的实证安全事件。
+
+  - item: 648
+    bucket: HI-keep
+    expect: keep
+    min: 70
+    max: 95
+    why: Cursor 用 agent 群仅凭手册重造 SQLite。工业界的能力边界实测。
+
+  - item: 611
+    bucket: HI-keep
+    expect: keep
+    min: 70
+    max: 100
+    why: 陶哲轩谈数学与 AI。goals 明确豁免的高信号个人本人发言。
+
+  - item: 55
+    bucket: HI-keep
+    expect: keep
+    min: 65
+    max: 92
+    why: 神经假体让完全性四肢瘫痪患者恢复手部运动和触觉。这是论文，但有人体结果、
+      是人类首次——用来验证"论文上限 58"没有把真实医学里程碑一起压死。
+
+  # -------------------------------------------------------------------
+  # SAN-drop —— 保留 4 条廉价理智检查（原来 17 条，太容易，给了虚假安全感）
+  # -------------------------------------------------------------------
+  - item: 203
+    bucket: SAN-drop
+    expect: drop
+    why: 金价大跌逢低买入。大宗商品行情。
+
+  - item: 244
+    bucket: SAN-drop
+    expect: drop
+    why: Java 生态例行更新。
+
+  - item: 410
+    bucket: SAN-drop
+    expect: drop
+    why: 韩国芯片掌门离婚案宣判。八卦。
+
+  - item: 218
+    bucket: SAN-drop
+    expect: drop
+    why: LWiAI 播客回顾。聚合日报，锚点表里 25 分档。

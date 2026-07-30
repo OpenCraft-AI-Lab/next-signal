@@ -240,6 +240,10 @@ prepend 到**每个 agent** 的 instructions 头部。house rules / 用户 profi
   `radar_recaps` / `knowledge_reviews`）→ 裸
   `psycopg.connect(database_url())`（同步 short-lived 连接）；
   DDL 在 `scripts/bootstrap_db.py`，运行时读写在对应 collector / workflow 模块里
+- **例外：评测表**（`radar_eval_cases` / `radar_eval_runs` / `radar_eval_results`）
+  同样走裸 psycopg，但 DDL 在 `scripts/radar_eval.py` 自己的 `init` 子命令里，
+  **刻意不放进 `bootstrap_db.py`**——它们只服务离线评测、不承载运行时行为，生产部署
+  没有理由持有。这条写进了 `openspec/specs/core-database/`，不要"顺手"迁进 bootstrap
 
 ---
 
