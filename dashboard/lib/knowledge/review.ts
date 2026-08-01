@@ -12,6 +12,10 @@ import { RADAR_TZ } from "@/lib/radar/queries";
  * `paca.workflows.knowledge_review.STAGES` — the Python side is the source of
  * truth (and is where the arithmetic is unit-tested); this copy exists only so
  * the in-request "seen" advance can run without shelling out.
+ *
+ * It also defines the retention histogram's bins: one per entry, labelled by the
+ * interval that stage waits on, plus a terminal bin for retired docs. A schedule
+ * change therefore still has exactly one place to land on this side.
  */
 export const REVIEW_STAGES = [1, 3, 7, 15, 30, 60, 120];
 
@@ -61,6 +65,66 @@ export async function getDueReviews(): Promise<{ cards: ReviewCard[]; total: num
 
   const cards = await Promise.all(rows.map(rowToCard));
   return { cards, total: Number(totals[0]?.n ?? 0) };
+}
+
+/** One histogram bin: a stage, or the terminal bin when `days` is `null`. */
+export type StageBin = {
+  /** Days this stage waits on after capture; `null` for retired docs. */
+  days: number | null;
+  total: number;
+  /** How many of `total` are already due today (radar timezone). */
+  due: number;
+};
+
+type StageCountRow = {
+  retired: boolean;
+  stage: number;
+  total: number;
+  due: number;
+};
+
+/**
+ * Enrolled docs per curve position, for the retention histogram. Bins come from
+ * the stored `stage`, not from `captured_at` and today: `advanceReview` already
+ * fast-forwards the stage in SQL, and re-deriving position here would put that
+ * rule in two places. The terminal bin keys on `next_due_at IS NULL` — the
+ * actual retirement marker — rather than on a stage number.
+ *
+ * `due` uses the same radar-timezone boundary as `getDueReviews`, so a doc
+ * counted as due here is a doc that can appear as a card.
+ */
+export async function getStageDistribution(): Promise<StageBin[]> {
+  const rows = await query<StageCountRow>(
+    `SELECT next_due_at IS NULL AS retired,
+            stage,
+            count(*)::int AS total,
+            count(*) FILTER (WHERE ${DUE_WHERE})::int AS due
+       FROM knowledge_reviews
+      GROUP BY retired, stage`,
+    [RADAR_TZ],
+  );
+  return toBins(rows);
+}
+
+/**
+ * Shape sparse `GROUP BY` rows into the fixed bin array — one per stage plus the
+ * terminal bin, absent stages zeroed. A stage outside the schedule's range is
+ * clamped into the nearest bin rather than dropped: the row is real, and losing
+ * it would understate the collection.
+ */
+export function toBins(rows: StageCountRow[]): StageBin[] {
+  const bins: StageBin[] = REVIEW_STAGES.map((days) => ({ days, total: 0, due: 0 }));
+  bins.push({ days: null, total: 0, due: 0 });
+  const last = REVIEW_STAGES.length - 1;
+
+  for (const row of rows) {
+    const bin = row.retired
+      ? bins[bins.length - 1]
+      : bins[Math.min(Math.max(row.stage, 0), last)];
+    bin.total += Number(row.total);
+    bin.due += Number(row.due);
+  }
+  return bins;
 }
 
 async function rowToCard(row: DueRow): Promise<ReviewCard> {

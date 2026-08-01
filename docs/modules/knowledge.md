@@ -135,6 +135,30 @@ in-request (a GET could let a prefetch advance the curve); the refresh control
 spawns the `--sync` job detached, since reconciliation plus recall generation is
 LLM work.
 
+Alongside the cards the section carries a strip laid out like the radar tracker:
+summary figures on the left (enrolled / due / scheduled / done, plus the stage
+the median doc is waiting on — all derived from the same bins, no extra query),
+then a **retention histogram** flush right, titled after the Ebbinghaus curve by
+name. One bar per stage (`1d` … `120d`) plus a terminal bar for docs past the
+final stage, each
+split into the portion already due (solid) and the portion still scheduled
+(translucent, with a key — the split is opacity-only, so unlike the radar's score
+histogram it cannot go unlabelled). It answers
+where the collection sits on the curve, which the due count alone cannot: a base
+whose docs are all at `1d` and one whose docs have mostly reached `120d` both
+render as "3 due". Bins come from the stored `stage` column and from
+`next_due_at IS NULL`, never re-derived from `captured_at` and today — the stage
+advance already fast-forwards in SQL, and recomputing it here would put that rule
+in two places. It is seated the way the radar tracker seats its score histogram
+(trailing edge of a strip below the header, same 232px slot and bar geometry).
+Its frame — title, full axis, key — renders in every state, including with
+nothing due and nothing enrolled, exactly as the radar tracker still reads
+"Score distribution · 0-100" over a full axis on a day with no items; the
+collapsed "nothing due" state drops the cards and the card chrome, not the
+chart's labels. Colour comes from its own
+retention ramp (`--kb-*`), never the score ramp: that one encodes the radar's
+verdict, so borrowing it would read a 120-day doc as "scored well".
+
 ## Invariants
 
 - Review state lives entirely in `knowledge_reviews`; the review layer never

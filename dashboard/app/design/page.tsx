@@ -13,6 +13,7 @@ import { Chip } from "@/components/ui/chip";
 import { useI18n } from "@/components/i18n-provider";
 import { Input, SearchWrap, Textarea } from "@/components/ui/input";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
+import { RETENTION_HELD, retentionColor } from "@/lib/retention";
 import { scoreHue, scoreLOff } from "@/lib/score";
 
 type Tab = "tokens" | "components" | "states" | "brand";
@@ -242,6 +243,69 @@ function Tokens() {
           {[18, 42, 55, 63, 71, 78, 84, 91, 96, 100].map((s) => (
             <ScoreChip key={s} value={s} size="sm" />
           ))}
+        </div>
+      </Card>
+
+      <Card pad>
+        <div className="sec-head">
+          <h2 className="sec-title">Retention ramp</h2>
+          <span className="sec-sub">
+            review stage · fragile → consolidated · independent of the score ramp
+          </span>
+        </div>
+        <div className="col" style={{ gap: 7, marginBottom: 14 }}>
+          <div
+            style={{
+              height: 14,
+              borderRadius: 3,
+              background: `linear-gradient(90deg, ${[0, 0.25, 0.5, 0.75, 1]
+                .map((t) => `${retentionColor(t)} ${t * 100}%`)
+                .join(", ")})`,
+            }}
+          />
+          <div className="row" style={{ justifyContent: "space-between" }}>
+            {[
+              { t: 0, label: "1d · fragile" },
+              { t: 0.5, label: "15d" },
+              { t: 1, label: "120d · consolidated" },
+            ].map((m) => (
+              <span
+                key={m.label}
+                className="mono"
+                style={{ fontSize: 11, color: retentionColor(m.t), fontWeight: 500 }}
+              >
+                {m.label}
+              </span>
+            ))}
+          </div>
+        </div>
+        <hr className="hr" style={{ margin: "4px 0 14px" }} />
+        <div className="row gap-12 wrap" style={{ alignItems: "center" }}>
+          {[0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 5 / 6, 1].map((t, i) => (
+            <span
+              key={i}
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 4,
+                background: retentionColor(t),
+                boxShadow: "var(--ring-light)",
+              }}
+            />
+          ))}
+          <span
+            title="past the final stage — deliberately off the ramp"
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: 4,
+              background: RETENTION_HELD,
+              boxShadow: "var(--ring-light)",
+            }}
+          />
+          <span className="mono muted-2" style={{ fontSize: 11 }}>
+            one swatch per stage, then the off-ramp neutral for docs past 120d
+          </span>
         </div>
       </Card>
 

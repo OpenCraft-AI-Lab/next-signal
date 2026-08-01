@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { searchKnowledge } from "@/lib/actions/knowledge";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/server";
-import { getDueReviews } from "@/lib/knowledge/review";
+import { getDueReviews, getStageDistribution } from "@/lib/knowledge/review";
 import { listCategories, type WikiCategoryOption } from "@/lib/taxonomy";
 import { getWikiDoc, listWikiTree } from "@/lib/wiki";
 
@@ -28,13 +28,14 @@ export default async function KnowledgePage({
   const q = (params.q ?? "").trim();
   const docId = params.doc;
 
-  const [tree, hits, active, reviews] = await Promise.all([
+  const [tree, hits, active, reviews, bins] = await Promise.all([
     listWikiTree(),
     q ? searchKnowledge(q) : Promise.resolve([]),
     docId ? getWikiDoc(docId) : Promise.resolve(null),
     // Degrade to an empty review section if Postgres is unreachable, so the rest
     // of the page (tree / search / preview, all filesystem + GBrain) still works.
     getDueReviews().catch(() => ({ cards: [], total: 0 })),
+    getStageDistribution().catch(() => []),
   ]);
 
   // Degrade to auto-classify-only if the taxonomy can't be read, so the rest
@@ -67,7 +68,7 @@ export default async function KnowledgePage({
           <ReindexButton />
         </div>
 
-        <ReviewSection reviews={reviews} t={t} />
+        <ReviewSection reviews={reviews} bins={bins} t={t} />
 
         <div className="card" style={{ padding: 16, marginBottom: 18 }}>
           <div className="col gap-12">

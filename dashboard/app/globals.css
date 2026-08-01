@@ -157,6 +157,22 @@
   --brand-grad-kb:     linear-gradient(135deg, #9a6bff 0%, #f472b6 100%);
 }
 
+/* ---- KNOWLEDGE RETENTION RAMP (review stage on the Ebbinghaus curve) ----
+   A single-hue sequential ramp on the KB brand hue, interpolated between
+   `--kb-l-lo` (fragile, freshly captured) and `--kb-l-hi` (consolidated). Like
+   the brand group above, it never aliases --purple / --green / --score-*: the
+   score ramp is the radar's *verdict* colour, and borrowing it would render a
+   doc at the 120-day stage green — reading as "scored well" rather than
+   "consolidated". `--kb-held` is deliberately outside the ramp, for docs past
+   the final stage: they are neither decaying nor scheduled, so the deep end of
+   a continuum they have left would overstate them. See lib/retention.ts. */
+:root, [data-theme="light"] {
+  --kb-h: 333; --kb-s: 70%; --kb-l-lo: 78%; --kb-l-hi: 38%; --kb-held: #b0b0b0;
+}
+[data-theme="dark"] {
+  --kb-h: 333; --kb-s: 64%; --kb-l-lo: 28%; --kb-l-hi: 74%; --kb-held: #4e4e4e;
+}
+
 /* ============================================================
    BASE
    ============================================================ */
