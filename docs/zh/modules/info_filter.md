@@ -101,6 +101,44 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
   每次访问活跃区间变成一分钟本地推理。
 - 不要往 logger dump 整个 provider dict。
 
+## 输出语言
+
+`SIGNAL_OUTPUT_LANG`（`zh` | `en`）决定读者看到的所有散文字段用什么语言——tier-2 的
+`summary` / `impact`、tier-1 的 `reason`、recap 的 headline 与 narrative——与文章语言、
+与 `goals.yaml` 语言都无关。不设则各 prompt 自己的默认生效。机制见
+[core.md](./core.md#输出语言)。
+
+**实测**（13 条 × 5 次重复，真实 stage，记录 prompt digest）：旧的条件句规则下，中文 goals +
+英文文章时 tier-2 `summary` 命中 0/64；改成无条件后 63/63。`impact` 和 tier-1 `reason` 在
+**同一批响应**里本来就 100% 正确——出问题的恰好是字段说明里没有语言锚点的那个。英文目标在
+中文 goals **且**中文文章下守住 65/65，零错误。
+
+修后在 55 条 holdout 上、带同一晚的 baseline 对照：英文文章 + 中文目标下，英文 summary 从
+**12/12 降到 0/12**，而 `impact` 长度、verdict flips、均分全都落在 baseline 自身的轮间波动范围内。
+`scripts/lang_probe.py` 测 tier-2 的 `summary` / `impact` 与 tier-1 的 `reason`：**两个方向都是
+0/30，无翻转**。`radar_recap` 在一个含 22 条英文 + 153 条中文 summary 的区间上跑出中文。
+
+**未实测**：tier-2 截断有没有变多。baseline 两轮都是 2/165，本改动两轮是 8/165 和 4/165——
+同一配置两轮差一倍，这个样本量下判不出来。它们是 xgrammar 的 premature-EOS，两边都落在同样
+约 6 条脆弱条目上，代价是重试而不是丢数据（tier-2 失败的条目不标记 seen）。`radar_dedup_judge` 刻意豁免——它的 `reason` 既不入库也不渲染。
+
+不要改回条件句写法，也不要加字段级语言条款：单独点名 `summary` 的变体语言命中率一样，但输出
+长了 35%，截断失败从 1/65 升到 6/65（撞 4096 `max_tokens` 上限）。
+
+### dedup 与混合语言的嵌入空间
+
+dedup gate 嵌入的就是 tier-2 的 `summary`,所以被嵌入的文本现在也跟着
+`SIGNAL_OUTPUT_LANG` 走。`radar_pushed_topics` 从不被清理——没有任何地方 DELETE 它——
+所以它会永久保留 32 条输出语言改动之前冻结的英文 topic,和 210 条中文 topic 混在一起。
+于是英文文章的中文 summary,要去和同一件事的英文向量做 ANN 比对。
+
+拿 5 对这样的组合实测(存量英文 topic vs 同一条目现在产出的中文 summary):余弦距离
+0.11–0.26,均值 0.195,阈值 0.40。全部通过且有余量,跨语言重复仍然抓得住。
+
+两点推论:余量真实但有限——谁要把 `DEFAULT_THRESHOLD` 收到 ~0.30 以下,得知道空间里有
+落在 0.26 的跨语言对。以及 `radar_dedup_judge` 现在会看到中文 `new_summary` 配可能是英文的
+候选;它豁免语言规则(`reason` 既不入库也不渲染),而且只处理已经过了 ANN 闸门的候选。
+
 ## 调优与评测
 
 打分行为靠测量,不靠手感。`scripts/radar_eval.py` 拿 `radar_items` 的人工标注子集
@@ -112,6 +150,16 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 正文在 `load` 时快照冻结并在每次 run 中重放,所以变体之间的差异可归因于提示词,
 而不是 folocli 当天答不答得上来。每次 run 记录 `prompt_digest`——两个提示词加
 `goals.yaml` 的哈希——任何一组数字都能追溯到产生它的那份文本。
+
+`scripts/lang_probe.py` 是它的姊妹台,测的是输出**语言**而不是分数。它回放同样的 stage
+外加 `knowledge_frontmatter`,只往 `PACA_AGENT_TMP_DIR/lang-probe/` 写 JSON,报告有多少次
+生成落在了错误的语言上。那里重复次数是必须的:frontmatter 的缺陷是**不确定性**的——同一篇
+文章在不同次运行之间会换语言——跑一遍很可能正好没撞上。
+
+有两道保险,因为这两种失败都真实发生过:探针会断言构建出来的 agent 的 composed instructions
+里确实点名了目标语言(曾有一次 bind mount 静默没生效,让修复看起来像没效果),并且会在某个
+agent 的 instructions 跑到一半发生变化时拒绝写结果(`prompts/` 是 live bind mount,跑的过程中
+改 prompt 会把两个版本混进同一批结果)。`radar_eval.py` 没有这道保险——它跑的时候不要改 prompt。
 
 `configs/info_radar/` 下有三个标注集:
 

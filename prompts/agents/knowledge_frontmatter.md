@@ -41,4 +41,7 @@ Output schema:
   - `evolving`: evolves on a months scale, e.g. agent frameworks, harness design.
   - `ephemeral`: stale within weeks, e.g. news digests, market or product-version snapshots.
 
-Write Chinese fields in Simplified Chinese. Preserve technical terms and proper nouns.
+Write `title` and `summary` in {{OUTPUT_LANGUAGE}}, regardless of the language
+of the article body. Keep technical terms and proper nouns (company, model,
+repo, paper and benchmark names) in their original form; `tags` stay English
+per the field spec above.

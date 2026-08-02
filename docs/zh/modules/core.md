@@ -74,7 +74,7 @@ embedder 调用也占同一配额（本地 LLM 和 embedding 共抢一块 GPU）
 ## Shared context
 
 `prompts/_shared/*.md` 按文件名字母序拼接（两位数前缀控顺序：`00_house_rules.md`、
-`10_user_profile.md`），以 markdown 横线分隔，prepend 到**每个 agent** 的 instructions 头部
+`10_user_profile.md`），以 markdown 横线分隔，**append** 到每个 agent 的 instructions 末尾
 （`paca.core.context.shared_context()`）。
 
 - `_*.md` 前缀：**不加载**也不提交——纯草稿。
@@ -82,6 +82,33 @@ embedder 调用也占同一配额（本地 LLM 和 embedding 共抢一块 GPU）
 - import 时读一次并缓存；dashboard 热加载路径调 `reload()`。
 - 单个 agent 退出继承：YAML `extra: {shared_context: false}`（纯转换 / 判定类 agent 均退出，
   另配 `extra: {db: false}` 不建会话库）。
+
+agent 自己的 instructions 在最前，shared 块作为限定条件跟在后面，这样它不会盖过 agent 被
+检验的字段契约。注意语言规则该待的位置和这里相反——见下一节。
+
+## 输出语言
+
+`SIGNAL_OUTPUT_LANG`（`zh` | `en`）决定所有 agent 写**散文字段**用什么语言，与源文章语言、
+与 `configs/info_radar/goals.yaml` 的语言都无关。不设 = 默认语言（简体中文，也就是这些 prompt
+原本就是照着写的那个语言），行为不变；值不认识 → `RuntimeError`。
+
+- call time 读（`paca.core.context.output_language()`），改了下次 build agent 就生效，不需要
+  `reload()`。刻意**不**并进被缓存的 shared-context 字符串——那样会在进程内冻住。
+- 两种投递方式。prompt 里写了 `{{OUTPUT_LANGUAGE}}` 的，由 `language_name()` 就地替换成语言
+  名，规则留在作者放的位置，prompt 自己的收尾句（`Return JSON`、`Do NOT pad`）仍然在最后；
+  没写 token 的，才把 `language_rule()` 的块 append 在 shared context 之后。
+- append 到 prompt 收尾句**之后**这个做法实测被否：在 55 条 holdout 上让 `impact` 输出长了
+  约 31%，截断从 2/165 涨到 7/165（撞 `max_tokens` 上限）。新 prompt 优先用 token。
+- prompt 写了 token 但 YAML 又设了 `output_language: false` → `RuntimeError`，
+  否则字面量 token 会直接送到模型面前。
+- 由 `extra: {output_language: false}` 控制，与 `shared_context` **相互独立**。所有生产 agent
+  都关掉了 shared context 但仍然需要语言规则；把两者绑一起等于强行给结构化输出 agent 灌
+  house rules。
+- 标识符字段豁免：`tags` 在任何语言下都保持小写英文——`_normalize_tags` 会静默丢弃含 CJK 的 tag。
+- 永久豁免的 agent：`knowledge_artifact_editor` 与 `knowledge_github_cleaner` 输出的是文章正文
+  本身；`radar_dedup_judge` 的 `reason` 既不入库也不渲染。
+- 规则刻意写成无条件句——条件句形式（"如果 goals 是中文…"）在中文 goals + 英文文章下实测
+  tier-2 summary 命中 0/64，改成无条件后 63/63。
 
 ## 不变量
 

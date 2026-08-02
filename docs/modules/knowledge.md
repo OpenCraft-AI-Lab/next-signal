@@ -159,6 +159,35 @@ chart's labels. Colour comes from its own
 retention ramp (`--kb-*`), never the score ramp: that one encodes the radar's
 verdict, so borrowing it would read a 120-day doc as "scored well".
 
+## Output language
+
+`SIGNAL_OUTPUT_LANG` (`zh` | `en`) decides the language of frontmatter `title`
+and `summary` — the text shown in the wiki and on review cards — independent of
+the article's own language. Unset keeps each prompt's default. Mechanism in
+[core.md](./core.md#output-language).
+
+- `tags` are **exempt** and stay lowercase English in every language.
+  `_normalize_tags` silently drops any tag containing CJK, so a rule pushing tags
+  into Chinese would not produce Chinese tags — it would produce documents with
+  none.
+- `knowledge_artifact_editor` and `knowledge_github_cleaner` are **permanently
+  exempt**: they emit the cleaned article body, and translating it destroys the
+  only copy of the source text the wiki holds. A Chinese article under an English
+  target keeps a Chinese body with English frontmatter.
+
+**Measured.** Before: with no language rule at all, 17.9% of titles and 7.7% of
+summaries came back pure English on English articles, and the *same article*
+flipped between languages across runs — a single manual check can pass while the
+defect is present. After (10 articles x 3 repeats through `scripts/lang_probe.py`):
+English articles under a Chinese target are **0/30 defects on both fields with no
+flipping**. The reverse direction stays **imperfect**: 2/30 (6.7%) came back
+wholly Chinese under an English target, still flipping — one heavily
+Chinese-entity article produced a Chinese title on two runs of three.
+
+**Hazard**: changing the language and re-indexing rewrites `title`, and the wiki
+filename is derived from `title` — files will be renamed. There is no automatic
+migration.
+
 ## Invariants
 
 - Review state lives entirely in `knowledge_reviews`; the review layer never

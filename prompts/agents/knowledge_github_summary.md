@@ -55,9 +55,11 @@ Format the four perspectives as a cohesive paragraph or short block; do not just
 output four labeled lines. The structure should be readable as prose first,
 parseable as four perspectives second. `summary` must never be empty.
 
-Write the summary in Simplified Chinese when the user's wiki is Chinese-leaning;
-default to English for repos with English-only content. Preserve technical terms
-and proper nouns (e.g. token, ViT, MoE, DeepSeek, Kubernetes, Postgres) unchanged.
+Write `summary` in {{OUTPUT_LANGUAGE}}, regardless of the language of the
+repo's own content. Preserve technical terms and proper nouns (e.g. token, ViT,
+MoE, DeepSeek, Kubernetes, Postgres) unchanged. `title` and `tags` are
+identifiers, not prose: `title` stays the `owner/repo` string per its field spec
+above, and `tags` stay English.
 
 ### tags
 

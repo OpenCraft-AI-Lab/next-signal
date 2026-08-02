@@ -42,6 +42,9 @@ repo-local `.env` 关键值：
 - `GBRAIN_BIN`（`gbrain` 不在 `PATH` 时；dashboard 与后端同一套解析）
 - `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR`（**必填**，无代码默认；缺失时 knowledge pipeline 与 dashboard wiki 视图 fail loud）
 - `PACA_STATE_DIR` / `PACA_AGENT_TMP_DIR`（可选，测试或换路径）
+- `SIGNAL_OUTPUT_LANG`（`zh` | `en`，可选）—— 所有 agent 写散文字段用的语言。不设 =
+  prompt 原本照着写的默认语言（简体中文）；值不认识 → `RuntimeError`。只经
+  `paca.core.context.output_language()` 读
 
 不要在任意模块直接读这些；走对应的 core / helper 函数。完整 key 列表见 `.env.example`。
 
@@ -75,7 +78,8 @@ uv run paca doctor                            # host-native
 docker compose exec dashboard paca doctor     # 容器里
 ```
 
-检查：`DATABASE_URL`、`ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY`、`OMLX_BASE_URL`、Postgres 可达、
+检查：`DATABASE_URL`、`ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY`、`OMLX_BASE_URL`、
+`SIGNAL_OUTPUT_LANG`（报出解析后的语言，值不认识则标红）、Postgres 可达、
 configured agents、registered tools、GBrain CLI/service（`gbrain doctor --fast`）、
 folocli auth（`folocli whoami` — `FOLO_TOKEN` 或 `~/.folo/config.json` 任一可用即可）、
 info-radar `configs/info_radar/goals.yaml` 存在且可解析（缺则 `paca info-radar analyze`

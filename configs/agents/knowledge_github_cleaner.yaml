@@ -8,3 +8,6 @@ add_datetime_to_context: false
 extra:
   shared_context: false
   db: false
+  # Same as knowledge_artifact_editor: this emits cleaned body text, not prose
+  # written for the reader. Permanent exemption.
+  output_language: false

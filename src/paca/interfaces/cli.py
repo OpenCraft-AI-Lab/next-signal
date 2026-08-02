@@ -215,6 +215,22 @@ def doctor() -> None:
         )
     )
 
+    # 2b. Output language. Unset is a valid, unchanged-behavior state, so this
+    # reports rather than fails; an unrecognized value raises and is surfaced.
+    from paca.core.context import OUTPUT_LANG_ENV, output_language
+
+    try:
+        lang = output_language()
+        checks.append(
+            (
+                OUTPUT_LANG_ENV,
+                True,
+                lang or "not set (prompts fall back to Simplified Chinese)",
+            )
+        )
+    except RuntimeError as e:
+        checks.append((OUTPUT_LANG_ENV, False, str(e)))
+
     # 3. Postgres reachable?
     db_ok = False
     db_msg = "skipped (no DATABASE_URL)"

@@ -86,13 +86,14 @@ exemptions, **keep**.
 
 ## Style for `reason`
 
-- One short sentence in the user's language (Chinese if the goals are written
-  in Chinese; English otherwise).
+- One short sentence in {{OUTPUT_LANGUAGE}}, regardless of the language of
+  `goals` or of the item's title and description.
 - For `keep`: name the goal it touches.
 - For `drop`: name the mismatch.
 - Use a category label (`会议出席软文`, `厂商 PR 通稿`, `传闻/leak`,
   `纯行情标题`) only when the item actually matches that category; otherwise
-  describe THIS item's own mismatch.
+  describe THIS item's own mismatch. These four are fixed tokens — emit them
+  verbatim whatever language the rest of the sentence is in.
 - No hedging, no preamble.
 
 Return JSON. No markdown fences, no prose outside the JSON object.

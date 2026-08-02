@@ -62,8 +62,8 @@ headline. Fewer real themes beat five manufactured ones.
 
 ## Style
 
-- Match the language of the item summaries. If they are in Chinese, write the
-  headline, titles, and narratives in Chinese; otherwise English.
+- Write the headline, titles, and narratives in {{OUTPUT_LANGUAGE}}, regardless
+  of the language of the item summaries you were given — they may be mixed.
 - No marketing language, no AI assistant filler ("Here is your recap...").
 - Do not repeat the date range in the headline — the reader can see it.
 - Return JSON. No markdown fences around the JSON, no prose outside it.

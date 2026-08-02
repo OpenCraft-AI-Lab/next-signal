@@ -8,3 +8,7 @@ add_datetime_to_context: false
 extra:
   shared_context: false
   db: false
+  # Only `is_duplicate` / `matched_topic_id` are consumed; `reason` is discarded
+  # (radar_analyses has no column for it and nothing renders it), so a language
+  # rule here would be prompt cost with no user-visible effect.
+  output_language: false

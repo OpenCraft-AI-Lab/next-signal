@@ -128,6 +128,62 @@ reading and manual triggering.
   into a minute of local inference.
 - Never dump a whole provider dict into the logger.
 
+## Output language
+
+`SIGNAL_OUTPUT_LANG` (`zh` | `en`) decides the language of every prose field the
+reader sees — tier-2 `summary` and `impact`, the tier-1 `reason`, and the recap
+headline / theme narratives — independent of the article's language and of
+`goals.yaml`. Unset keeps each prompt's own default. See
+[core.md](./core.md#output-language) for the mechanism.
+
+**Measured** (13 items x 5 repeats, real stages, prompt digests recorded):
+tier-2 `summary` came back English 0/64 against Chinese goals with English
+articles under the old conditional rule, and 63/63 under the unconditional one.
+`impact` and the tier-1 `reason` were already 100% correct in the very same
+responses — the field that failed was the one whose spec carried no language
+cue. An English target held 65/65 with 0 errors against Chinese goals *and*
+Chinese articles.
+
+Post-fix, on the 55-item holdout with a same-night baseline control: English
+articles under a Chinese target went from **12/12 English summaries to 0/12**,
+with `impact` length, verdict flips and mean score all inside baseline's own
+run-to-run range. `scripts/lang_probe.py` measured tier-2 `summary` / `impact`
+and the tier-1 `reason` at **0/30 defects in both directions**, no flipping.
+`radar_recap` over a window holding 22 English and 153 Chinese summaries
+returned Chinese.
+
+**Not measured**: whether tier-2 truncations rose. Baseline measured 2/165
+twice; this change measured 8/165 and 4/165 — a 2x spread between identical
+configurations, so the metric is too noisy to call at this sample size. They are
+premature-EOS under xgrammar, land on the same ~6 fragile items in both arms, and
+cost a retry rather than data (a tier-2 failure leaves the item unseen). `radar_dedup_judge` is deliberately exempt — its `reason` is neither
+stored nor rendered.
+
+Do not restore a conditional phrasing, and do not add a per-field language
+clause: a variant that named `summary` specifically held language equally well
+while making output 35% longer and raising truncation failures from 1/65 to 6/65
+against the 4096 `max_tokens` cap.
+
+### Dedup and the mixed-language embedding space
+
+The dedup gate embeds the tier-2 `summary`, so what gets embedded now follows
+`SIGNAL_OUTPUT_LANG` too. `radar_pushed_topics` is never swept — nothing deletes
+from it — so it permanently holds 32 English topics frozen from before the
+output-language change, alongside 210 Chinese ones. A Chinese summary of an
+English article is therefore ANN-searched against the English embedding of the
+same story.
+
+Measured on 5 such pairs (the stored English topic vs the Chinese summary the
+same item now produces): cosine distance 0.11–0.26, mean 0.195, against a 0.40
+threshold. All pass with margin, so cross-language duplicates are still caught.
+
+Two things follow. The margin is real but finite — anyone tightening
+`DEFAULT_THRESHOLD` below ~0.30 should know the space contains cross-language
+pairs sitting at 0.26. And `radar_dedup_judge` now sees a Chinese `new_summary`
+against possibly-English candidates; it is exempt from the language rule (its
+`reason` is neither stored nor rendered) and only ever judges candidates that
+already cleared the ANN gate.
+
 ## Tuning and evaluation
 
 Scoring behaviour is measured, not adjusted by feel. `scripts/radar_eval.py`
@@ -142,6 +198,22 @@ Article content is snapshotted at `load` time and replayed, so a variant
 comparison is attributable to the prompt rather than to whether folocli answered
 that day. Each run records a `prompt_digest` — a hash of both prompts plus
 `goals.yaml` — so a set of numbers always traces to the text that produced it.
+
+`scripts/lang_probe.py` is the companion harness for output *language* rather
+than score. It replays the same stages plus `knowledge_frontmatter`, writes only
+JSON under `PACA_AGENT_TMP_DIR/lang-probe/`, and reports the share of
+generations that came back in the wrong language. Repeats are mandatory there:
+frontmatter's defect is nondeterministic — the same article flipped language
+between runs — so a single pass can pass while the bug is present.
+
+Two guards exist because both failures actually happened: the probe asserts the
+built agent's composed instructions really name the target language (a bind
+mount that silently did not apply once made a fix look like a no-op), and it
+refuses to write results if an agent's instructions change mid-run (`prompts/`
+is bind-mounted live, so editing a prompt during a run mixes two versions into
+one result set). `radar_eval.py` has no such guard — do not edit prompts while
+it is running.
+
 
 Three label sets live in `configs/info_radar/`:
 

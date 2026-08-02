@@ -8,3 +8,6 @@ add_datetime_to_context: false
 extra:
   shared_context: false
   db: false
+  # Output is the article body itself — translating it destroys the only copy
+  # of the source text the wiki holds. Permanent exemption (spec: core-output-language).
+  output_language: false

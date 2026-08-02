@@ -206,7 +206,13 @@ instructions、model profile 写死。需要一个 LLM 子任务（例如 frontm
 ### Shared context（系统级规则）
 
 `prompts/_shared/*.md` 里的 .md 文件会被 `paca.core.context.shared_context()` 自动拼起来，
-prepend 到**每个 agent** 的 instructions 头部。house rules / 用户 profile / 默认行为放这。
+**append** 到每个 agent 的 instructions 末尾（agent 自己的指令在前）。house rules / 用户
+profile / 默认行为放这。
+
+输出语言另走一条独立通道：`SIGNAL_OUTPUT_LANG`（`zh`|`en`，call time 读，值不认识 →
+`RuntimeError`）由 `language_rule()` 渲染成一块 append 在**最后**，开关是
+`extra: {output_language: false}`，**与 `shared_context` 相互独立**——所有生产 agent 都关了
+shared context 但仍然需要语言规则。`tags` 永远是英文标识符，不受语言规则影响。
 
 - 文件名按字母序拼接，前缀两位数（`00_house_rules.md`、`10_user_profile.md`）控顺序
 - `_*.md` 前缀和 `99_*.md` 是 git-ignored 的草稿位

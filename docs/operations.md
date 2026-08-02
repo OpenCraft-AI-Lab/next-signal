@@ -48,6 +48,10 @@ Key values in the repo-local `.env`:
 - `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` (**required**, no code default — when
   missing, the knowledge pipeline and the dashboard wiki view fail loud)
 - `PACA_STATE_DIR` / `PACA_AGENT_TMP_DIR` (optional, for tests or alternate paths)
+- `SIGNAL_OUTPUT_LANG` (`zh` | `en`, optional) — the language every agent writes
+  its prose fields in. Unset means the default the prompts were written against
+  (Simplified Chinese); an unrecognized value raises `RuntimeError`. Read only
+  through `paca.core.context.output_language()`
 
 Never read these directly from an arbitrary module — go through the corresponding
 core/helper function. The complete key list is in `.env.example`.
@@ -87,7 +91,8 @@ docker compose exec dashboard paca doctor     # in the container
 ```
 
 It checks `DATABASE_URL`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`,
-`OMLX_BASE_URL`, Postgres reachability, configured agents, registered tools, the
+`OMLX_BASE_URL`, `SIGNAL_OUTPUT_LANG` (reports the resolved language, or flags an
+unrecognized value), Postgres reachability, configured agents, registered tools, the
 GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`folocli whoami` —
 either `FOLO_TOKEN` or `~/.folo/config.json` is enough), and that info-radar's
 `configs/info_radar/goals.yaml` exists and parses (without it,

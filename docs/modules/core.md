@@ -93,7 +93,7 @@ Pick by purpose; never mix them:
 
 Files in `prompts/_shared/*.md` are concatenated in filename order (two-digit
 prefixes control ordering: `00_house_rules.md`, `10_user_profile.md`), separated
-by markdown rules, and prepended to **every agent's** instructions
+by markdown rules, and **appended** to every agent's instructions
 (`paca.core.context.shared_context()`).
 
 - `_*.md` prefix: **not loaded** and not committed — pure scratch.
@@ -104,6 +104,46 @@ by markdown rules, and prepended to **every agent's** instructions
 - An individual agent opts out with `extra: {shared_context: false}` in its YAML.
   Pure transformation and verdict agents all opt out, and also set
   `extra: {db: false}` so no session store is created.
+
+The agent's own instructions come first and the shared block trails as a
+qualifier, so it cannot outrank the field contract an agent is judged against.
+Note this is the opposite of where the language rule belongs — see below.
+
+## Output language
+
+`SIGNAL_OUTPUT_LANG` (`zh` | `en`) decides the language every agent writes its
+**prose** fields in, independent of the language of the source article and of
+`configs/info_radar/goals.yaml`. Unset means the default language (Simplified
+Chinese, what the prompts were written against), so behavior is unchanged. An
+unrecognized value raises `RuntimeError`.
+
+- Read at call time (`paca.core.context.output_language()`), so changing it takes
+  effect on the next agent build without a `reload()`. It is deliberately not
+  folded into the cached shared-context string, which would freeze it for the
+  process.
+- Delivery is two-way. A prompt that declares `{{OUTPUT_LANGUAGE}}` gets the
+  language *name* substituted in place by `language_name()`, keeping the rule
+  where its author put it so the prompt's own closers (`Return JSON`,
+  `Do NOT pad`) still land last. A prompt with no token gets
+  `language_rule()`'s block appended after the shared context instead.
+- Appending after a prompt's closers was measured and rejected: on the 55-item
+  holdout set it raised `impact` output ~31% and truncations 2/165 → 7/165
+  against the `max_tokens` cap. Prefer migrating a prompt to the token.
+- A prompt declaring the token while its YAML sets `output_language: false`
+  raises `RuntimeError` — otherwise the literal token reaches the model.
+- Gated by `extra: {output_language: false}`, **independent** of
+  `shared_context`. Every production agent opts out of shared context and still
+  needs the language rule; coupling them would force the house-rules block on
+  structured-output agents.
+- Identifier fields are exempt: `tags` stay lowercase English in every language,
+  because `_normalize_tags` silently drops any tag containing CJK.
+- Permanently exempt agents: `knowledge_artifact_editor` and
+  `knowledge_github_cleaner` emit the article body itself, and
+  `radar_dedup_judge` whose `reason` is never stored or rendered.
+- The rule is phrased unconditionally on purpose — a conditional
+  ("if the goals are in Chinese…") measured 0/64 on tier-2 summaries against
+  Chinese goals with English articles, while the unconditional form measured
+  63/63.
 
 ## Invariants
 

@@ -145,7 +145,7 @@ Return JSON ONLY, matching this schema:
 
 ## Style
 
-- Match the language of `goals`. If goals are in Chinese, write
-  `summary`/`impact` in Chinese; otherwise English.
+- Write `summary` and `impact` in {{OUTPUT_LANGUAGE}}, regardless of the
+  language of `goals` or of the article body.
 - No marketing language, no AI assistant filler ("As you requested...").
 - Return JSON. No markdown fences around the JSON, no prose outside it.
