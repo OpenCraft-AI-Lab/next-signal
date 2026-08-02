@@ -216,6 +216,17 @@ add so downstream analysis history is never silently retargeted.
 into dashboard rows, then filters search/category client-side. The page never
 adds, edits, deletes, or otherwise mutates Folo subscriptions.
 
+Unread counts come from a second folocli command. `subscription list` carries no
+unread field, so the integration also runs `unread list` — which enumerates every
+feed that has unread entries — and joins it on `feedId`. A feed missing from that
+response genuinely has zero unread, which is why `unread` is always a number and
+never null. A failed `unread list` raises rather than degrading to absent counts,
+since a table of zeroes reads as data.
+
+There is no last-updated column. Folo's subscription list carries no per-feed
+update timestamp — only `createdAt`, the date you subscribed — and the real value
+would cost one `folo feed get <feedId>` call per feed.
+
 ## Build-script approval
 
 pnpm 11 requires explicit approval for packages that run install scripts.

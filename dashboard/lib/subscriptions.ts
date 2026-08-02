@@ -11,8 +11,7 @@ export type SubscriptionRow = {
   feedUrl: string;
   siteUrl: string | null;
   category: string;
-  unread: number | null;
-  updatedAt: string | null;
+  unread: number;
 };
 
 export type SubscriptionsState =
@@ -38,6 +37,9 @@ function normalizeRows(value: unknown): SubscriptionRow[] {
       throw new Error(`subscription row ${index} is not an object`);
     }
     const raw = row as Record<string, unknown>;
+    if (typeof raw.unread !== "number" || !Number.isFinite(raw.unread)) {
+      throw new Error(`subscription row ${index} has no numeric unread count`);
+    }
     return {
       id: String(raw.id ?? raw.feedUrl ?? raw.title ?? index),
       title: typeof raw.title === "string" && raw.title ? raw.title : "(untitled)",
@@ -45,8 +47,7 @@ function normalizeRows(value: unknown): SubscriptionRow[] {
       siteUrl: typeof raw.siteUrl === "string" ? raw.siteUrl : null,
       category:
         typeof raw.category === "string" && raw.category ? raw.category : "Uncategorized",
-      unread: typeof raw.unread === "number" && Number.isFinite(raw.unread) ? raw.unread : null,
-      updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : null,
+      unread: raw.unread,
     };
   });
 }

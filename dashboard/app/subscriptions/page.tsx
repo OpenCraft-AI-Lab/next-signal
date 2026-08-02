@@ -12,7 +12,7 @@ export default async function SubscriptionsPage() {
   const t = getDictionary(locale);
   const state = await getSubscriptions();
   const rows = state.ok ? state.rows : [];
-  const totalUnread = rows.reduce((sum, row) => sum + (row.unread ?? 0), 0);
+  const totalUnread = rows.reduce((sum, row) => sum + row.unread, 0);
 
   return (
     <div className="page page-enter">

@@ -36,7 +36,9 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 ## 接的外部
 
 - **Folo CLI**（`paca.integrations.info_radar.folo`）—— info-radar source / full content /
-  subscriptions；默认 `npx --yes folocli@0.0.5`，可用 `FOLO_CLI_ARGV` 覆盖。
+  subscriptions / unread counts；默认 `npx --yes folocli@0.0.5`，可用 `FOLO_CLI_ARGV` 覆盖。
+  subscriptions 盘点合并两个命令：`subscription list` 不带 unread 字段，每个 feed 的未读数
+  由 `unread list` 提供，按 `feedId` join。
   Dashboard `/radar` 的 Ingest 会先用 `folocli entry get <source_id>` 拉全文并 stage 成
   `PACA_AGENT_TMP_DIR` 下的 HTML，再交给 knowledge pipeline；非 Folo source 仍走
   `radar_items.url`。

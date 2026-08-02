@@ -192,6 +192,15 @@ item 后创建一个受跟踪的 knowledge ingest job；Folo 行会先 stage 成
 dashboard 行，然后在客户端做搜索/分类过滤。这个页面**从不**新增、编辑、删除或以
 任何方式修改 Folo 订阅。
 
+未读数来自第二个 folocli 命令。`subscription list` 不带 unread 字段，所以集成层
+额外跑一次 `unread list`（它会列出所有有未读的 feed），再按 `feedId` join。没出现在
+这个响应里的 feed 就是真的零未读——所以 `unread` 永远是数字，不会是 null。
+`unread list` 失败时直接抛错，不降级成缺失的计数：一整列 0 看起来就像真数据。
+
+没有「最后更新」这一列。Folo 的订阅列表不带每个 feed 的更新时间，只有
+`createdAt`（你订阅的日期）；真正的更新时间要为每个 feed 各跑一次
+`folo feed get <feedId>` 才拿得到。
+
 ## 构建脚本授权
 
 pnpm 11 要求对运行安装脚本的包显式授权。`esbuild`、`sharp`（Next.js 图片优化）和

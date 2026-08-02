@@ -39,8 +39,10 @@ reading and manual triggering.
 ## External systems
 
 - **Folo CLI** (`paca.integrations.info_radar.folo`) — info-radar source, full
-  content, and subscriptions. Defaults to `npx --yes folocli@0.0.5`, overridable
-  with `FOLO_CLI_ARGV`. The dashboard's `/radar` Ingest first pulls the full text
+  content, subscriptions, and unread counts. Defaults to `npx --yes folocli@0.0.5`,
+  overridable with `FOLO_CLI_ARGV`. The subscriptions inventory merges two
+  commands: `subscription list` carries no unread field, so `unread list` supplies
+  the per-feed counts, joined on `feedId`. The dashboard's `/radar` Ingest first pulls the full text
   with `folocli entry get <source_id>` and stages it as HTML under
   `PACA_AGENT_TMP_DIR` before handing off to the knowledge pipeline; non-Folo
   sources still go through `radar_items.url`.

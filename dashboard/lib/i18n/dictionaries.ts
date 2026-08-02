@@ -355,7 +355,6 @@ export const dictionaries = {
       feedUrl: "Feed URL",
       category: "Category",
       unread: "Unread",
-      lastUpdated: "Last updated",
       noFeedUrl: "no feed URL",
       noMatches: (query: string) =>
         `No feeds match ${query ? `"${query}"` : "these filters"}.`,
@@ -713,7 +712,6 @@ export const dictionaries = {
       feedUrl: "Feed URL",
       category: "分类",
       unread: "未读",
-      lastUpdated: "最后更新",
       noFeedUrl: "没有 feed URL",
       noMatches: (query: string) =>
         `没有 feed 匹配${query ? `“${query}”` : "当前过滤条件"}。`,

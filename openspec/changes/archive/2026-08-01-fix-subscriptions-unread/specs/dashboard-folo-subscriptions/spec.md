@@ -1,8 +1,5 @@
-# dashboard-folo-subscriptions Specification
+## MODIFIED Requirements
 
-## Purpose
-TBD - created by archiving change dashboard-goals-subscriptions. Update Purpose after archive.
-## Requirements
 ### Requirement: Subscriptions page
 
 The dashboard SHALL render `/subscriptions` as a read-only inventory of the operator's Folo subscriptions, per `dashboard/app/subscriptions/page.tsx`.
@@ -60,51 +57,3 @@ The system SHALL expose a stable server-side boundary that combines `folocli sub
 
 - **WHEN** `folocli unread list` fails, times out, or returns a malformed envelope
 - **THEN** the subscription boundary raises `RuntimeError` rather than returning rows whose unread counts are absent or defaulted to zero
-
-### Requirement: Subscription filtering
-
-The `/subscriptions` page SHALL provide client-side search and category/view filtering over the loaded subscription rows.
-
-#### Scenario: search narrows rows
-
-- **WHEN** the operator types into the feed search box
-- **THEN** the table shows only rows whose title or feed URL matches the search text case-insensitively
-
-#### Scenario: category filter narrows rows
-
-- **WHEN** the operator selects a category/view chip
-- **THEN** the table shows only rows in that category/view
-
-#### Scenario: no matching rows shows empty state
-
-- **WHEN** the current search and category filters match no subscriptions
-- **THEN** the table body shows an empty-state row rather than disappearing
-
-### Requirement: Subscription loading and error states
-
-The `/subscriptions` page SHALL distinguish loading, error, and empty-success states.
-
-#### Scenario: cold start loading state
-
-- **WHEN** the subscription list request is still running
-- **THEN** the page shows a loading row/skeleton with copy explaining that a cold `folocli` start can take time
-
-#### Scenario: CLI error state
-
-- **WHEN** the subscription list request fails due to missing launcher, timeout, auth failure, or malformed output
-- **THEN** the page shows an error panel with the diagnostic message and does not render an empty successful table
-
-#### Scenario: empty subscription success
-
-- **WHEN** Folo returns a successful empty subscription list
-- **THEN** the page shows a successful empty state that says no subscriptions were returned
-
-### Requirement: Subscriptions are read-only
-
-The `/subscriptions` page SHALL NOT create, edit, delete, or reorder Folo subscriptions.
-
-#### Scenario: no mutation controls
-
-- **WHEN** the operator views `/subscriptions`
-- **THEN** there are no add/edit/delete subscription controls and no dashboard action mutates Folo subscription state
-

@@ -72,7 +72,6 @@ def test_subscriptions_prints_json(monkeypatch) -> None:
                 "siteUrl": None,
                 "category": "Blogs",
                 "unread": 2,
-                "updatedAt": None,
             }
         ],
     )

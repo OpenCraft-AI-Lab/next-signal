@@ -1,12 +1,14 @@
 """Folo CLI bridge helpers.
 
 ``folocli`` is invoked via subprocess from ``paca.collectors.info_radar.runner``;
-the actual argv comes from each source's YAML entry. This module exists for
-two things only:
+the actual argv comes from each source's YAML entry. Public surface:
 
-1. ``default_argv()`` — the default argv prefix when a source descriptor
-   doesn't override; pinned to ``folocli@0.0.5`` per Appendix B.
-2. ``whoami()`` — used by ``paca doctor`` to verify auth.
+- ``default_argv()`` — the default argv prefix when a source descriptor
+  doesn't override; pinned to ``folocli@0.0.5`` per Appendix B.
+- ``whoami()`` — used by ``paca doctor`` to verify auth.
+- ``entry_get()`` — one entry's full content, for the radar fetch stage.
+- ``subscription_list()`` / ``unread_list()`` — the dashboard's subscription
+  inventory and the per-feed unread counts merged into it.
 
 Auth: ``folocli`` reads ``FOLO_TOKEN`` env var if set, otherwise falls back to
 the session at ``~/.folo/config.json``. We pass the parent environment through
@@ -125,17 +127,42 @@ def entry_get(source_id: str, *, timeout: float = 60.0) -> dict[str, Any]:
 
 
 def subscription_list(*, timeout: float = 60.0) -> list[dict[str, Any]]:
-    """Return normalized rows from ``folocli subscription list``.
+    """Return normalized rows from ``folocli subscription list``, unread counts merged in.
 
     The CLI output shape has drifted across folocli versions, so this parser
     accepts the common list locations and field aliases, then emits a small
     dashboard-stable row shape. It raises ``RuntimeError`` on auth/shape errors
     instead of returning an empty list, because an empty subscription inventory
     is materially different from a failed CLI call.
+
+    ``subscription list`` carries no unread count, so counts come from a second
+    call to :func:`unread_list`. A failure there is loud for the same reason:
+    absent counts render as a zero on every row, which reads as data.
+
+    ``timeout`` is per folocli call, so the worst case is twice it. In practice
+    the cold ``npx`` start is paid once and the second call hits the npm cache.
     """
+    data = _run_envelope(["subscription", "list"], "subscription list", timeout)
+    raw_rows = _envelope_rows(data, "subscription list")
+    unread_by_feed = _unread_counts(unread_list(timeout=timeout))
+    return [_normalize_subscription(row, unread_by_feed) for row in raw_rows]
+
+
+def unread_list(*, timeout: float = 60.0) -> list[dict[str, Any]]:
+    """Return the rows of ``folocli unread list`` — every feed that has unread entries.
+
+    Feeds with nothing unread are omitted by the CLI, which is what lets callers
+    read "absent" as a real zero rather than as missing data.
+    """
+    data = _run_envelope(["unread", "list"], "unread list", timeout)
+    return _envelope_rows(data, "unread list")
+
+
+def _run_envelope(command: list[str], label: str, timeout: float) -> Any:
+    """Run one folocli command and return its envelope ``data``; raise on every failure path."""
     try:
         result = subprocess.run(
-            [*default_argv(), "subscription", "list"],
+            [*default_argv(), *command],
             check=False,
             capture_output=True,
             text=True,
@@ -144,54 +171,68 @@ def subscription_list(*, timeout: float = 60.0) -> list[dict[str, Any]]:
     except FileNotFoundError as e:
         raise RuntimeError(f"folocli launcher missing: {e}") from e
     except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"folocli subscription list timed out after {timeout}s") from e
+        raise RuntimeError(f"folocli {label} timed out after {timeout}s") from e
 
     if result.returncode != 0 and not result.stdout.strip():
         excerpt = (result.stderr or "").strip()[:200]
-        raise RuntimeError(f"folocli subscription list exit {result.returncode}: {excerpt!r}")
+        raise RuntimeError(f"folocli {label} exit {result.returncode}: {excerpt!r}")
 
     try:
         envelope = json.loads(result.stdout)
     except json.JSONDecodeError as e:
         excerpt = (result.stderr or result.stdout)[:200].strip()
-        raise RuntimeError(f"folocli subscription list non-JSON output: {excerpt!r}") from e
+        raise RuntimeError(f"folocli {label} non-JSON output: {excerpt!r}") from e
 
     if not isinstance(envelope, dict) or "ok" not in envelope:
-        raise RuntimeError(f"folocli subscription list: missing 'ok' in envelope: {envelope!r}")
+        raise RuntimeError(f"folocli {label}: missing 'ok' in envelope: {envelope!r}")
 
     if not envelope.get("ok"):
         err = envelope.get("error") or {}
         raise RuntimeError(
-            f"folocli subscription list ok=false: {err.get('code', 'UNKNOWN')}: "
+            f"folocli {label} ok=false: {err.get('code', 'UNKNOWN')}: "
             f"{err.get('message', 'no message')}"
         )
 
-    raw_rows = _subscription_rows(envelope.get("data"))
-    return [_normalize_subscription(row) for row in raw_rows]
+    return envelope.get("data")
 
 
-def _subscription_rows(data: Any) -> list[dict[str, Any]]:
+def _envelope_rows(data: Any, label: str) -> list[dict[str, Any]]:
     if isinstance(data, list):
         rows = data
     elif isinstance(data, dict):
-        rows = []
         for key in ("subscriptions", "feeds", "list", "items"):
             if key in data:
                 rows = data[key]
                 break
+        else:
+            # Never fall through to an empty list: for `unread list` that would
+            # render a real-looking zero on every feed instead of surfacing the
+            # shape drift. Keys only — values can carry account data.
+            raise RuntimeError(f"folocli {label}: no rows key in data, got keys {sorted(data)}")
     else:
         raise RuntimeError(
-            f"folocli subscription list: data must be a list or mapping, got {type(data).__name__}"
+            f"folocli {label}: data must be a list or mapping, got {type(data).__name__}"
         )
     if not isinstance(rows, list):
         raise RuntimeError(
-            f"folocli subscription list: subscriptions missing or not a list, got {type(rows).__name__}"
+            f"folocli {label}: rows missing or not a list, got {type(rows).__name__}"
         )
     out: list[dict[str, Any]] = []
     for row in rows:
         if isinstance(row, dict):
             out.append(row)
     return out
+
+
+def _unread_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    """Map feed id -> unread count from ``unread list`` rows."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        feed_id = _first_str(row, "feedId", "feed_id")
+        count = _first_int(row, "unreadCount", "unread_count", "unread")
+        if feed_id and count is not None:
+            counts[feed_id] = count
+    return counts
 
 
 def _first_str(row: dict[str, Any], *keys: str) -> str | None:
@@ -223,7 +264,7 @@ def _category(row: dict[str, Any]) -> str | None:
     return None
 
 
-def _normalize_subscription(row: dict[str, Any]) -> dict[str, Any]:
+def _normalize_subscription(row: dict[str, Any], unread_by_feed: dict[str, int]) -> dict[str, Any]:
     feed = row.get("feeds") if isinstance(row.get("feeds"), dict) else {}
     title = _first_str(row, "title", "name", "feedTitle") or _first_str(feed, "title", "name") or "(untitled)"
     feed_url = (
@@ -233,6 +274,10 @@ def _normalize_subscription(row: dict[str, Any]) -> dict[str, Any]:
         or _first_str(feed, "siteUrl", "site_url", "homepage")
         or ""
     )
+    # Match on the raw feed id, not the emitted `id` below — that only resolves
+    # to feedId incidentally, and a folocli that adds a real subscription id
+    # would silently break the join.
+    feed_id = _first_str(row, "feedId", "feed_id") or _first_str(feed, "id")
     return {
         "id": _first_str(row, "id", "sourceId", "source_id", "feedId")
         or _first_str(feed, "id", "sourceId", "source_id")
@@ -243,8 +288,5 @@ def _normalize_subscription(row: dict[str, Any]) -> dict[str, Any]:
         "siteUrl": _first_str(row, "siteUrl", "site_url", "homepage")
         or _first_str(feed, "siteUrl", "site_url", "homepage"),
         "category": _category(row) or "Uncategorized",
-        "unread": _first_int(row, "unread", "unreadCount", "unread_count"),
-        "updatedAt": _first_str(
-            row, "updatedAt", "updated_at", "lastUpdated", "last_updated", "createdAt", "created_at"
-        ),
+        "unread": unread_by_feed.get(feed_id, 0) if feed_id else 0,
     }

@@ -5,11 +5,10 @@ import { useMemo, useState } from "react";
 
 import { useI18n } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
-import { timeAgo } from "@/lib/relative-time";
 import type { SubscriptionRow } from "@/lib/subscriptions";
 
 export function SubscriptionsTable({ rows }: { rows: SubscriptionRow[] }) {
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
   const categories = useMemo(
@@ -65,7 +64,6 @@ export function SubscriptionsTable({ rows }: { rows: SubscriptionRow[] }) {
               <th style={{ width: 80, textAlign: "right" }}>
                 {t.subscriptions.unread}
               </th>
-              <th style={{ width: 120 }}>{t.subscriptions.lastUpdated}</th>
             </tr>
           </thead>
           <tbody>
@@ -104,7 +102,7 @@ export function SubscriptionsTable({ rows }: { rows: SubscriptionRow[] }) {
                   <span className="chip">{row.category}</span>
                 </td>
                 <td style={{ textAlign: "right" }}>
-                  {row.unread && row.unread > 0 ? (
+                  {row.unread > 0 ? (
                     <span
                       className={`badge ${row.unread > 30 ? "amber" : "accent"}`}
                     >
@@ -114,19 +112,12 @@ export function SubscriptionsTable({ rows }: { rows: SubscriptionRow[] }) {
                     <span className="num muted-2">0</span>
                   )}
                 </td>
-                <td>
-                  <span className="mono muted" style={{ fontSize: 11.5 }}>
-                    {row.updatedAt
-                      ? timeAgo(row.updatedAt, new Date(), locale)
-                      : "—"}
-                  </span>
-                </td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={4}
                   style={{
                     textAlign: "center",
                     color: "var(--text-4)",

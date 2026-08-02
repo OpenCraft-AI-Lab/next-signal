@@ -132,6 +132,7 @@ uv run paca info-radar analyze [--limit N] [--source NAME]
                                                       # prerequisite: configs/info_radar/goals.yaml must exist
                                                       # (cp configs/info_radar/goals.example.yaml configs/info_radar/goals.yaml, then edit)
 uv run paca info-radar subscriptions --json           # read Folo subscriptions as stable JSON lines
+                                                      # merges `unread list` for per-feed unread counts
 uv run paca info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]
                                                       # synthesize a date range of kept signals into
                                                       # themed narratives (cached per range + gate)
