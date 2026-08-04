@@ -69,7 +69,9 @@ def _stub_editor(
                 )
             )
 
-    monkeypatch.setattr(artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name))
+    monkeypatch.setattr(
+        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
+    )
 
 
 def _frontmatter(path: str) -> dict:
@@ -124,7 +126,6 @@ def test_ingest_markdown_file_writes_clean_and_raw(wiki_paths, monkeypatch) -> N
     assert fm["tags"] == ["omlx", "local-models"]
     assert fm["freshness"] == "stable"
     assert "# OMLX" in text
-    assert "## 总结\n\na dense factual summary." in text
 
 
 def test_ingest_markdown_file_uses_editor_title_for_filename(wiki_paths, monkeypatch) -> None:

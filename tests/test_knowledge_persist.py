@@ -72,12 +72,6 @@ def test_persist_writes_wiki_file_and_frontmatter() -> None:
     assert fm["status"] == "clean"
 
 
-def test_persist_appends_summary_section() -> None:
-    result = persist(_ready())
-    text = result.clean_path.read_text(encoding="utf-8")
-    assert "## 总结\n\na dense factual summary." in text
-
-
 def test_persist_uses_editor_freshness_tier() -> None:
     result = persist(_ready(freshness="ephemeral"))
     assert _frontmatter(result.clean_path)["freshness"] == "ephemeral"

@@ -77,8 +77,14 @@ def _run_editor(
     *,
     agent_name: str = "knowledge_artifact_editor",
 ) -> str:
-    """Send a body to the named cleaner agent; return the cleaned plain markdown."""
-    agent = build_from_name(agent_name)
+    """Send a body to the named cleaner agent; return the cleaned plain markdown.
+
+    Both cleaner agents resolve `same_as_source`: the body must stay in the
+    article's own language, targeted explicitly via the language `fetch()`
+    already detected, rather than left to the model's default tendency to
+    preserve input language.
+    """
+    agent = build_from_name(agent_name, language=artifact.detected_language)
     response = agent.run(
         json.dumps(
             {
@@ -96,7 +102,13 @@ def _run_editor(
 
 
 def write_frontmatter(artifact: KnowledgeArtifact) -> KnowledgeArtifact:
-    """Run the frontmatter agent under FrontmatterDraft; set the fields."""
+    """Run the frontmatter agent under FrontmatterDraft; set the fields.
+
+    `title`/`summary` resolve `global` — they are the artifact's index entry,
+    read in the dashboard, so they follow the reader's content-language
+    setting. No `language=` override: the detected source language belongs to
+    `clean_body`, which must not translate the archived text.
+    """
     if not artifact.markdown.strip():
         raise RuntimeError("frontmatter step received empty markdown")
     agent_name = (

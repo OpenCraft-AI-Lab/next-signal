@@ -221,6 +221,17 @@ markdown。公开的微信公众号文章是服务端渲染的、不需要登录
 里面至少要有一个云 LLM key，以及指向你 wiki 仓库宿主机路径的 `PACA_WIKI_DIR` /
 `PACA_WIKI_RAW_DIR`。
 
+> **把栈跑起来 vs. 拿它验证一个改动。** 本节讲前者。如果你要验证一个改动是否生效
+> ——改了什么该跑哪个 loop、容器里跑的到底是不是你的代码、哪些命令不烧 token、
+> 什么才算证据——见
+> [`.claude/skills/docker-verify/SKILL.md`](../../.claude/skills/docker-verify/SKILL.md)。
+> 它要防的那个坑：`/app` 是烤进镜像的，所以改完 `src/` 直接 `docker compose exec`
+> 验的是**改之前**的代码。
+
+> **与宿主机相关。** 下面的 shell 片段默认 POSIX shell（macOS 上是 zsh，自 Catalina
+> 起的默认）。Windows 上跑在 PowerShell 里，引号处理和 exit code 的语义都不同，
+> 而且是静默出错——跨平台对照表在上面那个 skill 里。
+
 ### 快速开始
 
 1. 安装并启动 Docker Engine + Compose v2（Docker Desktop 或 colima）。

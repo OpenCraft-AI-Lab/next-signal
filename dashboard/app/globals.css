@@ -240,7 +240,15 @@ a { color: inherit; text-decoration: none; }
   background: var(--accent); border-radius: 2px;
 }
 .nav-spacer { flex: 1; }
-.nav-tools { display: flex; align-items: center; gap: 8px; }
+.nav-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* The slot is the bar's only shrink point: everything after it is a control the
+   user has to be able to reach, and without this the English labels alone
+   overflow 1280px and push language / settings / theme off the right edge (or
+   squeeze the icon buttons narrower than their icons). Inside the slot, the
+   chip wrapper in `radar/pull-analyze-button.tsx` absorbs the clip so the
+   primary button beside it stays whole. */
+.nav-tools > * { flex-shrink: 0; }
+#nav-trigger-slot { flex-shrink: 1; min-width: 0; }
 .lang-toggle { min-width: 58px; }
 
 /* ---- BUTTONS ---- */

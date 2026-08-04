@@ -209,10 +209,20 @@ instructions、model profile 写死。需要一个 LLM 子任务（例如 frontm
 **append** 到每个 agent 的 instructions 末尾（agent 自己的指令在前）。house rules / 用户
 profile / 默认行为放这。
 
-输出语言另走一条独立通道：`SIGNAL_OUTPUT_LANG`（`zh`|`en`，call time 读，值不认识 →
-`RuntimeError`）由 `language_rule()` 渲染成一块 append 在**最后**，开关是
-`extra: {output_language: false}`，**与 `shared_context` 相互独立**——所有生产 agent 都关了
-shared context 但仍然需要语言规则。`tags` 永远是英文标识符，不受语言规则影响。
+输出语言另走一条独立通道，由 `paca.core.language` 解析：每个 agent 在自己 YAML 的
+`extra.output_language` 声明一个 policy——`off`（不加规则，裸 `false` 等价）/ `global`
+（读 `~/.next-signal/language.json` 的实时偏好，不存在则回落硬编码 `"en"`，**不**读
+`.env`）/ `same_as_source`（调用方必须传 `language=` override，通常是探测出的源语言，
+缺失则 `RuntimeError`）/ `fixed:<lang>`（字面量）。call time 解析，值不认识 →
+`RuntimeError`，由 `language_rule()` 渲染成一块 append 在**最后**，**与 `shared_context`
+相互独立**——所有生产 agent 都关了 shared context 但仍然需要语言规则。`tags` 永远是英文
+标识符，走各 agent 自己 prompt 里的专门指令，不受这套语言 policy 影响。
+
+分界线是**输出物是什么**，不是模块：写给读者看的用 `global`（info-radar 四个 agent +
+两个 frontmatter agent 的 `title`/`summary`——偏好文件由 dashboard nav 上的**设置面板**
+写入，语言按钮只管界面文案）；正文清洗那两个 agent 用 `same_as_source`（wiki 里源文本的
+唯一副本，翻译掉就毁了；源语言由 `paca.core.language_detect.detect_language()` 确定性
+探测，不用 LLM）。所以一个 wiki 文件可以是英文 frontmatter 配中文正文。
 
 - 文件名按字母序拼接，前缀两位数（`00_house_rules.md`、`10_user_profile.md`）控顺序
 - `_*.md` 前缀和 `99_*.md` 是 git-ignored 的草稿位
@@ -315,6 +325,9 @@ shared context 但仍然需要语言规则。`tags` 永远是英文标识符，�
   （app 镜像已把 `paca` / `uv` 放进 PATH，例如 `paca doctor`、`paca run-workflow knowledge_ingest`、
   `paca info-radar pull`）
 - 完整设计与卷 / 环境变量映射见 [`docs/containerized-deployment.md`](./docs/containerized-deployment.md)
+- **怎么验**（改了什么该跑哪个 loop、镜像是否过期、哪些命令不烧 token、什么才算证据）见
+  [`.claude/skills/docker-verify/SKILL.md`](./.claude/skills/docker-verify/SKILL.md)。
+  注意 `/app` 是烤进镜像的，不是 bind mount——改完 `src/` 直接 `exec` 验的是旧代码
 
 ---
 

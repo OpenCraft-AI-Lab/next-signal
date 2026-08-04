@@ -18,9 +18,13 @@ const LOCALES: { value: Locale; name: string; short: string }[] = [
 ];
 
 /**
- * Locale picker. Built on Radix Select rather than a menu primitive because
- * this picks a value rather than firing a command — which also makes the
- * trigger announce the current language instead of an ambiguous target.
+ * UI-chrome locale picker. Built on Radix Select rather than a menu primitive
+ * because this picks a value rather than firing a command — which also makes
+ * the trigger announce the current language instead of an ambiguous target.
+ *
+ * Governs interface text only. Generated content (radar analyses, wiki
+ * frontmatter) follows the separate content-language setting in
+ * `SettingsPanel`.
  */
 export function LanguageToggle() {
   const router = useRouter();
@@ -32,6 +36,9 @@ export function LanguageToggle() {
       value={locale}
       onValueChange={(next) => {
         if (next === locale) return;
+        // UI chrome only. The pipeline's content language is a separate
+        // setting, owned by the nav settings panel — the two are independent
+        // and may hold different values on purpose.
         document.cookie = `${LOCALE_COOKIE}=${next}; path=/; max-age=31536000; samesite=lax`;
         router.refresh();
       }}

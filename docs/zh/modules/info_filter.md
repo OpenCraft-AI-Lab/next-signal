@@ -103,10 +103,12 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 
 ## 输出语言
 
-`SIGNAL_OUTPUT_LANG`（`zh` | `en`）决定读者看到的所有散文字段用什么语言——tier-2 的
-`summary` / `impact`、tier-1 的 `reason`、recap 的 headline 与 narrative——与文章语言、
-与 `goals.yaml` 语言都无关。不设则各 prompt 自己的默认生效。机制见
-[core.md](./core.md#输出语言)。
+`global` 语言 policy（机制见 [core.md](./core.md#输出语言)）决定读者看到的所有散文字段
+用什么语言——tier-2 的 `title`、`summary` / `impact`、tier-1 的 `reason`、recap 的
+headline 与 narrative——与文章语言、与 `goals.yaml` 语言都无关。`title` 是后加的：以前
+它原样透传源标题，导致跟同一张卡片上的 `summary`/`impact` 语言不一致；现在它走同一次
+tier-2 调用、同一个 policy。解析出的语言来自 dashboard 的实时偏好文件,不存在时回落到
+硬编码默认值——不再是某个 env var（已退役的 `SIGNAL_OUTPUT_LANG` 机制）。
 
 **实测**（13 条 × 5 次重复，真实 stage，记录 prompt digest）：旧的条件句规则下，中文 goals +
 英文文章时 tier-2 `summary` 命中 0/64；改成无条件后 63/63。`impact` 和 tier-1 `reason` 在
@@ -128,7 +130,7 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 ### dedup 与混合语言的嵌入空间
 
 dedup gate 嵌入的就是 tier-2 的 `summary`,所以被嵌入的文本现在也跟着
-`SIGNAL_OUTPUT_LANG` 走。`radar_pushed_topics` 从不被清理——没有任何地方 DELETE 它——
+`global` 语言 policy 走。`radar_pushed_topics` 从不被清理——没有任何地方 DELETE 它——
 所以它会永久保留 32 条输出语言改动之前冻结的英文 topic,和 210 条中文 topic 混在一起。
 于是英文文章的中文 summary,要去和同一件事的英文向量做 ANN 比对。
 

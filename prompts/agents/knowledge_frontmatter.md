@@ -24,10 +24,10 @@ Output schema:
   or 12 English words. The wiki filename is derived directly from `title`; do not
   generate a separate filename or slug.
 - `summary`: a dense factual mini-summary, usually 2-4 sentences and 120-220 Chinese
-  characters or 70-130 English words. It is written to frontmatter AND to the article's
-  final `## 总结` section, so write it as a reader-facing closing summary, not just
-  metadata. Include the artifact's core claim, the key mechanisms/evidence, and the
-  reasoning chain that connects them. Mention important caveats or scope limits when
+  characters or 70-130 English words. It is shown on review cards, so write it as a
+  reader-facing closing summary, not just metadata. Include the artifact's core claim,
+  the key mechanisms/evidence, and the reasoning chain that connects them. Mention
+  important caveats or scope limits when
   they affect interpretation. Do not write a bullet list, teaser, generic abstract, or
   one-line headline. `summary` must never be empty.
 - `tags`: 3-5 short lowercase English topic tags, no Chinese characters, no spaces, no

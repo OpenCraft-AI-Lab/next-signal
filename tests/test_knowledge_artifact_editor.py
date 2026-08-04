@@ -21,6 +21,7 @@ def _artifact(
         title="orig title",
         markdown=markdown,
         metadata={},
+        detected_language="en",
     )
 
 
@@ -41,7 +42,54 @@ def _stub_agent(monkeypatch, payload) -> None:
         def run(self, agent_input, **kwargs):
             return _FakeResponse(text)
 
-    monkeypatch.setattr(artifact_editor_mod, "build_from_name", lambda name: FakeAgent())
+    monkeypatch.setattr(
+        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent()
+    )
+
+
+def test_clean_body_threads_detected_language_to_the_agent(monkeypatch) -> None:
+    """`same_as_source` needs the caller to supply the override explicitly —
+    verify it's the artifact's own detected_language, not the global preference."""
+    seen_language: list[str | None] = []
+
+    class FakeAgent:
+        def run(self, agent_input, **kwargs):
+            return _FakeResponse("cleaned.")
+
+    def fake_build(name, language=None):
+        seen_language.append(language)
+        return FakeAgent()
+
+    monkeypatch.setattr(artifact_editor_mod, "build_from_name", fake_build)
+    artifact = _artifact()
+    artifact.detected_language = "zh"
+    clean_body(artifact)
+
+    assert seen_language == ["zh"]
+
+
+def test_write_frontmatter_does_not_pass_a_language_override(monkeypatch) -> None:
+    """The frontmatter agents resolve `global` — title/summary are the reader's
+    index entry, so they follow the content-language setting, not the source.
+    Passing the detected language here would silently re-pin them to it."""
+    seen_language: list[str | None] = []
+
+    class FakeAgent:
+        def run(self, agent_input, **kwargs):
+            return _FakeResponse(
+                json.dumps({"title": "T", "summary": "s", "tags": ["a"]}, ensure_ascii=False)
+            )
+
+    def fake_build(name, language=None):
+        seen_language.append(language)
+        return FakeAgent()
+
+    monkeypatch.setattr(artifact_editor_mod, "build_from_name", fake_build)
+    artifact = _artifact()
+    artifact.detected_language = "zh"
+    write_frontmatter(artifact)
+
+    assert seen_language == [None]
 
 
 # --- clean_body -----------------------------------------------------------
@@ -87,7 +135,9 @@ def test_clean_body_keeps_transcript_scaffold(monkeypatch) -> None:
             seen.append(json.loads(agent_input)["markdown"])
             return _FakeResponse("cleaned spoken body.")
 
-    monkeypatch.setattr(artifact_editor_mod, "build_from_name", lambda name: FakeAgent())
+    monkeypatch.setattr(
+        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent()
+    )
 
     result = clean_body(
         _artifact(source_type="bilibili", markdown="# Vid\n\n## Transcript\n\nspoken body.")
@@ -111,7 +161,7 @@ def test_clean_body_github_routes_to_github_cleaner(monkeypatch) -> None:
             return _FakeResponse("Tight condensed README.")
 
     monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name)
+        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
     )
 
     body = (
@@ -147,7 +197,7 @@ def test_clean_body_non_github_uses_default_cleaner(monkeypatch) -> None:
             return _FakeResponse(json.loads(agent_input)["markdown"])
 
     monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name)
+        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
     )
 
     clean_body(_artifact(source_type="web", markdown="# Hello\n\nA body."))
@@ -166,7 +216,7 @@ def test_clean_body_github_collapse_below_floor_raises(monkeypatch) -> None:
             return _FakeResponse("x")  # single char — way below 20% floor
 
     monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name)
+        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
     )
 
     long_readme = "a" * 3000
@@ -233,7 +283,7 @@ def test_write_frontmatter_github_routes_to_github_summary(monkeypatch) -> None:
             )
 
     monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name: FakeAgent(name)
+        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
     )
 
     write_frontmatter(_artifact(source_type="github", markdown="# owner/repo\n\nbody"))

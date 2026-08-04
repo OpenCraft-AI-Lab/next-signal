@@ -237,6 +237,19 @@ root. Prerequisites: Docker Engine + Compose v2, and a `.env` (copy from
 `.env.example`) with at least a cloud LLM key and `PACA_WIKI_DIR` /
 `PACA_WIKI_RAW_DIR` set to the host paths of your wiki repos.
 
+> **Standing the stack up vs. verifying a change against it.** This section is
+> about the former. If you are checking whether an edit works — which loop to run
+> for a given change, whether the container is even running your code, which
+> commands avoid model spend, and what counts as evidence — see
+> [`.claude/skills/docker-verify/SKILL.md`](../.claude/skills/docker-verify/SKILL.md).
+> The trap it exists to prevent: `/app` is baked into the image, so editing
+> `src/` and re-running `docker compose exec` verifies the *previous* code.
+
+> **Host-specific.** The shell snippets below assume a POSIX shell (zsh on macOS,
+> the default since Catalina). On Windows they run under PowerShell, where
+> quoting and exit-code handling differ in ways that silently corrupt results —
+> the skill above carries the cross-platform table.
+
 ### Quickstart
 
 1. Install/start Docker Engine + Compose v2 (Docker Desktop or colima).

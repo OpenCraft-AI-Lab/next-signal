@@ -9,5 +9,5 @@ extra:
   shared_context: false
   db: false
   # Same as knowledge_artifact_editor: this emits cleaned body text, not prose
-  # written for the reader. Permanent exemption.
-  output_language: false
+  # written for the reader. Targets the source's own detected language.
+  output_language: same_as_source

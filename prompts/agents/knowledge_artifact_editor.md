@@ -32,7 +32,8 @@ Input is a JSON object with:
   only to remote `![](https://...)` URLs that point at nothing real.
 - Heading lines must contain only heading text. Put body text in a separate paragraph
   after the heading.
-- Do NOT add a `## 总结` section — the summary is appended separately downstream.
+- Do NOT add a closing summary section — the article's `summary` lives in frontmatter
+  only, not in the body.
 - Use Simplified Chinese for Chinese content. Preserve technical terms and proper nouns
   when useful, such as token, ViT, MoE, Reference Gap, Perception Gap, DeepSeek, LLaVA,
   Gemini, Claude.

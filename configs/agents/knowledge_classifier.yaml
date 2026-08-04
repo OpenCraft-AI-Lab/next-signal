@@ -8,3 +8,7 @@ add_datetime_to_context: false
 extra:
   shared_context: false
   db: false
+  # Output is a taxonomy category path (an identifier, always English), never
+  # prose, so a language rule here would be prompt cost with no user-visible
+  # effect. Same reasoning as radar_dedup_judge's `off`.
+  output_language: "off"

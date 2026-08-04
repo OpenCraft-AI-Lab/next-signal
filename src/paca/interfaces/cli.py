@@ -215,25 +215,31 @@ def doctor() -> None:
         )
     )
 
-    # 2b. Output language. Unset is a valid, unchanged-behavior state, so this
-    # reports rather than fails; an unrecognized value raises and is surfaced.
-    from paca.core.context import OUTPUT_LANG_ENV, output_language
+    # 2b. Output language (global policy). A missing preference file is a
+    # valid, unchanged-behavior state, so this reports rather than fails; a
+    # corrupt or unrecognized preference-file value raises and is surfaced.
+    from paca.core.language import LANGUAGE_STATE_FILE, global_language
 
     try:
-        lang = output_language()
+        lang = global_language()
         checks.append(
             (
-                OUTPUT_LANG_ENV,
+                "content language",
                 True,
-                lang or "not set (prompts fall back to Simplified Chinese)",
+                f"{lang} ({'from ' + str(LANGUAGE_STATE_FILE) if LANGUAGE_STATE_FILE.exists() else 'hardcoded default'})",
             )
         )
     except RuntimeError as e:
-        checks.append((OUTPUT_LANG_ENV, False, str(e)))
+        checks.append(("content language", False, str(e)))
 
-    # 3. Postgres reachable?
+    # 3. Postgres reachable, and is its schema current?
+    # Reachability alone is not health: a stack running a pre-migration image
+    # answers SELECT 1 happily while the dashboard 500s on a missing column.
+    from paca.core.db import missing_business_columns
+
     db_ok = False
     db_msg = "skipped (no DATABASE_URL)"
+    schema_check: tuple[str, bool, str] | None = None
     if db:
         try:
             import psycopg
@@ -242,11 +248,24 @@ def doctor() -> None:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
                     cur.fetchone()
-            db_ok = True
-            db_msg = "reachable"
+                db_ok = True
+                db_msg = "reachable"
+                gaps = missing_business_columns(conn)
+            schema_check = (
+                ("business schema", True, "all expected columns present")
+                if not gaps
+                else (
+                    "business schema",
+                    False,
+                    "; ".join(f"{t} missing {', '.join(c)}" for t, c in gaps.items())
+                    + " — re-run scripts/bootstrap_db.py (rebuild the image first)",
+                )
+            )
         except Exception as e:  # noqa: BLE001
             db_msg = f"unreachable: {e}"
     checks.append(("Postgres", db_ok, db_msg))
+    if schema_check:
+        checks.append(schema_check)
 
     # 4. configs / agents present?
     agents = list_agents()

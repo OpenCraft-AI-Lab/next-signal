@@ -20,7 +20,15 @@ export const dictionaries = {
       design: "Design System",
     },
     language: {
-      label: "Language",
+      label: "Interface language",
+    },
+    settings: {
+      trigger: "Settings",
+      heading: "Settings",
+      contentLanguage: "Content language",
+      contentLanguageHint:
+        "Language for generated content — radar analyses and wiki frontmatter. Does not change the interface language.",
+      saveFailed: "Could not save. Check the dashboard logs.",
     },
     theme: {
       toggle: "Toggle theme",
@@ -388,7 +396,15 @@ export const dictionaries = {
       design: "设计系统",
     },
     language: {
-      label: "语言",
+      label: "界面语言",
+    },
+    settings: {
+      trigger: "设置",
+      heading: "设置",
+      contentLanguage: "内容语言",
+      contentLanguageHint:
+        "生成内容的语言——雷达分析与知识库 frontmatter。不影响界面语言。",
+      saveFailed: "保存失败，请查看 dashboard 日志。",
     },
     theme: {
       toggle: "切换主题",

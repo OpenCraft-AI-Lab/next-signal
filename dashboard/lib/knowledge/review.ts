@@ -25,7 +25,7 @@ export const REVIEW_DISPLAY_CAP = 5;
 export type ReviewCard = {
   docPath: string;
   title: string;
-  /** The doc's own frontmatter `summary` (its `## 总结`), or a body fallback. */
+  /** The doc's own frontmatter `summary`, or a body fallback. */
   summary: string | null;
   /** YYYY-MM-DD capture anchor. */
   capturedAt: string;
@@ -141,8 +141,8 @@ async function rowToCard(row: DueRow): Promise<ReviewCard> {
 
 /**
  * Frontmatter title + summary for a due doc. `summary` is the doc's own closing
- * summary (written to frontmatter and the `## 总结` section at ingest); for a
- * hand-created doc that has none, fall back to its first body paragraph.
+ * summary, written to frontmatter at ingest; for a hand-created doc that has
+ * none, fall back to its first body paragraph.
  */
 async function readDocMeta(
   docPath: string,

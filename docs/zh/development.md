@@ -48,9 +48,10 @@ extra: { db: false, shared_context: false }
 
 production agent 不要在 Python 里硬编码 model / instructions。纯转换 / verifier
 agent 可在 yaml 写 `extra: {db: false}`（不要会话库）、`extra: {shared_context: false}`
-（不继承 shared context）。第三个开关 `extra: {output_language: false}` 用于退出
-`SIGNAL_OUTPUT_LANG` 语言规则——它与 `shared_context` 相互独立，只该配在输出是源文本
-而非写给读者的散文的 agent 上。
+（不继承 shared context）。第三个 key `extra: {output_language: <policy>}` 选语言
+policy（`off` / `global` / `same_as_source` / `fixed:<lang>`，见
+[modules/core.md](./modules/core.md#输出语言)）——它与 `shared_context` 相互独立，
+`off` 只该配在输出是源文本或会被丢弃、而非写给读者的散文的 agent 上。
 
 ## runnable 配置
 

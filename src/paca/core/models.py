@@ -247,6 +247,7 @@ def _build_deepseek(p: ModelProfile) -> Model:
             "DEEPSEEK_API_KEY not set. Add it to .env to use the deepseek provider."
         )
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+    extra_body: dict[str, Any] = dict(p.extra.get("extra_body", {}))
 
     return OpenAILike(
         id=p.model_id,
@@ -256,6 +257,12 @@ def _build_deepseek(p: ModelProfile) -> Model:
         top_p=p.top_p,
         max_tokens=p.max_tokens,
         timeout=p.timeout,
+        # deepseek-v4-flash/-pro default to thinking mode on with effort "high"
+        # (undocumented in code before; caught us with slower/pricier calls).
+        # YAML sets this via `extra.reasoning_effort` ("low"/"high"/"max") or
+        # fully disables thinking via `extra.extra_body.thinking.type: disabled`.
+        reasoning_effort=p.extra.get("reasoning_effort"),
+        extra_body=extra_body or None,
         # DeepSeek's API rejects response_format json_schema ("This response_format
         # type is unavailable now"); only json_object mode is supported. Both flags
         # off makes agno emit {"type": "json_object"} — the schema is conveyed via

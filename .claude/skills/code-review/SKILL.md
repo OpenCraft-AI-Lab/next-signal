@@ -284,6 +284,10 @@ accurate. This is the core of light mode — code and docs drift silently.
 | Test count changed materially | `CLAUDE.md` "当前 N 个 test 全过" |
 | New env var / external service | `.env.example`, `docs/operations.md` 环境变量 table |
 | New dependency | `pyproject.toml` (via `uv add`) — confirm it was not hand-edited |
+| `docker-compose.yml`, `Dockerfile`, `.dockerignore`, or `scripts/container_bootstrap.sh` | `.claude/skills/docker-verify/SKILL.md` (paths live vs baked, service access, timings), `docs/containerized-deployment.md` + `docs/zh/` mirror |
+| A `build_from_name` / `get_model` / `get_embedder` call added to a path listed as model-free (notably anything under `src/paca/collectors/`) | `.claude/skills/docker-verify/SKILL.md` LLM-cost safety map — a stale entry there causes unintended token spend |
+| An agent's `extra.output_language` / policy changed, or any agent renamed | `scripts/lang_probe.py`, `scripts/radar_eval.py` — the measurement harnesses build the *shipped* agents and encode assumptions about their policy (a `same_as_source` agent needs a `language=` override; a `global` one needs `global_language` patched). A stale harness either aborts or, worse, measures the wrong prompt |
+| A business table's DDL changed in `scripts/bootstrap_db.py` | `paca.core.db.BUSINESS_TABLE_COLUMNS` — the runtime schema contract `paca doctor` checks against. A column the runtime reads but the contract omits is a 500 nobody is warned about |
 
 A doc-sync finding is not optional cleanup — list it as a required follow-up.
 

@@ -59,20 +59,34 @@ profiles:
     model_id: claude-haiku-4-5
     temperature: 0.4
 
+  # reasoning_effort: low — deepseek-v4-flash defaults to thinking mode ON at
+  # effort "high", which is slower and bills reasoning tokens as output. This
+  # fallback doesn't need full chain-of-thought; low keeps some reasoning
+  # without the cost/latency hit of the default.
   deepseek_smart:
     provider: deepseek
     model_id: deepseek-v4-flash
     temperature: 0.4
     top_p: 0.85
+    extra:
+      reasoning_effort: low
 
   # Tight token cap mirrors local_structured — keeps structured-output agents
-  # from hanging if json_schema constrained decoding loops.
+  # from hanging if json_schema constrained decoding loops. Thinking mode is
+  # disabled outright (not just low effort): with a 4096-token cap, default
+  # high-effort reasoning could burn the whole budget on reasoning_content
+  # before ever emitting the JSON answer, turning the cap into a guaranteed
+  # truncation instead of a safety net.
   deepseek_structured:
     provider: deepseek
     model_id: deepseek-v4-flash
     temperature: 0.2
     top_p: 0.85
     max_tokens: 4096
+    extra:
+      extra_body:
+        thinking:
+          type: disabled
 
   # Optional cloud fallbacks — uncomment when keys are configured.
   # gpt:

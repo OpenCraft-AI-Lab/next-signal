@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 import psycopg
 from psycopg import sql
 
+from paca.core.db import missing_business_columns
 
 CREATE_EXTENSION = "CREATE EXTENSION IF NOT EXISTS vector"
 
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS radar_analyses (
     radar_item_id   BIGINT NOT NULL REFERENCES radar_items(id) ON DELETE CASCADE,
     verdict         TEXT NOT NULL,            -- 'drop' | 'keep'
     tier1_reason    TEXT,
+    title           TEXT,                     -- tier-2's rewritten title, NULL on 'drop'
     summary         TEXT,
     impact_md       TEXT,
     score           INTEGER,
@@ -80,6 +82,11 @@ CREATE TABLE IF NOT EXISTS radar_analyses (
     analyzed_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (radar_item_id)
 );
+-- `title` shipped after this table did (output-language-policy); the CREATE
+-- above only runs on a fresh database, so an already-provisioned one needs
+-- this too. Nullable: historical rows keep NULL, and the dashboard falls
+-- back to radar_items.title for them.
+ALTER TABLE radar_analyses ADD COLUMN IF NOT EXISTS title TEXT;
 CREATE INDEX IF NOT EXISTS radar_analyses_unpushed_idx
     ON radar_analyses (analyzed_at)
     WHERE verdict='keep' AND dedup_status='novel' AND pushed_at IS NULL;
@@ -157,6 +164,14 @@ def main() -> int:
             cur.execute(CREATE_RADAR_ANALYSES)
             cur.execute(CREATE_RADAR_RECAPS)
             cur.execute(CREATE_KNOWLEDGE_REVIEWS)
+
+        # The DDL above only creates what's missing, so a column added to an
+        # existing table needs its own ALTER. Fail here rather than let the
+        # gap surface later as a query error in the dashboard.
+        gaps = missing_business_columns(conn)
+        if gaps:
+            detail = "; ".join(f"{t} missing {', '.join(c)}" for t, c in gaps.items())
+            raise RuntimeError(f"schema does not satisfy the runtime contract: {detail}")
 
     print(f"bootstrap complete on {db_name}")
     return 0

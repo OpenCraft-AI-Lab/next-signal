@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { useI18n } from "@/components/i18n-provider";
 import { Input, SearchWrap, Textarea } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { RETENTION_HELD, retentionColor } from "@/lib/retention";
 import { scoreHue, scoreLOff } from "@/lib/score";
@@ -575,6 +576,30 @@ function Components() {
             </div>
           </div>
           <Spec>used by LanguageToggle (Radix Select)</Spec>
+        </div>
+      </Card>
+
+      <Card pad>
+        <div className="sec-head">
+          <h2 className="sec-title">Popover</h2>
+          <span className="sec-sub">
+            anchored non-modal panel · same elevated surface as the menu above
+          </span>
+        </div>
+        <div className="row gap-16" style={{ alignItems: "flex-start" }}>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button>Open popover</Button>
+            </PopoverTrigger>
+            <PopoverContent className="col w-[16rem] gap-2" align="start">
+              <p className="sec-title">Panel heading</p>
+              <p className="muted text-[12px] leading-snug">
+                For settings and small forms anchored to their trigger. Use Dialog
+                instead when the choice deserves to block the page.
+              </p>
+            </PopoverContent>
+          </Popover>
+          <Spec>used by SettingsPanel (Radix Popover)</Spec>
         </div>
       </Card>
     </div>

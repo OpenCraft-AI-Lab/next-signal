@@ -131,3 +131,36 @@ def test_build_deepseek_honors_base_url_override(monkeypatch) -> None:
         ModelProfile(provider="deepseek", model_id="deepseek-v4-flash")
     )
     assert model.base_url == "https://proxy.example.com"
+
+
+def test_build_deepseek_defaults_reasoning_effort_unset(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    model = models_mod._build_deepseek(
+        ModelProfile(provider="deepseek", model_id="deepseek-v4-flash")
+    )
+    assert model.reasoning_effort is None
+    assert model.extra_body is None
+
+
+def test_build_deepseek_honors_reasoning_effort_extra(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    model = models_mod._build_deepseek(
+        ModelProfile(
+            provider="deepseek",
+            model_id="deepseek-v4-flash",
+            extra={"reasoning_effort": "low"},
+        )
+    )
+    assert model.reasoning_effort == "low"
+
+
+def test_build_deepseek_honors_extra_body_thinking_disabled(monkeypatch) -> None:
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    model = models_mod._build_deepseek(
+        ModelProfile(
+            provider="deepseek",
+            model_id="deepseek-v4-flash",
+            extra={"extra_body": {"thinking": {"type": "disabled"}}},
+        )
+    )
+    assert model.extra_body == {"thinking": {"type": "disabled"}}

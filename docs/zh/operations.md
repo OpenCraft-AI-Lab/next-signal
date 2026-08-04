@@ -42,9 +42,12 @@ repo-local `.env` 关键值：
 - `GBRAIN_BIN`（`gbrain` 不在 `PATH` 时；dashboard 与后端同一套解析）
 - `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR`（**必填**，无代码默认；缺失时 knowledge pipeline 与 dashboard wiki 视图 fail loud）
 - `PACA_STATE_DIR` / `PACA_AGENT_TMP_DIR`（可选，测试或换路径）
-- `SIGNAL_OUTPUT_LANG`（`zh` | `en`，可选）—— 所有 agent 写散文字段用的语言。不设 =
-  prompt 原本照着写的默认语言（简体中文）；值不认识 → `RuntimeError`。只经
-  `paca.core.context.output_language()` 读
+
+内容语言——radar 分析和 wiki frontmatter 用什么语言写——**不是** env var，而是 `global`
+语言 policy 的实时偏好文件 `~/.next-signal/language.json`（`content_language: zh | en`），
+由 dashboard 的**设置面板**（nav 上的齿轮按钮）写入，文件缺失时回落到硬编码默认值。旁边
+nav 上的语言选择器是另一个独立设置，只改 dashboard 自己的界面文案；两者互不影响，可以不
+一致。见 [modules/core.md](./modules/core.md#输出语言)。
 
 不要在任意模块直接读这些；走对应的 core / helper 函数。完整 key 列表见 `.env.example`。
 
@@ -61,7 +64,8 @@ repo-local `.env` 关键值：
 ## State 位置
 
 - 项目 repo：configs、prompts、代码、tests、OpenSpec specs。
-- 用户 state（`~/.next-signal/`）：`knowledge_ingest_manifest.json`、`agent-tmp/`。
+- 用户 state（`~/.next-signal/`）：`knowledge_ingest_manifest.json`、`language.json`
+  （内容语言偏好）、`agent-tmp/`。
 - 知识库：`~/Projects/digitalpaca-wiki/`（clean）、`~/Projects/digitalpaca-wiki-raw/`（raw）
   ——路径由 `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` 指定，不是硬编码默认值。
 - agno 自管表（sessions / memory / knowledge / traces）：本地 Postgres + pgvector。
@@ -79,7 +83,8 @@ docker compose exec dashboard paca doctor     # 容器里
 ```
 
 检查：`DATABASE_URL`、`ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY`、`OMLX_BASE_URL`、
-`SIGNAL_OUTPUT_LANG`（报出解析后的语言，值不认识则标红）、Postgres 可达、
+解析后的内容语言（报出 `global` policy 的值、来自偏好文件还是硬编码默认值，偏好文件
+损坏或值不认识则标红）、Postgres 可达、
 configured agents、registered tools、GBrain CLI/service（`gbrain doctor --fast`）、
 folocli auth（`folocli whoami` — `FOLO_TOKEN` 或 `~/.folo/config.json` 任一可用即可）、
 info-radar `configs/info_radar/goals.yaml` 存在且可解析（缺则 `paca info-radar analyze`

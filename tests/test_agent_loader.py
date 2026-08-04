@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 
 from paca.agents import loader
-from paca.core.config import AgentConfig
+from paca.core import language as language_module
+from paca.core.config import AgentConfig, load_agent
 
 
 def test_build_db_free_agent_does_not_touch_db(monkeypatch) -> None:
@@ -44,9 +45,16 @@ def test_build_db_free_agent_does_not_touch_db(monkeypatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _compose(monkeypatch, *, instructions, extra, lang="zh", shared="HOUSE RULES BLOCK"):
+def _compose(
+    monkeypatch, *, instructions, extra, lang="zh", shared="HOUSE RULES BLOCK", override=None
+):
+    """Patch `global_language` at its source (paca.core.language) rather than
+    the value `_compose_instructions` receives directly — this exercises the
+    real `normalize_policy`/`resolve_language` dispatch, including `off`
+    never touching `global_language` at all and `same_as_source` ignoring it
+    entirely in favor of `override`."""
     monkeypatch.setattr(loader, "shared_context", lambda: shared)
-    monkeypatch.setattr(loader, "output_language", lambda: lang)
+    monkeypatch.setattr(language_module, "global_language", lambda: lang)
     return loader._compose_instructions(
         AgentConfig(
             name="probe",
@@ -55,7 +63,8 @@ def _compose(monkeypatch, *, instructions, extra, lang="zh", shared="HOUSE RULES
             markdown=False,
             add_history_to_context=False,
             extra=extra,
-        )
+        ),
+        override=override,
     )
 
 
@@ -78,10 +87,12 @@ def test_english_target_substitutes_english(monkeypatch) -> None:
     assert "Write summary in English." in out
 
 
-def test_unset_language_still_substitutes_a_default(monkeypatch) -> None:
-    """A prompt carrying the token must read as a sentence even when unset."""
-    out = _compose(monkeypatch, instructions=_WITH_TOKEN, extra={}, lang=None)
-    assert "Write summary in Simplified Chinese." in out
+def test_global_policy_always_resolves_a_concrete_language(monkeypatch) -> None:
+    """Unlike the retired env-var mechanism, the `global` policy has no
+    'unset' state at the loader level — `global_language()` always returns a
+    real value (preference file or the hardcoded default), never None."""
+    out = _compose(monkeypatch, instructions=_WITH_TOKEN, extra={}, lang="en")
+    assert "Write summary in English." in out
     assert "{{OUTPUT_LANGUAGE}}" not in out
 
 
@@ -92,8 +103,10 @@ def test_prompt_without_token_gets_appended_block(monkeypatch) -> None:
     assert out.index(_NO_TOKEN) < out.index("## Output language")
 
 
-def test_unset_language_appends_nothing_without_token(monkeypatch) -> None:
-    out = _compose(monkeypatch, instructions=_NO_TOKEN, extra={}, lang=None)
+def test_off_policy_appends_nothing_without_token(monkeypatch) -> None:
+    out = _compose(
+        monkeypatch, instructions=_NO_TOKEN, extra={"output_language": "off"}
+    )
     assert "## Output language" not in out
 
 
@@ -111,6 +124,13 @@ def test_gates_are_independent(monkeypatch) -> None:
     assert "HOUSE RULES BLOCK" in out and "## Output language" not in out
 
 
+def test_bare_boolean_false_still_means_off(monkeypatch) -> None:
+    """Back-compat: the three agents shipped before the policy model existed
+    still say `output_language: false` in YAML, and must behave identically."""
+    out = _compose(monkeypatch, instructions=_NO_TOKEN, extra={"output_language": False})
+    assert "## Output language" not in out
+
+
 def test_opted_out_agent_with_token_fails_loud(monkeypatch) -> None:
     """Otherwise the literal token would be shipped to the model."""
     with pytest.raises(RuntimeError, match="OUTPUT_LANGUAGE"):
@@ -126,8 +146,8 @@ def test_bare_instructions_when_nothing_trails(monkeypatch) -> None:
     """No "# Agent role" heading unless another block follows it.
 
     Every production agent sets shared_context: false, so wrapping
-    unconditionally silently changed all ten prompts — it measured as ~30%
-    longer tier-2 `impact` output on the holdout set.
+    unconditionally silently changed all ten prompts once — it measured as
+    ~30% longer tier-2 `impact` output on the holdout set.
     """
     out = _compose(
         monkeypatch,
@@ -151,14 +171,96 @@ def test_language_rule_alone_never_adds_the_heading(monkeypatch) -> None:
     """Turning the setting on must not silently reshape an unmigrated prompt.
 
     knowledge_classifier has no token and opts out of shared context; before
-    this guard, setting SIGNAL_OUTPUT_LANG gave it a "# Agent role" heading it
-    never had — the same heading that measured +31% tier-2 output.
+    the original output-language change, enabling the setting gave it a
+    "# Agent role" heading it never had — the same heading that measured
+    +31% tier-2 output.
     """
-    off = _compose(monkeypatch, instructions=_NO_TOKEN,
-                   extra={"shared_context": False}, lang=None)
+    off = _compose(
+        monkeypatch,
+        instructions=_NO_TOKEN,
+        extra={"shared_context": False, "output_language": "off"},
+    )
     on = _compose(monkeypatch, instructions=_NO_TOKEN,
                   extra={"shared_context": False}, lang="zh")
     assert not off.startswith("# Agent role")
     assert not on.startswith("# Agent role")
     # Enabling the setting adds the rule and nothing else.
     assert on.startswith(_NO_TOKEN) and "## Output language" in on
+
+
+# ---------------------------------------------------------------------------
+# same_as_source policy: caller-supplied override
+# ---------------------------------------------------------------------------
+
+
+def test_same_as_source_uses_the_override(monkeypatch) -> None:
+    out = _compose(
+        monkeypatch,
+        instructions=_WITH_TOKEN,
+        extra={"shared_context": False, "output_language": "same_as_source"},
+        override="en",
+    )
+    assert "Write summary in English." in out
+
+
+def test_same_as_source_ignores_the_global_preference(monkeypatch) -> None:
+    """The whole point of this policy: it must not fall back to `global`."""
+    out = _compose(
+        monkeypatch,
+        instructions=_WITH_TOKEN,
+        extra={"shared_context": False, "output_language": "same_as_source"},
+        lang="en",  # global_language() patched to "en"...
+        override="zh",  # ...but the override must win.
+    )
+    assert "Write summary in Simplified Chinese." in out
+
+
+def test_same_as_source_without_override_raises(monkeypatch) -> None:
+    with pytest.raises(RuntimeError, match="same_as_source"):
+        _compose(
+            monkeypatch,
+            instructions=_WITH_TOKEN,
+            extra={"shared_context": False, "output_language": "same_as_source"},
+        )
+
+
+def test_fixed_policy_ignores_global_and_override(monkeypatch) -> None:
+    out = _compose(
+        monkeypatch,
+        instructions=_WITH_TOKEN,
+        extra={"shared_context": False, "output_language": "fixed:en"},
+        lang="zh",
+        override="zh",
+    )
+    assert "Write summary in English." in out
+
+
+# ---------------------------------------------------------------------------
+# The shipped ingest split: index entries follow the setting, bodies don't
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("agent_name", "expected_rule"),
+    [
+        # `same_as_source` -> the override. Appended-block delivery (no token).
+        ("knowledge_artifact_editor", "prose field of your output in Simplified Chinese"),
+        ("knowledge_github_cleaner", "prose field of your output in Simplified Chinese"),
+        # `global` -> the preference. Token substituted in the prompt's own line.
+        ("knowledge_frontmatter", "Write `title` and `summary` in English"),
+        ("knowledge_github_summary", "Write `summary` in English"),
+    ],
+)
+def test_ingest_agents_split_between_source_and_setting(
+    monkeypatch, agent_name, expected_rule
+) -> None:
+    """One Chinese item under an English content-language setting.
+
+    The body cleaners must target the source (`zh`, from the override) so the
+    wiki keeps its only copy of the source text; the frontmatter agents must
+    target the setting (`en`) because their output is the reader's index entry.
+    Loads the shipped YAML, so flipping either policy by accident fails here.
+    """
+    monkeypatch.setattr(language_module, "global_language", lambda: "en")
+    out = loader._compose_instructions(load_agent(agent_name), override="zh")
+    assert expected_rule in out

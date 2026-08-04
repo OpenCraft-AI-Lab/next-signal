@@ -115,8 +115,7 @@ Ebbinghaus curve so captured material is refreshed before it decays.
   the doc stops surfacing. A corpus mostly older than 120 days therefore surfaces
   once and then quiets down; re-enrolling retired docs would be a separate
   evergreen-rotation feature, not a wider stage list.
-- **Card content** — the card reuses the doc's own frontmatter `summary` (the
-  closing summary written to frontmatter and the `## 总结` section at ingest), so
+- **Card content** — the card reuses the doc's own frontmatter `summary`, so
   the review layer makes **no LLM call** and stores no generated text. A
   hand-created doc with no `summary` falls back to its first body paragraph.
 - **Reconciliation** — `paca knowledge review` walks the wiki, enrolls
@@ -161,32 +160,118 @@ verdict, so borrowing it would read a 120-day doc as "scored well".
 
 ## Output language
 
-`SIGNAL_OUTPUT_LANG` (`zh` | `en`) decides the language of frontmatter `title`
-and `summary` — the text shown in the wiki and on review cards — independent of
-the article's own language. Unset keeps each prompt's default. Mechanism in
-[core.md](./core.md#output-language).
+One ingest splits across **both** language policies (see
+[core.md](./core.md#output-language)), because it produces two different kinds
+of text:
 
-- `tags` are **exempt** and stay lowercase English in every language.
-  `_normalize_tags` silently drops any tag containing CJK, so a rule pushing tags
-  into Chinese would not produce Chinese tags — it would produce documents with
-  none.
-- `knowledge_artifact_editor` and `knowledge_github_cleaner` are **permanently
-  exempt**: they emit the cleaned article body, and translating it destroys the
-  only copy of the source text the wiki holds. A Chinese article under an English
-  target keeps a Chinese body with English frontmatter.
+| Step | Agent | Output | Policy | Language |
+|---|---|---|---|---|
+| Clean body | `knowledge_artifact_editor` / `knowledge_github_cleaner` | the article body | `same_as_source` | the article's own, detected |
+| Frontmatter | `knowledge_frontmatter` / `knowledge_github_summary` | `title` / `summary` | `global` | the content-language setting |
 
-**Measured.** Before: with no language rule at all, 17.9% of titles and 7.7% of
-summaries came back pure English on English articles, and the *same article*
-flipped between languages across runs — a single manual check can pass while the
-defect is present. After (10 articles x 3 repeats through `scripts/lang_probe.py`):
-English articles under a Chinese target are **0/30 defects on both fields with no
-flipping**. The reverse direction stays **imperfect**: 2/30 (6.7%) came back
-wholly Chinese under an English target, still flipping — one heavily
-Chinese-entity article produced a Chinese title on two runs of three.
+The body is the archive — the wiki holds the only copy of that source text, so
+translating it would destroy it. `title` and `summary` are the artifact's index
+entry, the text the knowledge list and review cards display, so they follow
+whatever the reader set in the dashboard's settings panel.
 
-**Hazard**: changing the language and re-indexing rewrites `title`, and the wiki
-filename is derived from `title` — files will be renamed. There is no automatic
-migration.
+A wiki file is therefore allowed to be bilingual: an English `title`/`summary`
+over a Chinese body, if that is how the setting is configured. This is intended,
+and mirrors the radar reader, which already shows a translated title above a
+source-language article.
+
+- The **detected** language is computed once per item in `fetch()`
+  (deterministically, not via an LLM call — see
+  `paca.core.language_detect`), carried on `KnowledgeArtifact.detected_language`,
+  and passed as `language=` to the body cleaner only. The frontmatter step is
+  built with no override and resolves the setting on its own.
+- `tags` are **exempt** and stay lowercase English in every language — via a
+  bespoke, field-specific prompt instruction, not the language-policy
+  mechanism (a field needing to diverge from the rest of the same call stays
+  a prompt-level exception; see core.md). `_normalize_tags` silently drops any
+  tag containing CJK, so a rule pushing tags into Chinese would not produce
+  Chinese tags — it would produce documents with none.
+
+**Measured**, under exactly this configuration — frontmatter targeting an
+operator-set language rather than the article's own.
+
+Before, with no language rule at all: 17.9% of titles and 7.7% of summaries came
+back pure English on English articles, and the *same article* flipped between
+languages across runs — a single manual check can pass while the defect is
+present.
+
+After, re-measured when frontmatter moved back onto `global` (10 real
+`radar_items` per direction x 3 repeats through `scripts/lang_probe.py`, on the
+local `Qwen3.5-122B`):
+
+| Step | Corpus / setting | Field | Defects | Flipping |
+|---|---|---|---|---|
+| frontmatter (`global`) | English source, setting `zh` | title / summary | 0/30 · 0/30 | none |
+| frontmatter (`global`) | Chinese source, setting `en` | title / summary | 0/30 · 0/30 | none |
+| body cleaner (`same_as_source`) | Chinese source, setting `en` | body | 0/30 | none |
+| body cleaner (`same_as_source`) | English source, setting `zh` | body | 0/30 | none |
+
+The cleaner rows are the sharper test, because the setting was deliberately
+pointed at the *opposite* language: a body drifting toward the operator
+preference — the exact failure `same_as_source` exists to prevent — would have
+shown up. Chinese bodies came back at 0.909 mean CJK ratio, English bodies at
+0.000, and `--agent cleaner` also asserts, on every repeat, that the composed
+rule targets the detected language and not the setting.
+
+The defect test is "prose entirely in the wrong language", so read the CJK ratio
+next to it rather than instead of it: for a `zh` target, a title that keeps
+English model names is correct output. Four of the ten English items are
+`Last Week in AI` episodes whose titles are almost all proper nouns, so their
+correct Chinese renderings still measure as low as 0.156
+(`LWiAI #247：Opus 4.8、微软 MAI 与 Anthropic 上市` — `微软` and `上市` translated,
+model names kept). An earlier run of the Chinese→English direction, on a
+different corpus and model pin, measured 2/30 (6.7%) with flipping; this
+configuration did not reproduce that, but the sample is 10 articles, not a
+guarantee.
+
+**Unrelated but surfaced by the same run**: on the corpus's one long article
+(41k chars, next-longest 13k) `knowledge_artifact_editor` compressed the body to
+0.32 retention on all three repeats — measured with production's own
+`_content_length`, so it is directly comparable to `_MIN_LONG_TEXT_RETENTION`
+(0.6). `_check_summarized` would reject that ingest with a loud `RuntimeError`
+rather than write a summarized body to the wiki. The guard is doing its job;
+what it means is that very long articles may not survive cleaning today. Every
+other item measured ≥0.88. This is a cleaner-quality question, not a language
+one — the over-compressed output was still correctly English.
+
+**`knowledge_classifier` and the cost of assuming `off` is free.** The classifier
+emits only a taxonomy path copied verbatim from its input, so moving it to `off`
+looked inert. It is not: 30 real items (5 wiki docs + 25 analysed radar items) x
+3 repeats, `off` versus the same agent with the rule block restored, disagreed on
+**7/30** — against an A/A noise floor of **1/30** from running one config against
+itself (Fisher exact, two-sided, p ≈ 0.05). The mechanism is visible in the rule
+itself, whose exemption clause names this agent's exact output type:
+"Identifier-like fields — tags, slugs, **category paths** — stay lowercase
+English."
+
+Direction favours `off`. Five of the seven are the classifier flip-flopping
+between `knowledge/ai-engineering` and `radar/tech` within a single variant, so
+they carry no signal. Of the two clean cases (both arms unanimous and different),
+one is decidable against the taxonomy: `radar/tech`'s scope reads
+"科技领域的阶段性综述(digest，不是单条新闻)", and for a single news item
+(台积电 chip pricing) `off` answered `temp-inbox` 3/3 — the designed
+"no clear fit, a human will file it" outlet — while the rule-bearing variant
+answered `radar/tech` 3/3, violating that scope. Caveat: n=30, p on the
+threshold, and this boundary is the classifier's least stable one to begin with.
+
+**Hazard, and why it does not fire**: the wiki filename is derived from `title`
+(`persist.py::_artifact_slug`), so anything that rewrites titles in bulk renames
+files project-wide with no automatic migration. Putting frontmatter back on the
+operator's setting looks like it should reintroduce exactly that — flip the
+setting, re-index, every file renamed.
+
+It does not, because re-index never rewrites frontmatter. `paca run-workflow
+knowledge_ingest` runs `reindex_wiki`, which digests each wiki markdown file and
+re-embeds the changed ones into GBrain; the frontmatter agent is not in that path.
+The only code that writes `title` is a fresh `paca knowledge ingest <source>`, one
+document at a time and deliberately. Changing the setting therefore affects future
+ingests only, and existing documents keep their filenames and their frontmatter
+language indefinitely — including a library ingested before this split, which stays
+in its source languages until each source is ingested again.
 
 ## Invariants
 

@@ -130,11 +130,16 @@ reading and manual triggering.
 
 ## Output language
 
-`SIGNAL_OUTPUT_LANG` (`zh` | `en`) decides the language of every prose field the
-reader sees — tier-2 `summary` and `impact`, the tier-1 `reason`, and the recap
-headline / theme narratives — independent of the article's language and of
-`goals.yaml`. Unset keeps each prompt's own default. See
-[core.md](./core.md#output-language) for the mechanism.
+The `global` language policy (see [core.md](./core.md#output-language))
+decides the language of every prose field the reader sees — tier-2 `title`,
+`summary` and `impact`, the tier-1 `reason`, and the recap headline / theme
+narratives — independent of the article's language and of `goals.yaml`.
+`title` is a later addition: it used to pass through untouched from the
+source, which left it in a different language than `summary`/`impact` on the
+same card; it now goes through the same tier-2 call and the same policy as
+the other two. The resolved language comes from the dashboard's live
+preference file, falling back to a hardcoded default — not from an env var
+(the retired `SIGNAL_OUTPUT_LANG` mechanism).
 
 **Measured** (13 items x 5 repeats, real stages, prompt digests recorded):
 tier-2 `summary` came back English 0/64 against Chinese goals with English
@@ -167,7 +172,7 @@ against the 4096 `max_tokens` cap.
 ### Dedup and the mixed-language embedding space
 
 The dedup gate embeds the tier-2 `summary`, so what gets embedded now follows
-`SIGNAL_OUTPUT_LANG` too. `radar_pushed_topics` is never swept — nothing deletes
+the `global` language policy too. `radar_pushed_topics` is never swept — nothing deletes
 from it — so it permanently holds 32 English topics frozen from before the
 output-language change, alongside 210 Chinese ones. A Chinese summary of an
 English article is therefore ANN-searched against the English embedding of the

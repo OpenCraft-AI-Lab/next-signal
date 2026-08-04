@@ -8,3 +8,8 @@ add_datetime_to_context: false
 extra:
   shared_context: false
   db: false
+  # headline/theme narrative are user-facing prose in the recap view, so they
+  # need the language rule. `global` is already the loader's default for a
+  # missing key -- declared explicitly here so that's visible without reading
+  # paca.agents.loader.
+  output_language: global

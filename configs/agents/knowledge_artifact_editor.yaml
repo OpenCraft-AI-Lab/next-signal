@@ -9,5 +9,7 @@ extra:
   shared_context: false
   db: false
   # Output is the article body itself — translating it destroys the only copy
-  # of the source text the wiki holds. Permanent exemption (spec: core-output-language).
-  output_language: false
+  # of the source text the wiki holds. Targets the source's own detected
+  # language explicitly, never the operator's global preference (spec:
+  # core-output-language, knowledge-pipeline).
+  output_language: same_as_source

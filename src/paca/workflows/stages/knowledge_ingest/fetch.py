@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
+from paca.core.language_detect import detect_language
 from paca.integrations._helpers import http_client
 from paca.integrations.knowledge.bilibili import extract_bilibili
 from paca.integrations.knowledge.github import extract_github
@@ -203,6 +204,11 @@ def fetch(value: str, *, category: str) -> KnowledgeArtifact:
     source_type = detect_source_type(value)
     artifact = _FETCHERS[source_type](value, category=category)
     artifact.markdown = _normalize_spacing(artifact.markdown)
+    # Detected once here, primarily from the title (short, reliably
+    # natural-language even for sources like READMEs whose body is
+    # code/markup-heavy), falling back to the body when there's no title.
+    # Reused unchanged by both clean_body and write_frontmatter.
+    artifact.detected_language = detect_language(artifact.title or artifact.markdown)
     return artifact
 
 

@@ -161,7 +161,7 @@ export async function getDayGroups(daysBack: number): Promise<DayGroup[]> {
           ra.analyzed_at,
           ra.tags,
           ri.id,
-          ri.title
+          coalesce(ra.title, ri.title) AS title
         FROM radar_analyses ra
         JOIN radar_items ri ON ri.id = ra.radar_item_id
         WHERE ra.verdict = 'keep'
@@ -220,7 +220,7 @@ export async function getItemsForDay(
         ri.source,
         ri.source_id,
         ri.url AS source_url,
-        ri.title,
+        coalesce(ra.title, ri.title) AS title,
         ri.excerpt,
         ri.published_at::text,
         ri.fetched_at::text,
@@ -361,7 +361,7 @@ export async function getItemDetail(itemId: number): Promise<RadarItemDetail | n
         ri.source,
         ri.source_id,
         ri.url AS source_url,
-        ri.title,
+        coalesce(ra.title, ri.title) AS title,
         ri.excerpt,
         ri.published_at::text,
         ri.fetched_at::text,
@@ -633,7 +633,7 @@ export async function getFilteredTodayList(
   const day = dayOverride ?? todayInRadarTz();
   const rows = await query<DetailListRow>(
     `
-      SELECT ri.id, ri.title, ra.score
+      SELECT ri.id, coalesce(ra.title, ri.title) AS title, ra.score
       FROM radar_analyses ra
       JOIN radar_items ri ON ri.id = ra.radar_item_id
       WHERE ra.verdict = 'keep'

@@ -94,34 +94,53 @@ export function PullAnalyzeButton({
 
   return (
     <NavTriggerPortal>
-      <div className="row" style={{ alignItems: "center", gap: 10 }}>
-        {lastPull && (
-          <Chip
-            label={t.radar.pullAnalyze.pulled}
-            entry={lastPull}
-            color="var(--text-4)"
-            title={t.radar.pullAnalyze.lastPullTitle}
-            countPrefix="+"
-          />
-        )}
-        {lastAnalyze && (
-          <Chip
-            label={t.radar.pullAnalyze.analyzed}
-            entry={lastAnalyze}
-            color="var(--text-4)"
-            title={t.radar.pullAnalyze.analyzedTitle}
-          />
-        )}
-        {unanalyzed > 0 && (
-          <span
-            className="mono"
-            style={{ fontSize: 11, color: "var(--amber)", whiteSpace: "nowrap" }}
-            title={t.radar.pullAnalyze.drainedTitle}
-          >
-            {t.radar.pullAnalyze.pending}{" "}
-            <strong style={{ fontWeight: 600 }}>{unanalyzed}</strong>
-          </span>
-        )}
+      {/* minWidth 0 so this row actually shrinks to the slot instead of
+          overflowing it and painting over the nav controls to its right. */}
+      <div className="row" style={{ alignItems: "center", gap: 10, minWidth: 0 }}>
+        {/* The status chips are the nav bar's shock absorber: when the bar runs
+            out of room they shrink and clip (see `#nav-trigger-slot` in
+            globals.css) so the button below and the nav controls after it stay
+            whole. Wrapping them is what keeps the clip off the button. */}
+        <div
+          className="row"
+          style={{
+            alignItems: "center",
+            gap: 10,
+            minWidth: 0,
+            overflow: "hidden",
+            // Fade the cut instead of slicing a glyph in half, so a clipped
+            // chip reads as "there is more" rather than as a rendering bug.
+            maskImage: "linear-gradient(to right, #000 calc(100% - 24px), transparent)",
+          }}
+        >
+          {lastPull && (
+            <Chip
+              label={t.radar.pullAnalyze.pulled}
+              entry={lastPull}
+              color="var(--text-4)"
+              title={t.radar.pullAnalyze.lastPullTitle}
+              countPrefix="+"
+            />
+          )}
+          {lastAnalyze && (
+            <Chip
+              label={t.radar.pullAnalyze.analyzed}
+              entry={lastAnalyze}
+              color="var(--text-4)"
+              title={t.radar.pullAnalyze.analyzedTitle}
+            />
+          )}
+          {unanalyzed > 0 && (
+            <span
+              className="mono"
+              style={{ fontSize: 11, color: "var(--amber)", whiteSpace: "nowrap" }}
+              title={t.radar.pullAnalyze.drainedTitle}
+            >
+              {t.radar.pullAnalyze.pending}{" "}
+              <strong style={{ fontWeight: 600 }}>{unanalyzed}</strong>
+            </span>
+          )}
+        </div>
         <Button variant="primary" onClick={onClick} disabled={loading}>
           {loading ? (
             <Loader2 className="spin" size={14} />

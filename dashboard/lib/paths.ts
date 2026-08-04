@@ -1,3 +1,4 @@
+import os from "node:os";
 import path from "node:path";
 
 /**
@@ -18,4 +19,21 @@ export function wikiRoot(): string {
     throw new Error("PACA_WIKI_DIR is required; set it in .env and launch via `paca dashboard`");
   }
   return dir;
+}
+
+/**
+ * User-state root, mirroring `paca.core.paths.STATE_ROOT` — same env var,
+ * same `~/.next-signal` default (unlike `wikiRoot()`, this one always has a
+ * sane fallback, so it never throws).
+ */
+export function stateRoot(): string {
+  return process.env.PACA_STATE_DIR?.trim() || path.join(os.homedir(), ".next-signal");
+}
+
+/**
+ * The live content-language preference file both the dashboard and every
+ * `paca` pipeline container read/write — see `paca.core.language`.
+ */
+export function languageStateFile(): string {
+  return path.join(stateRoot(), "language.json");
 }

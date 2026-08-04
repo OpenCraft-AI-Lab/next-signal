@@ -39,6 +39,12 @@ class KnowledgeArtifact:
     assets_dir: Path | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    # Set once by `fetch()` (deterministic, non-LLM — see
+    # `paca.core.language_detect`) and reused unchanged by both the
+    # body-cleaning and frontmatter steps, so the two never disagree about
+    # what the source language is.
+    detected_language: str = ""
+
     artifact_edit: dict[str, Any] | None = None
 
     clean_path: Path | None = None
@@ -55,6 +61,7 @@ class KnowledgeArtifact:
             "category": self.category,
             "title": self.title,
             "markdown": self.markdown,
+            "detected_language": self.detected_language,
             "raw_path": str(self.raw_path) if self.raw_path is not None else None,
             "assets_dir": str(self.assets_dir) if self.assets_dir is not None else None,
             "metadata": dict(self.metadata),

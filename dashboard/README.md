@@ -152,6 +152,20 @@ relative time, and date display. User/data content such as article titles,
 analysis summaries, tags, YAML values, wiki document bodies, and feed/category
 names is rendered as stored.
 
+## Content language
+
+Separate setting, separate control: the **gear button** in the nav opens a
+settings panel holding the *content* language — what the pipeline writes radar
+analyses and wiki frontmatter in. It writes `content_language` into
+`~/.next-signal/language.json`, which every `paca` agent on the `global` policy
+reads (see [`docs/modules/core.md`](../docs/modules/core.md#output-language)).
+
+This is deliberately independent of the UI locale above. Reading the interface in
+one language while generating content in another is a supported state; nothing
+syncs or warns about the two disagreeing. The current value is resolved server-side
+in `app/layout.tsx` and passed into the nav, so the panel shows its real state on
+first paint.
+
 ## Dependency policy: mirror `agent-ui`, then add
 
 `package.json`'s dependency set is a strict **superset** of

@@ -7,7 +7,7 @@ from paca.workflows.info_radar_analysis.stages.tier2 import _apply_ceilings
 
 
 def _analysis(score: int, tags: list[str]) -> Tier2Analysis:
-    return Tier2Analysis(summary="s", impact="i", score=score, tags=tags)
+    return Tier2Analysis(title="t", summary="s", impact="i", score=score, tags=tags)
 
 
 def test_opinion_above_ceiling_is_clamped() -> None:

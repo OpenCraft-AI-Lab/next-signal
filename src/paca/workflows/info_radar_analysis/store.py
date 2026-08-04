@@ -37,6 +37,7 @@ def insert_analysis(
     radar_item_id: int,
     verdict: str,
     tier1_reason: str | None = None,
+    title: str | None = None,
     summary: str | None = None,
     impact_md: str | None = None,
     score: int | None = None,
@@ -47,13 +48,17 @@ def insert_analysis(
 ) -> int | None:
     """Insert one radar_analyses row. Idempotent via UNIQUE(radar_item_id).
 
+    ``title`` is only set on a tier-2 "keep" (rewritten into the configured
+    output language); a "drop" row has no tier-2 analysis to produce one from,
+    so it stays NULL and the dashboard falls back to ``radar_items.title``.
+
     Returns the new row id, or ``None`` if a row already existed.
     """
     sql = """
         INSERT INTO radar_analyses
-            (radar_item_id, verdict, tier1_reason, summary, impact_md, score,
+            (radar_item_id, verdict, tier1_reason, title, summary, impact_md, score,
              tags, content_status, dedup_status, dedup_match_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s)
         ON CONFLICT (radar_item_id) DO NOTHING
         RETURNING id
     """
@@ -65,6 +70,7 @@ def insert_analysis(
                     radar_item_id,
                     verdict,
                     tier1_reason,
+                    title,
                     summary,
                     impact_md,
                     score,

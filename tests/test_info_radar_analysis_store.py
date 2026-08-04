@@ -126,6 +126,29 @@ def test_insert_analysis_is_idempotent(source_name) -> None:
     assert second is None  # ON CONFLICT DO NOTHING
 
 
+def test_insert_analysis_persists_title(source_name) -> None:
+    """`title` is nullable — a 'drop' row (no tier-2 analysis) omits it, and a
+    'keep' row persists tier-2's rewritten title."""
+    dropped = _seed_item(source_name, "d1")
+    analysis_store.insert_analysis(radar_item_id=dropped, verdict="drop", tier1_reason="off-topic")
+
+    kept = _seed_item(source_name, "k1")
+    analysis_store.insert_analysis(
+        radar_item_id=kept, verdict="keep", tier1_reason="ok", title="Rewritten Title"
+    )
+
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT title FROM radar_analyses WHERE radar_item_id = ANY(%s) ORDER BY radar_item_id",
+                ([dropped, kept],),
+            )
+            rows = cur.fetchall()
+    titles = {r[0] for r in rows}
+    assert None in titles
+    assert "Rewritten Title" in titles
+
+
 def test_mark_seen_sets_timestamp(source_name) -> None:
     item_id = _seed_item(source_name, "s1")
     analysis_store.mark_seen(item_id)

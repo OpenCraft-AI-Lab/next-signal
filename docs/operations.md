@@ -48,10 +48,14 @@ Key values in the repo-local `.env`:
 - `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` (**required**, no code default — when
   missing, the knowledge pipeline and the dashboard wiki view fail loud)
 - `PACA_STATE_DIR` / `PACA_AGENT_TMP_DIR` (optional, for tests or alternate paths)
-- `SIGNAL_OUTPUT_LANG` (`zh` | `en`, optional) — the language every agent writes
-  its prose fields in. Unset means the default the prompts were written against
-  (Simplified Chinese); an unrecognized value raises `RuntimeError`. Read only
-  through `paca.core.context.output_language()`
+
+The content language — what radar analyses and wiki frontmatter are written in —
+is **not** an env var. It's the `global` language policy's live preference file,
+`~/.next-signal/language.json` (`content_language: zh | en`), written by the
+dashboard's **settings panel** (the gear button in the nav) and falling back to a
+hardcoded default when absent. The nav's language picker beside it is a separate
+setting that only changes the dashboard's own UI text; the two are independent and
+may differ. See [modules/core.md](./modules/core.md#output-language).
 
 Never read these directly from an arbitrary module — go through the corresponding
 core/helper function. The complete key list is in `.env.example`.
@@ -70,7 +74,8 @@ corresponding tool — it never blocks startup.
 ## Where state lives
 
 - Project repo: configs, prompts, code, tests, OpenSpec specs.
-- User state (`~/.next-signal/`): `knowledge_ingest_manifest.json`, `agent-tmp/`.
+- User state (`~/.next-signal/`): `knowledge_ingest_manifest.json`, `language.json`
+  (the content-language preference), `agent-tmp/`.
 - Knowledge base: `~/Projects/digitalpaca-wiki/` (clean) and
   `~/Projects/digitalpaca-wiki-raw/` (raw) — these paths come from
   `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR`, they are not hardcoded defaults.
@@ -91,8 +96,9 @@ docker compose exec dashboard paca doctor     # in the container
 ```
 
 It checks `DATABASE_URL`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`,
-`OMLX_BASE_URL`, `SIGNAL_OUTPUT_LANG` (reports the resolved language, or flags an
-unrecognized value), Postgres reachability, configured agents, registered tools, the
+`OMLX_BASE_URL`, the resolved content language (reports the `global` policy's
+value and whether it came from the preference file or the hardcoded default,
+or flags a corrupt/unrecognized preference-file value), Postgres reachability, configured agents, registered tools, the
 GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`folocli whoami` —
 either `FOLO_TOKEN` or `~/.folo/config.json` is enough), and that info-radar's
 `configs/info_radar/goals.yaml` exists and parses (without it,

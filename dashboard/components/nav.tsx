@@ -11,7 +11,9 @@ import { SignalMark } from "@/components/brand/signal-mark";
 import { useI18n } from "@/components/i18n-provider";
 import { LanguageToggle } from "@/components/language-toggle";
 import { NavTriggerSlot } from "@/components/nav-trigger-slot";
+import { SettingsPanel } from "@/components/settings-panel";
 import { ThemeToggle } from "@/components/theme-toggle";
+import type { Locale } from "@/lib/i18n/dictionaries";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -45,7 +47,9 @@ const NAV_ITEMS: NavItem[] = [
   ...(IS_DEV ? [{ href: "/design", icon: Palette }] : []),
 ];
 
-export function Nav() {
+/** `contentLanguage` is resolved server-side in the root layout so the
+ * settings panel renders its current value without a fetch on open. */
+export function Nav({ contentLanguage }: { contentLanguage: Locale }) {
   const pathname = usePathname();
   const { t } = useI18n();
   const [host, setHost] = useState<string | null>(null);
@@ -95,6 +99,7 @@ export function Nav() {
         <div className="nav-tools">
           <NavTriggerSlot />
           <LanguageToggle />
+          <SettingsPanel contentLanguage={contentLanguage} />
           <ThemeToggle />
         </div>
       </div>

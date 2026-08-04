@@ -51,9 +51,11 @@ extra: { db: false, shared_context: false }
 Production agents never hardcode a model or instructions in Python. A pure
 transformation or verifier agent can set `extra: {db: false}` (no session store)
 and `extra: {shared_context: false}` (does not inherit shared context). A third
-flag, `extra: {output_language: false}`, opts out of the `SIGNAL_OUTPUT_LANG`
-rule — it is independent of `shared_context`, and belongs only on agents whose
-output is source text rather than prose written for the reader.
+key, `extra: {output_language: <policy>}`, selects the language policy
+(`off` / `global` / `same_as_source` / `fixed:<lang>`, see
+[modules/core.md](./modules/core.md#output-language)) — it is independent of
+`shared_context`, and `off` belongs only on agents whose output is source text
+or discarded, rather than prose written for the reader.
 
 ## Runnable configuration
 

@@ -33,7 +33,7 @@ def persist(artifact: KnowledgeArtifact, *, ingest: bool = True) -> KnowledgeArt
     artifact.category = validate_category(artifact.category)
     artifact_edit = artifact.artifact_edit
 
-    body = _append_summary_section(artifact.markdown, str(artifact_edit.get("summary") or "").strip())
+    body = artifact.markdown
     artifact_slug = _artifact_slug(artifact.title, artifact.source_type, artifact.digest)
     category_dir = paths.WIKI_DIR / artifact.category
     # Title-derived slugs can collide across DIFFERENT sources (same title,
@@ -177,12 +177,6 @@ def _render(frontmatter: dict[str, Any], markdown: str) -> str:
     """Render a clean knowledge artifact: YAML frontmatter block + markdown body."""
     yaml_text = yaml.safe_dump(frontmatter, allow_unicode=True, sort_keys=False).strip()
     return f"---\n{yaml_text}\n---\n\n{markdown.strip()}\n"
-
-
-def _append_summary_section(markdown: str, summary: str) -> str:
-    if not summary or re.search(r"(?m)^##\s+总结\s*$", markdown):
-        return markdown
-    return f"{markdown.rstrip()}\n\n## 总结\n\n{summary}"
 
 
 def _artifact_slug(title: str, source_type: str, digest: str) -> str:

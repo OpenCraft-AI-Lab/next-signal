@@ -97,9 +97,8 @@ ingest 是写入侧，回顾是读取侧。每篇 wiki 文档在 `knowledge_revi
 - **退休** —— advance 越过最后一个阶段就把 `next_due_at` 置 `NULL`，文档不再出现。
   因此以 120 天以上老内容为主的语料会冒一次头就安静下来；让退休文档重新入列是另一个
   常青轮换功能，而不是把阶段列表加长。
-- **卡片内容** —— 卡片直接复用文档自己的 frontmatter `summary`（入库时写进 frontmatter 和
-  `## 总结` 那段的收尾摘要），所以回顾层**不调 LLM**、行里也不存生成文本。手写、没有 `summary`
-  的文档回退到正文首段。
+- **卡片内容** —— 卡片直接复用文档自己的 frontmatter `summary`，所以回顾层**不调 LLM**、
+  行里也不存生成文本。手写、没有 `summary` 的文档回退到正文首段。
 - **对账（reconciliation）** —— `paca knowledge review` 遍历 wiki，把未知文档入列
   （按曲线 seed），把文件已删的行移除。wiki 根缺失或空时直接拒绝，而不是把 "没有文件" 读成
   "全部删了"。`captured_at` 从 frontmatter 解析，优先级 `captured_at` → `updated_at` →
@@ -125,24 +124,90 @@ tracker 依然显示"分数分布 · 0-100"和完整坐标轴。折叠态砍掉�
 
 ## 输出语言
 
-`SIGNAL_OUTPUT_LANG`（`zh` | `en`）决定 frontmatter 的 `title` 和 `summary` 用什么语言——
-也就是 wiki 和回顾卡片上显示的文字——与文章本身语言无关。不设则各 prompt 默认生效。
-机制见 [core.md](./core.md#输出语言)。
+一次入库会**同时**用到两条语言 policy（机制见 [core.md](./core.md#输出语言)），因为它产出
+的是两种不同性质的文本：
 
-- `tags` **豁免**，任何语言下都保持小写英文。`_normalize_tags` 会静默丢弃含 CJK 的 tag，
-  所以把 tag 推成中文不会得到中文 tag，只会得到没有 tag 的文档。
-- `knowledge_artifact_editor` 与 `knowledge_github_cleaner` **永久豁免**：它们产出的是清洗后
-  的文章正文，翻译等于毁掉 wiki 里唯一一份原文。英文目标下的中文文章 = 中文正文 + 英文
-  frontmatter。
+| 步骤 | Agent | 产出 | Policy | 语言 |
+|---|---|---|---|---|
+| 清洗正文 | `knowledge_artifact_editor` / `knowledge_github_cleaner` | 文章正文 | `same_as_source` | 文章自己的语言（探测得到） |
+| 写 frontmatter | `knowledge_frontmatter` / `knowledge_github_summary` | `title` / `summary` | `global` | 内容语言设置 |
 
-**实测。** 修前：完全没有语言规则时，英文文章下 17.9% 的 title、7.7% 的 summary 是纯英文，
-而且**同一篇文章**在不同次运行之间来回翻——手动测一次很可能正好抽到对的。修后（10 篇 × 3 次
-重复，走 `scripts/lang_probe.py`）：英文文章 → 中文目标，两个字段**都是 0/30，且不再翻转**。
-反方向仍**不干净**：英文目标下 2/30（6.7%）整段回中文且仍在翻——一篇中文实体密集的文章
-三次里有两次出了中文标题。
+正文就是归档本身——wiki 里存着那段源文本的唯一副本，翻译掉就等于毁掉它。而
+`title` 和 `summary` 是条目的索引项，是知识列表和回顾卡片上显示的文字，所以跟着读者在
+dashboard 设置面板里选的内容语言走。
 
-**风险**：改了语言再 re-index 会重写 `title`，而 wiki 文件名由 `title` 推导——文件会被改名，
-没有自动迁移。
+因此一个 wiki 文件是允许双语的：英文的 `title`/`summary` 配中文正文（如果设置是那样）。
+这是有意的，也和 radar 阅读器一致——那边早就是翻译过的标题配源语言文章。
+
+- **探测**出的语言在 `fetch()` 里每条算一次（确定性算法，不走 LLM，见
+  `paca.core.language_detect`），挂在 `KnowledgeArtifact.detected_language` 上，只作为
+  `language=` 传给正文清洗 agent。frontmatter 那步不传 override，自己解析设置。
+- `tags` **豁免**，任何语言下都保持小写英文——走的是针对该字段的专门 prompt 指令，不是
+  语言 policy 机制（同一次调用里某个字段需要跟别的字段不一样，就留在 prompt 层单独处理，
+  见 core.md）。`_normalize_tags` 会静默丢弃含 CJK 的 tag，所以把 tag 推成中文不会得到
+  中文 tag，只会得到没有 tag 的文档。
+
+**实测**，就是在当前这套配置下测的——frontmatter 的目标是操作者设定的语言，而非文章自己的
+语言。
+
+修前，完全没有语言规则时：英文文章下 17.9% 的 title、7.7% 的 summary 是纯英文，而且
+**同一篇文章**在不同次运行之间来回翻——手动测一次很可能正好抽到对的。
+
+修后，在 frontmatter 改回 `global` 之后重测（每个方向 10 条真实 `radar_items` × 3 次重复，
+走 `scripts/lang_probe.py`，本地 `Qwen3.5-122B`）：
+
+| 步骤 | 语料 / 设置 | 字段 | 缺陷 | 翻转 |
+|---|---|---|---|---|
+| frontmatter（`global`） | 英文源，设置 `zh` | title / summary | 0/30 · 0/30 | 无 |
+| frontmatter（`global`） | 中文源，设置 `en` | title / summary | 0/30 · 0/30 | 无 |
+| 正文清洗（`same_as_source`） | 中文源，设置 `en` | body | 0/30 | 无 |
+| 正文清洗（`same_as_source`） | 英文源，设置 `zh` | body | 0/30 | 无 |
+
+清洗那两行是更狠的测法：设置被**刻意指向相反的语言**，所以正文只要往操作者偏好方向漂
+——正是 `same_as_source` 要防的那种失败——就会暴露出来。中文正文回来时 CJK 比例均值
+0.909，英文正文 0.000；而且 `--agent cleaner` 每一次重复都会逐条断言组合出的规则指向的是
+探测出的语言、而不是那个设置。
+
+判定标准是「整段都是错的语言」，所以要连着 CJK 比例一起看，而不是只看缺陷数：中文目标下，
+一个保留了英文模型名的标题是**正确**输出。十条英文样本里有四条是 `Last Week in AI` 播客，
+标题几乎全是专有名词，所以它们正确的中文译法比例也低到 0.156
+（`LWiAI #247：Opus 4.8、微软 MAI 与 Anthropic 上市`——`微软`、`上市` 都翻了，模型名保留）。
+更早一次在不同语料、不同模型 pin 下跑的中文→英文方向测出过 2/30（6.7%）且有翻转；这套配置
+没有复现，但样本只有 10 篇，不构成保证。
+
+**跟语言无关、但同一次跑出来的现象**：语料里唯一那篇长文（41k 字符，第二长的才 13k），
+`knowledge_artifact_editor` 三次重复都把正文压到 0.32 的保留率——用的是生产自己的
+`_content_length`，所以和 `_MIN_LONG_TEXT_RETENTION`（0.6）直接可比。
+`_check_summarized` 会用一个 loud 的 `RuntimeError` 直接拒掉这次入库，而不是把一份被
+摘要过的正文写进 wiki。守卫本身是好的；
+它说明的是**超长文章目前可能过不了清洗这一关**。其余每条都 ≥0.88。这是清洗质量问题，
+不是语言问题——那份被过度压缩的输出语言仍然是正确的英文。
+
+**`knowledge_classifier`，以及"`off` 是白省的"这个错觉。** 分类器只输出一条从输入里逐字
+复制的 taxonomy 路径，所以把它设成 `off` 看着像 no-op。实测不是：30 条真实条目（5 篇 wiki
+文档 + 25 条已分析的 radar 条目）× 3 次重复，`off` 与"把规则块加回去"的同一个 agent 相比，
+**7/30 不一致**——而把同一份配置跑两遍得到的 A/A 噪声底线是 **1/30**（Fisher 精确检验双侧
+p ≈ 0.05）。机制就写在规则自己的豁免句里，它点名的正是这个 agent 的输出类型：
+"Identifier-like fields — tags, slugs, **category paths** — stay lowercase English."
+
+方向上是支持 `off` 的。七条里有五条是分类器在 `knowledge/ai-engineering` 与 `radar/tech`
+之间自我翻转（同一个变体内部就不一致），没有信号。两条干净的（两边各自一致且不同）里，有
+一条能用 taxonomy 判对错：`radar/tech` 的 scope 写的是「科技领域的阶段性综述(digest，不是
+单条新闻)」，而对一条**单条新闻**（台积电芯片涨价），`off` 3/3 答 `temp-inbox`——正是
+prompt 设计的「没有明确归属就交给人归档」的出口——带规则的那版 3/3 答 `radar/tech`，违反了
+该 scope。注意：n=30、p 卡在阈值上，且这对边界本来就是分类器最不稳的地方。
+
+**风险，以及它为什么不会触发**：wiki 文件名由 `title` 推导
+（`persist.py::_artifact_slug`），所以任何批量重写标题的动作都会让全项目文件改名，且没有
+自动迁移。把 frontmatter 挪回操作者的设置，看上去正好会把这个风险带回来——切一下设置、
+re-index 一遍、所有文件改名。
+
+实际不会，因为 re-index 根本不重写 frontmatter。`paca run-workflow knowledge_ingest` 跑的是
+`reindex_wiki`：它对每个 wiki markdown 文件算摘要，把变了的重新 embed 进 GBrain，frontmatter
+agent 不在这条路径上。唯一会写 `title` 的是一次全新的 `paca knowledge ingest <source>`，
+一次一篇、且是刻意触发的。所以改设置只影响之后的入库，已有文档的文件名和 frontmatter 语言
+会一直保持不变——包括在这次拆分之前入库的整个知识库，会一直停在各自的源语言，直到某个来源
+被重新入库为止。
 
 ## 不变量
 

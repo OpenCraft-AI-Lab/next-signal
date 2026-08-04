@@ -8,3 +8,9 @@ add_datetime_to_context: false
 extra:
   shared_context: false
   db: false
+  # title/summary are the artifact's index entry — what the knowledge list and
+  # review cards display — so they follow the reader's content-language
+  # setting, not the source. The archive is preserved by the body, which
+  # `knowledge_artifact_editor` keeps in its own language (spec:
+  # core-output-language, knowledge-pipeline).
+  output_language: global

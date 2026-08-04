@@ -8,3 +8,8 @@ add_datetime_to_context: false
 extra:
   shared_context: false
   db: false
+  # summary is the repo's index entry — same rationale as knowledge_frontmatter:
+  # generated prose for the reader follows the content-language setting, while
+  # knowledge_github_cleaner keeps the README body in its own language.
+  # `title` stays the `owner/repo` string regardless.
+  output_language: global

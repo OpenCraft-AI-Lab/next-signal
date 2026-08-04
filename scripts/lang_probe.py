@@ -21,8 +21,21 @@ block for prompts that carry no token).
 Usage::
 
     python scripts/lang_probe.py snapshot --items en --limit 10
-    SIGNAL_OUTPUT_LANG=zh python scripts/lang_probe.py run \\
-        --agent radar --items en --limit 10 --repeats 3
+    python scripts/lang_probe.py run \\
+        --agent radar --items en --limit 10 --repeats 3 --target zh
+
+`--target` is required on `run`, and means different things per agent:
+
+- `radar` / `frontmatter` resolve the `global` policy, so `--target` is the
+  language to aim at. This points `paca.core.language.global_language` at it for
+  this process only, never writing the real preference file (the dashboard's
+  settings panel owns it).
+- `cleaner` resolves `same_as_source`, where the expected output is each item's
+  own detected language and no single target exists. There `--target` is the
+  **adversary**: the `global` setting is pointed at it so that a body drifting
+  toward the operator's preference — the exact failure `same_as_source` exists
+  to prevent — registers as a defect instead of passing silently. Point it at
+  the opposite of the corpus language.
 """
 
 from __future__ import annotations
@@ -42,19 +55,27 @@ from psycopg.rows import dict_row
 
 from paca.agents.loader import build_from_name
 from paca.agents.structured import run_structured
-from paca.core.context import LANGUAGE_TOKEN, OUTPUT_LANG_ENV, output_language
+from paca.core import language as language_module
 from paca.core.db import database_url
+from paca.core.language import LANGUAGE_TOKEN
+from paca.core.language_detect import detect_language
 from paca.core.paths import AGENT_TMP_DIR
 from paca.workflows.info_radar_analysis.goals import load_goals
 from paca.workflows.info_radar_analysis.runner import _BATCH_SIZE
 from paca.workflows.info_radar_analysis.stages import fetch, tier1, tier2
+from paca.workflows.stages.knowledge_ingest.artifact_editor import (
+    _MAX_MARKDOWN_CHARS as _PROD_MAX_MARKDOWN_CHARS,
+)
+from paca.workflows.stages.knowledge_ingest.artifact_editor import (
+    _content_length,
+    _strip_code_fence,
+)
 from paca.workflows.stages.knowledge_ingest.schemas import FrontmatterDraft
 
 OUT_DIR = AGENT_TMP_DIR / "lang-probe"
 CACHE_PATH = OUT_DIR / "content_cache.json"
 
 _ITEM_COLS = "id, source, source_id, url, title, excerpt, published_at, fetched_at, payload"
-_MAX_MARKDOWN_CHARS = 16000
 
 _CJK = re.compile(r"[一-鿿㐀-䶿]")
 _LATIN = re.compile(r"[A-Za-z]")
@@ -148,9 +169,7 @@ def cmd_snapshot(args: argparse.Namespace) -> None:
 
 
 def _instruction_digest(agent_name: str) -> str:
-    return hashlib.sha256(
-        str(build_from_name(agent_name).instructions).encode()
-    ).hexdigest()[:12]
+    return hashlib.sha256(str(build_from_name(agent_name).instructions).encode()).hexdigest()[:12]
 
 
 def _assert_language_applied(agent_name: str, target: str) -> str:
@@ -163,6 +182,9 @@ def _assert_language_applied(agent_name: str, target: str) -> str:
     once during this change's investigation via a bind mount that quietly did
     not apply.
 
+    Every agent reached here resolves `global`, so the target arrives through
+    the patched `global_language` and no per-call override is passed.
+
     Returns the instruction digest so the caller can detect the prompts being
     edited mid-run — ``prompts/`` is bind-mounted live, so a run started before
     an edit silently measures a mix of two prompt versions.
@@ -174,7 +196,8 @@ def _assert_language_applied(agent_name: str, target: str) -> str:
     if expected not in instructions:
         sys.exit(
             f"ABORT: {agent_name}'s instructions never name {expected!r}. "
-            f"Is {OUTPUT_LANG_ENV} set, and does the agent set output_language: false?"
+            "Check the agent's `extra.output_language` policy — `off` would "
+            "explain this."
         )
     digest = _instruction_digest(agent_name)
     print(f"  {agent_name}: names {expected} (instructions {digest})", flush=True)
@@ -219,15 +242,18 @@ def _run_radar(items, cache, goals, repeats, target, result) -> None:
             )
 
 
-def _run_frontmatter(items, cache, repeats, result) -> None:
+def _run_frontmatter(items, cache, repeats, target, result) -> None:
     for rep in range(repeats):
         for item in items:
             snap = cache[str(item["id"])]
+            # `knowledge_frontmatter` resolves `global`: no per-call override,
+            # exactly as a real ingestion run builds it. The target reaches it
+            # through the patched `global_language` in `cmd_run`.
             agent = build_from_name("knowledge_frontmatter")
             payload = json.dumps(
                 {"source_type": "markitdown", "category": "ai-engineering",
                  "title": snap["title"], "metadata": {},
-                 "markdown": snap["content"].strip()[:_MAX_MARKDOWN_CHARS]},
+                 "markdown": snap["content"].strip()[:_PROD_MAX_MARKDOWN_CHARS]},
                 ensure_ascii=False,
             )
             try:
@@ -249,10 +275,96 @@ def _run_frontmatter(items, cache, repeats, result) -> None:
             )
 
 
+def _run_cleaner(items, cache, repeats, target, result) -> None:
+    """Measure that the cleaned body keeps the article's own language.
+
+    `knowledge_artifact_editor` resolves `same_as_source`, so the override is
+    the language `fetch()` detects for this item and the expected output is that
+    same language — recorded per row, because there is no single target here.
+    `global_language` is meanwhile pointed at `target`, the opposite language,
+    so a body that drifts to the operator's preference registers as a defect.
+
+    Retention is recorded alongside: an over-summarized body would move the
+    language ratio for reasons that have nothing to do with the language rule.
+    It uses production's own `_content_length` (whitespace-stripped UTF-8
+    bytes) against the text actually sent, so the number is directly comparable
+    to `_MIN_LONG_TEXT_RETENTION` — a raw `len()` ratio is not, because the
+    cleaner reformats markdown and shifts whitespace density.
+    """
+    for rep in range(repeats):
+        for item in items:
+            snap = cache[str(item["id"])]
+            body = snap["content"].strip()[:_PROD_MAX_MARKDOWN_CHARS]
+            detected = detect_language(snap["title"] or body)
+            agent = build_from_name("knowledge_artifact_editor", language=detected)
+            # Every repeat, not just the first: this doubles as the mid-run
+            # prompt-drift guard that `cmd_run`'s digest check gives the other
+            # agents. `prompts/` is bind-mounted live, so an edit partway
+            # through would otherwise mix two prompt versions into one result
+            # file silently. The agent is rebuilt per call anyway, so it's free.
+            _assert_names_only(agent, detected, target, item["id"])
+            payload = json.dumps(
+                {"source_type": "markitdown", "title": snap["title"], "markdown": body},
+                ensure_ascii=False,
+            )
+            try:
+                response = agent.run(payload)
+                cleaned = _strip_code_fence(
+                    str(getattr(response, "content", response))
+                ).strip()
+                if not cleaned:
+                    raise RuntimeError("cleaner returned an empty body")
+            except Exception as e:  # noqa: BLE001 — mirrors the stage's isolation
+                result["cleaner"].append(
+                    {"item_id": item["id"], "repeat": rep, "error": str(e)}
+                )
+                print(f"  cl rep{rep} item{item['id']} FAILED {e}", flush=True)
+                continue
+            row = {
+                "item_id": item["id"], "repeat": rep, "expected": detected,
+                "source_lang": snap["content_lang"]["lang"],
+                "retention": round(_content_length(cleaned) / max(_content_length(body), 1), 3),
+                "body": cleaned[:400],
+                "body_lang": lang_stats(cleaned),
+            }
+            result["cleaner"].append(row)
+            print(
+                f"  cl rep{rep} item{item['id']} detected={detected} "
+                f"body={row['body_lang']['lang']} "
+                f"cjk={row['body_lang']['cjk_ratio']:.3f} ret={row['retention']}",
+                flush=True,
+            )
+
+
+def _assert_names_only(agent, expected: str, adversary: str, item_id: int) -> None:
+    """Fail loud unless this agent's rule targets the detected language, not the setting.
+
+    The negative half is the point: it proves the `global` preference never
+    reached a `same_as_source` agent, which a positive-only check cannot show.
+
+    Matches the rule's own directive clause rather than a bare language name —
+    `language_rule()` always ends with "tags, slugs, category paths stay
+    lowercase English", so a substring check for "English" reports a leak on
+    every Chinese-targeted prompt. That false positive is why this is phrased
+    against `... your output in <name>`.
+    """
+    names = {"zh": "Simplified Chinese", "en": "English"}
+    directive = "your output in {}".format
+    instructions = str(agent.instructions)
+    if directive(names[expected]) not in instructions:
+        sys.exit(
+            f"ABORT: item {item_id}: cleaner rule does not target "
+            f"{names[expected]!r} (detected {expected})."
+        )
+    if expected != adversary and directive(names[adversary]) in instructions:
+        sys.exit(
+            f"ABORT: item {item_id}: cleaner rule targets the global setting "
+            f"{names[adversary]!r} — `same_as_source` leaked `global`."
+        )
+
+
 def cmd_run(args: argparse.Namespace) -> None:
-    target = output_language()
-    if target is None:
-        sys.exit(f"ABORT: set {OUTPUT_LANG_ENV}=zh|en — this probe measures the injected rule")
+    target = args.target
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     cache = json.loads(CACHE_PATH.read_text()) if CACHE_PATH.exists() else {}
@@ -260,19 +372,35 @@ def cmd_run(args: argparse.Namespace) -> None:
     if not items:
         sys.exit("no snapshotted items — run `snapshot` first")
 
-    agents = ["radar_tier1_filter", "radar_tier2_impact"] if args.agent == "radar" else ["knowledge_frontmatter"]
+    # Patch `global_language` for this process only rather than persisting to
+    # the real preference file (which the dashboard's settings panel owns). For
+    # `global`-policy agents this is the target; for the cleaner it is the
+    # adversary the output must ignore.
+    language_module.global_language = lambda: target
+    agents = {
+        "radar": ["radar_tier1_filter", "radar_tier2_impact"],
+        "frontmatter": ["knowledge_frontmatter"],
+        "cleaner": [],  # asserted per item against its own detected language
+    }[args.agent]
     digests = {name: _assert_language_applied(name, target) for name in agents}
 
     result: dict[str, Any] = {
         "agent": args.agent, "items_kind": args.items, "target_lang": target,
         "repeats": args.repeats, "tier1": [], "tier2": [], "frontmatter": [],
+        "cleaner": [],
     }
-    print(f"{args.agent}: {len(items)} {args.items} items x {args.repeats} repeats -> {target}", flush=True)
+    arrow = "vs global" if args.agent == "cleaner" else "->"
+    print(
+        f"{args.agent}: {len(items)} {args.items} items x {args.repeats} repeats {arrow} {target}",
+        flush=True,
+    )
 
     if args.agent == "radar":
         _run_radar(items, cache, load_goals(), args.repeats, target, result)
+    elif args.agent == "cleaner":
+        _run_cleaner(items, cache, args.repeats, target, result)
     else:
-        _run_frontmatter(items, cache, args.repeats, result)
+        _run_frontmatter(items, cache, args.repeats, target, result)
 
     # prompts/ is bind-mounted live: an edit mid-run silently mixes two prompt
     # versions into one result set. Refuse to write a contaminated file.
@@ -285,29 +413,38 @@ def cmd_run(args: argparse.Namespace) -> None:
             )
     result["digests"] = digests
 
-    out = OUT_DIR / f"{args.agent}_{args.items}2{target}.json"
+    # `<items>2<target>` reads as a direction, which is only true for the
+    # `global`-policy agents. For the cleaner, `target` is the adversary and the
+    # expected output is the corpus's own language, so name it that way.
+    stem = (
+        f"{args.items}_vs_{target}" if args.agent == "cleaner" else f"{args.items}2{target}"
+    )
+    out = OUT_DIR / f"{args.agent}_{stem}.json"
     out.write_text(json.dumps(result, ensure_ascii=False, indent=2))
     _report(result, target)
     print(f"wrote {out}", flush=True)
 
 
 def _report(result: dict[str, Any], target: str) -> None:
-    fields = (
-        [("summary", "tier2"), ("impact", "tier2"), ("reason", "tier1")]
-        if result["agent"] == "radar"
-        else [("title", "frontmatter"), ("summary", "frontmatter")]
-    )
-    print(f"\n=== {result['agent']} {result['items_kind']} -> {target} ===")
+    fields = {
+        "radar": [("summary", "tier2"), ("impact", "tier2"), ("reason", "tier1")],
+        "frontmatter": [("title", "frontmatter"), ("summary", "frontmatter")],
+        "cleaner": [("body", "cleaner")],
+    }[result["agent"]]
+    arrow = "vs global" if result["agent"] == "cleaner" else "->"
+    print(f"\n=== {result['agent']} {result['items_kind']} {arrow} {target} ===")
     for field, bucket in fields:
         rows = [r for r in result[bucket] if "error" not in r and f"{field}_lang" in r]
         if not rows:
             continue
         # The unambiguous defect: prose entirely in the wrong language. A
         # Chinese summary carrying English product names is correct output, so
-        # for a zh target only a zero-CJK field counts as wrong.
+        # for a zh expectation only a zero-CJK field counts as wrong. `expected`
+        # is per row for `same_as_source`, where each item has its own target.
         def _wrong(row: dict[str, Any]) -> bool:
+            expected = row.get("expected", target)
             ratio = row[f"{field}_lang"]["cjk_ratio"]
-            return ratio == 0.0 if target == "zh" else ratio >= 0.30
+            return ratio == 0.0 if expected == "zh" else ratio >= 0.30
 
         bad = [r for r in rows if _wrong(r)]
         by = defaultdict(list)
@@ -323,7 +460,14 @@ def _report(result: dict[str, Any], target: str) -> None:
         )
         # Flipping is the failure a single pass cannot see — always name it.
         print(f"  {'':<8} items flipping between runs: {flip or 'none'}")
-    errs = [r for b in ("tier2", "frontmatter") for r in result[b] if "error" in r]
+    if result["agent"] == "cleaner":
+        rets = [r["retention"] for r in result["cleaner"] if "error" not in r]
+        if rets:
+            print(
+                f"  {'':<8} retention {statistics.mean(rets):.2f} "
+                f"[{min(rets):.2f}..{max(rets):.2f}] (a collapsed body moves the ratio too)"
+            )
+    errs = [r for b in ("tier2", "frontmatter", "cleaner") for r in result[b] if "error" in r]
     if errs:
         print(f"  errors: {len(errs)}")
 
@@ -339,10 +483,11 @@ def main() -> None:
     s.set_defaults(func=cmd_snapshot)
 
     r = sub.add_parser("run")
-    r.add_argument("--agent", choices=["radar", "frontmatter"], required=True)
+    r.add_argument("--agent", choices=["radar", "frontmatter", "cleaner"], required=True)
     r.add_argument("--items", choices=["en", "zh"], required=True)
     r.add_argument("--limit", type=int, default=10)
     r.add_argument("--repeats", type=int, default=3)
+    r.add_argument("--target", choices=["zh", "en"], required=True)
     r.set_defaults(func=cmd_run)
 
     args = ap.parse_args()

@@ -13,6 +13,7 @@ Return JSON ONLY, matching this schema:
 
 ```
 {
+  "title": "the item's title, rewritten into the target output language",
   "summary": "2-4 factual sentences about the item itself",
   "impact": "markdown explaining what this means for the user's goals",
   "score": <integer 0-100>,
@@ -33,6 +34,11 @@ Return JSON ONLY, matching this schema:
 的数字**，那由下面的档位处理。
 
 ## Fields
+
+- `title`: rewrite the input `title` into the target output language — not a
+  loose paraphrase, a faithful rendering of the same title. Keep proper nouns
+  (company, model, repository, paper, benchmark names) in their original
+  form. If `title` is already in the target language, return it unchanged.
 
 - `summary`: 2-4 sentences, factual, no hype. State the core claim or event;
   name the actor (company / repo / paper / person) and the concrete change.
@@ -145,7 +151,9 @@ Return JSON ONLY, matching this schema:
 
 ## Style
 
-- Write `summary` and `impact` in {{OUTPUT_LANGUAGE}}, regardless of the
-  language of `goals` or of the article body.
+- Write `title`, `summary`, and `impact` in {{OUTPUT_LANGUAGE}}, regardless of
+  the language of `goals` or of the article body. All three must agree on
+  language — a title left in the source language while summary/impact are
+  translated is a defect.
 - No marketing language, no AI assistant filler ("As you requested...").
 - Return JSON. No markdown fences around the JSON, no prose outside it.

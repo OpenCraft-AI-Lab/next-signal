@@ -135,6 +135,18 @@ dashboard 的界面文案**默认英文**，通过 nav 上的语言选择器切�
 被本地化**：标签、按钮、空状态、toast、相对时间和日期显示。用户/数据内容 —— 文章
 标题、分析摘要、tag、YAML 值、wiki 文档正文、feed / 分类名 —— 一律按存储原样渲染。
 
+## 内容语言
+
+独立的设置，独立的控件：nav 上的**齿轮按钮**打开设置面板，里面是*内容*语言 ——
+pipeline 用什么语言写 radar 分析和 wiki frontmatter。它写入
+`~/.next-signal/language.json` 的 `content_language`，所有走 `global` policy 的
+`paca` agent 都读这个文件（见
+[`docs/zh/modules/core.md`](../docs/zh/modules/core.md#输出语言)）。
+
+这和上面的界面语言刻意保持独立。用一种语言看界面、用另一种语言生成内容是被支持的
+状态；两者不一致时不会同步也不会告警。当前值在 `app/layout.tsx` 里服务端解析后传给
+nav，所以面板首次渲染就显示真实状态。
+
 ## 依赖策略：先镜像 `agent-ui`，再叠加
 
 `package.json` 的依赖集合是

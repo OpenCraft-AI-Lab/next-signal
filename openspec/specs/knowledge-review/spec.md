@@ -82,7 +82,7 @@ Advancing beyond the 120-day stage SHALL set `next_due_at` to `NULL`. A row with
 
 ### Requirement: The review card reuses the doc's frontmatter summary
 
-The review card SHALL present the doc's existing frontmatter `summary` — the closing summary written to frontmatter and the `## 总结` section at ingest — rather than generating separate per-doc text. The review layer SHALL make no LLM call and SHALL store no generated text on the review row. When a doc has no frontmatter `summary` (e.g. a hand-created wiki file), the card SHALL fall back to the first prose paragraph of the body, and render title and schedule alone if neither exists.
+The review card SHALL present the doc's existing frontmatter `summary` rather than generating separate per-doc text. The review layer SHALL make no LLM call and SHALL store no generated text on the review row. When a doc has no frontmatter `summary` (e.g. a hand-created wiki file), the card SHALL fall back to the first prose paragraph of the body, and render title and schedule alone if neither exists.
 
 #### Scenario: card shows the doc's own summary
 

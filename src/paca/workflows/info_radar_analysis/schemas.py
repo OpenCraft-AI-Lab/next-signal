@@ -54,6 +54,11 @@ class Tier1Batch(BaseModel):
 class Tier2Analysis(BaseModel):
     """Goal-grounded impact analysis on a single kept item."""
 
+    title: str = Field(
+        ...,
+        description="The item's title, rewritten into the target output language. "
+        "Not a translation of meaning alone — proper nouns stay in their original form.",
+    )
     summary: str = Field(
         ...,
         description="2-4 sentence factual summary of the item's actual content.",
