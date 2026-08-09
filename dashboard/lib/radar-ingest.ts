@@ -170,10 +170,10 @@ function foloArgv(): string[] {
 }
 
 function agentTmpDir(): string {
-  if (process.env.PACA_AGENT_TMP_DIR?.trim())
-    return process.env.PACA_AGENT_TMP_DIR.trim();
+  if (process.env.NEXT_SIGNAL_AGENT_TMP_DIR?.trim())
+    return process.env.NEXT_SIGNAL_AGENT_TMP_DIR.trim();
   const stateRoot =
-    process.env.PACA_STATE_DIR?.trim() ||
+    process.env.NEXT_SIGNAL_STATE_DIR?.trim() ||
     path.join(os.homedir(), ".next-signal");
   return path.join(stateRoot, "agent-tmp");
 }

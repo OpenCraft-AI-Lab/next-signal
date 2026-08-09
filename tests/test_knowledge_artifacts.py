@@ -6,23 +6,23 @@ from pathlib import Path
 import pytest
 import yaml
 
-import paca.workflows.stages.knowledge_ingest.artifact_editor as artifact_editor_mod
-import paca.workflows.stages.knowledge_ingest.classify as classify_mod
-import paca.workflows.stages.knowledge_ingest.fetch as pipeline_fetch
-import paca.workflows.stages.knowledge_ingest.persist as persist_mod
-from paca.core import paths
-from paca.workflows.stages.knowledge_ingest.classify import detect_source_type
-from paca.workflows.knowledge_ingest import ingest_one
+import next_signal.workflows.stages.knowledge_ingest.artifact_editor as artifact_editor_mod
+import next_signal.workflows.stages.knowledge_ingest.classify as classify_mod
+import next_signal.workflows.stages.knowledge_ingest.fetch as pipeline_fetch
+import next_signal.workflows.stages.knowledge_ingest.persist as persist_mod
+from next_signal.core import paths
+from next_signal.workflows.stages.knowledge_ingest.classify import detect_source_type
+from next_signal.workflows.knowledge_ingest import ingest_one
 
 
 @pytest.fixture
 def wiki_paths(tmp_path, monkeypatch):
-    monkeypatch.setenv("PACA_WIKI_DIR", str(tmp_path / "wiki"))
-    monkeypatch.setenv("PACA_WIKI_RAW_DIR", str(tmp_path / "raw"))
+    monkeypatch.setenv("WIKI_DIR", str(tmp_path / "wiki"))
+    monkeypatch.setenv("WIKI_RAW_DIR", str(tmp_path / "raw"))
     monkeypatch.setattr(paths, "AGENT_TMP_DIR", tmp_path / "agent-tmp")
     monkeypatch.setattr(persist_mod, "gbrain_ingest", lambda path, slug=None: {"ok": True})
     monkeypatch.setattr(
-        "paca.workflows.knowledge_ingest._MANIFEST", tmp_path / "knowledge_ingest_manifest.json"
+        "next_signal.workflows.knowledge_ingest._MANIFEST", tmp_path / "knowledge_ingest_manifest.json"
     )
 
     class _FakeClassifier:

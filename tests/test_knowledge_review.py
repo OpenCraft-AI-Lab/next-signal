@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from paca.workflows import knowledge_review as kr
+from next_signal.workflows import knowledge_review as kr
 
 
 # --- curve arithmetic (tasks 8.1, 8.2, 8.3) ---------------------------------
@@ -77,7 +77,7 @@ def test_seed_and_advance_never_schedule_in_the_past():
 @pytest.fixture
 def wiki(tmp_path, monkeypatch):
     """A wiki root with helpers to add docs and observe store writes."""
-    monkeypatch.setenv("PACA_WIKI_DIR", str(tmp_path))
+    monkeypatch.setenv("WIKI_DIR", str(tmp_path))
     monkeypatch.setattr(kr.store, "today_local", lambda: TODAY)
 
     calls: dict[str, Any] = {"seeded": None, "deleted": None, "existing": set()}
@@ -164,7 +164,7 @@ def test_empty_wiki_raises_without_deleting(wiki):
 
 
 def test_missing_wiki_root_raises_without_deleting(tmp_path, monkeypatch):
-    monkeypatch.setenv("PACA_WIKI_DIR", str(tmp_path / "does-not-exist"))
+    monkeypatch.setenv("WIKI_DIR", str(tmp_path / "does-not-exist"))
     deleted: list[Any] = []
     monkeypatch.setattr(kr.store, "existing_doc_paths", lambda: {"a.md"})
     monkeypatch.setattr(kr.store, "delete_paths", lambda p: deleted.append(p))

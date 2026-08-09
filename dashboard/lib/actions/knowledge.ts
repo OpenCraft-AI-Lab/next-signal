@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 
 import { revalidatePath } from "next/cache";
 
-import { spawnPacaDetached } from "@/lib/actions/spawn-paca";
+import { spawnCliDetached } from "@/lib/actions/spawn-cli";
 import {
   getDictionary,
   normalizeLocale,
@@ -24,7 +24,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-/** Mirror the backend's resolution (paca.integrations.gbrain): GBRAIN_BIN env
+/** Mirror the backend's resolution (next_signal.integrations.gbrain): GBRAIN_BIN env
  *  wins, else the `gbrain` launcher on PATH. */
 function gbrainBin(): string {
   return process.env.GBRAIN_BIN?.trim() || "gbrain";
@@ -94,10 +94,10 @@ export async function reindexKnowledge(
   localeValue?: Locale,
 ): Promise<{ ok: boolean; message: string }> {
   const t = getDictionary(normalizeLocale(localeValue));
-  const result = await spawnPacaDetached(
+  const result = await spawnCliDetached(
     ["run-workflow", "knowledge_ingest"],
     {
-      extraEnv: { PACA_WIKI_DIR: wikiRoot() },
+      extraEnv: { WIKI_DIR: wikiRoot() },
       verb: "Re-index",
       logTag: "knowledge-reindex",
     },

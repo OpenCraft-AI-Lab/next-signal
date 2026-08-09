@@ -12,15 +12,15 @@ and embeddings of both product modules ([knowledge](./knowledge.md) and
 
 ## Where the code lives
 
-- `src/paca/core/models.py` — model factory (profile → agno Model) + embedder +
+- `src/next_signal/core/models.py` — model factory (profile → agno Model) + embedder +
   OMLX endpoint
-- `src/paca/core/config.py` — every YAML loader (strict pydantic; unknown keys
+- `src/next_signal/core/config.py` — every YAML loader (strict pydantic; unknown keys
   fail loud)
-- `src/paca/core/db.py` — `database_url()` plus the `get_db()` singleton for
+- `src/next_signal/core/db.py` — `database_url()` plus the `get_db()` singleton for
   agno-managed tables
-- `src/paca/core/context.py` — shared-context assembly
-- `src/paca/core/concurrency.py` — per-provider inference concurrency semaphores
-- `src/paca/core/paths.py` / `logging.py` / `fileio.py` — path conventions /
+- `src/next_signal/core/context.py` — shared-context assembly
+- `src/next_signal/core/concurrency.py` — per-provider inference concurrency semaphores
+- `src/next_signal/core/paths.py` / `logging.py` / `fileio.py` — path conventions /
   structlog / atomic writes
 
 ## The model system
@@ -47,9 +47,9 @@ directly.
   an unreachable OMLX endpoint) automatically rebuilds against
   `fallback_profile`. `KeyError` / `ValueError` are programmer errors — they
   propagate instead of falling back. The result is lru-cached, so **once OMLX is
-  back you must call `paca.core.models.reset_cache()` before local is retried** —
-  this matters most for long-running processes like `paca serve`.
-- The OMLX endpoint is read only through `paca.core.models.omlx_endpoint()`
+  back you must call `next_signal.core.models.reset_cache()` before local is retried** —
+  this matters most for long-running processes like `next-signal serve`.
+- The OMLX endpoint is read only through `next_signal.core.models.omlx_endpoint()`
   (`OMLX_BASE_URL` / `OMLX_API_KEY`). Never duplicate that lookup elsewhere.
 - Qwen3 specifics are pinned in `_build_omlx`: thinking disabled, sampling
   parameters, and structured output through the standard OpenAI
@@ -88,7 +88,7 @@ the factory inherits this automatically — no module manages it locally.
 Pick by purpose; never mix them:
 
 - **agno-managed tables** (sessions / memory / knowledge / traces) → the
-  `paca.core.db.get_db()` singleton. The URL goes through
+  `next_signal.core.db.get_db()` singleton. The URL goes through
   `database_url(for_sqlalchemy=True)`, which rewrites the scheme to
   `postgresql+psycopg://` (psycopg v3). agno provisions these tables itself —
   never redefine them.
@@ -103,7 +103,7 @@ Pick by purpose; never mix them:
 Files in `prompts/_shared/*.md` are concatenated in filename order (two-digit
 prefixes control ordering: `00_house_rules.md`, `10_user_profile.md`), separated
 by markdown rules, and **appended** to every agent's instructions
-(`paca.core.context.shared_context()`).
+(`next_signal.core.context.shared_context()`).
 
 - `_*.md` prefix: **not loaded** and not committed — pure scratch.
 - `99_*.md`: **loaded** (sorted last) but gitignored — a local personal layer that
@@ -121,7 +121,7 @@ Note this is the opposite of where the language rule belongs — see below.
 ## Output language
 
 Every agent that writes **prose** for a reader declares a language *policy*
-in its own YAML (`extra.output_language`), resolved by `paca.core.language`:
+in its own YAML (`extra.output_language`), resolved by `next_signal.core.language`:
 
 - `off` — no language rule at all (a bare `false` still means this too, for
   back-compat). For agents that write no prose: output discarded
@@ -144,7 +144,7 @@ in its own YAML (`extra.output_language`), resolved by `paca.core.language`:
   from any global setting. The caller (a workflow stage) must supply it or the
   agent build raises `RuntimeError`. Used by exactly two agents, the knowledge
   body cleaners: the target is the *article's own* language, detected once per
-  item by `paca.core.language_detect.detect_language()` — a deterministic,
+  item by `next_signal.core.language_detect.detect_language()` — a deterministic,
   non-LLM, Unicode-script-ratio heuristic, never an LLM call (an LLM judging
   its own target language reintroduces the exact sampling-variance failure
   this mechanism exists to prevent).
@@ -191,13 +191,13 @@ generalizes:
   ("if the goals are in Chinese…") measured 0/64 on tier-2 summaries against
   Chinese goals with English articles, while the unconditional form measured
   63/63.
-- Two readers, two failure modes, on purpose: `paca.core.language` raises on a
+- Two readers, two failure modes, on purpose: `next_signal.core.language` raises on a
   corrupt or unrecognized preference file, because a pipeline run must not
   generate in a language nobody chose. The dashboard's own reader
   (`lib/actions/language.ts::getContentLanguage`) logs and falls back to its
   default instead — the nav renders on every page, so raising there would take
   down the whole dashboard including the panel used to fix the value.
-  `paca doctor` remains the single loud check.
+  `next-signal doctor` remains the single loud check.
 
 ## Invariants
 
@@ -211,7 +211,7 @@ generalizes:
   `Agent` needs `telemetry=False` too.
 
 A full inventory of agents and tools is deliberately not maintained in the docs:
-`uv run paca list` lists the runnables, and `src/paca/registry.py` plus each
+`uv run next-signal list` lists the runnables, and `src/next_signal/registry.py` plus each
 `tools/<domain>/register()` is the source of truth for the tool surface.
 
 ## Specs

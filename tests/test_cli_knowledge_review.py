@@ -1,12 +1,12 @@
-"""CLI surface tests for ``paca knowledge review``."""
+"""CLI surface tests for ``next-signal knowledge review``."""
 
 from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from paca.interfaces import cli
+from next_signal.interfaces import cli
 
-import paca.workflows.knowledge_review as pkg
+import next_signal.workflows.knowledge_review as pkg
 
 
 def test_review_prints_counts(monkeypatch) -> None:

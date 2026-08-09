@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel
 
-from paca.agents.structured import run_structured
+from next_signal.agents.structured import run_structured
 
 
 class _Probe(BaseModel):

@@ -1,6 +1,6 @@
 # core-integrations
 
-Provider integrations live under `src/paca/integrations/`, with domain-specific adapters under `src/paca/integrations/<domain>/`. An integration may register agent-facing tools only when the provider capability is intentionally exposed directly; otherwise tools or workflow stages call the adapter.
+Provider integrations live under `src/next_signal/integrations/`, with domain-specific adapters under `src/next_signal/integrations/<domain>/`. An integration may register agent-facing tools only when the provider capability is intentionally exposed directly; otherwise tools or workflow stages call the adapter.
 
 ## Purpose
 

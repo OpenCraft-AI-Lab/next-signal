@@ -1,7 +1,7 @@
 import { Pool, type QueryResultRow } from "pg";
 
-type PacaGlobal = typeof globalThis & {
-  pacaPgPool?: Pool;
+type AppGlobal = typeof globalThis & {
+  nsPgPool?: Pool;
 };
 
 function normalizePostgresUrl(url: string): string {
@@ -11,17 +11,17 @@ function normalizePostgresUrl(url: string): string {
 }
 
 function connectionString(): string {
-  const raw = process.env.PACA_DATABASE_URL ?? process.env.DATABASE_URL;
+  const raw = process.env.NEXT_SIGNAL_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!raw) {
-    throw new Error("DATABASE_URL or PACA_DATABASE_URL is required for dashboard DB reads");
+    throw new Error("DATABASE_URL or NEXT_SIGNAL_DATABASE_URL is required for dashboard DB reads");
   }
   return normalizePostgresUrl(raw);
 }
 
 function pool(): Pool {
-  const g = globalThis as PacaGlobal;
-  g.pacaPgPool ??= new Pool({ connectionString: connectionString() });
-  return g.pacaPgPool;
+  const g = globalThis as AppGlobal;
+  g.nsPgPool ??= new Pool({ connectionString: connectionString() });
+  return g.nsPgPool;
 }
 
 export async function query<T extends QueryResultRow>(

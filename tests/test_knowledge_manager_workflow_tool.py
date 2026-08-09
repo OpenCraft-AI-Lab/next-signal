@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from agno.tools.workflow import WorkflowTools
 
-from paca.registry import resolve_tools
+from next_signal.registry import resolve_tools
 
 
 def test_knowledge_ingest_tool_is_serialization_safe() -> None:

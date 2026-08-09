@@ -9,11 +9,11 @@ clean markdown 进 wiki 树，raw 原件归档，GBrain 做索引和 hybrid sear
 
 ## 代码位置
 
-`src/paca/tools/knowledge/` —— agent-facing knowledge tools。
-`src/paca/integrations/knowledge/` —— OpenCLI (WeChat) / Bilibili / GitHub adapters。
-`src/paca/workflows/knowledge_ingest.py` —— centralized workflow factory。
-`src/paca/workflows/stages/knowledge_ingest/` —— workflow-private pipeline stages。
-`src/paca/workflows/knowledge_review/` —— 间隔重复回顾调度器（`__init__.py` 放曲线 +
+`src/next_signal/tools/knowledge/` —— agent-facing knowledge tools。
+`src/next_signal/integrations/knowledge/` —— OpenCLI (WeChat) / Bilibili / GitHub adapters。
+`src/next_signal/workflows/knowledge_ingest.py` —— centralized workflow factory。
+`src/next_signal/workflows/stages/knowledge_ingest/` —— workflow-private pipeline stages。
+`src/next_signal/workflows/knowledge_review/` —— 间隔重复回顾调度器（`__init__.py` 放曲线 +
 reconciliation，`store.py` 放 Postgres I/O）。
 
 ## Agents
@@ -33,9 +33,9 @@ knowledge 领域工具：
 - `knowledge_ingest_workflow` —— 单篇入库路径（fetch → clean → enrich → classify → persist）。
 
 KB **检索**是横向基础设施（不在本模块）：`search_knowledge` 在
-`paca/tools/knowledge/search.py`；`gbrain_search` / `gbrain_get` / `gbrain_query` /
-`gbrain_ingest` 在 `paca/tools/gbrain.py`；GBrain bridge 在
-`paca/integrations/gbrain.py` —— 任何模块的 agent 都能按名字引用这些工具。
+`next_signal/tools/knowledge/search.py`；`gbrain_search` / `gbrain_get` / `gbrain_query` /
+`gbrain_ingest` 在 `next_signal/tools/gbrain.py`；GBrain bridge 在
+`next_signal/integrations/gbrain.py` —— 任何模块的 agent 都能按名字引用这些工具。
 
 ## 接的外部
 
@@ -43,7 +43,7 @@ KB **检索**是横向基础设施（不在本模块）：`search_knowledge` 在
   下载文章 + 图片到 raw store，按 slot 索引把 markdown 里的图片链接重写成本地相对路径。
   `OPENCLI_BIN` 必填，在 call time 读。
 - **MarkItDown** —— YouTube / PDF / HTML / Office / text-like 文件转 markdown
-  （横向 adapter：`paca/integrations/markitdown.py`）。
+  （横向 adapter：`next_signal/integrations/markitdown.py`）。
 - **Bilibili** —— 优先公开字幕；没字幕时下临时音频、本地转写、删临时媒体。
   另导出轻量 `bilibili_fetch_captions`（只取字幕+标题+简介、不下音频）——这是给
   跨领域抽样场景用的工具函数，next-signal 当前没有消费它的调用方，留着以备未来用途，
@@ -55,9 +55,9 @@ KB **检索**是横向基础设施（不在本模块）：`search_knowledge` 在
   按 does/value/maturity/ecosystem 四角度写 summary。`GITHUB_TOKEN` 可选，缺省走匿名
   （60/h rate limit，个人偶尔收藏够用）；token 设了在 call time 读自动加 Bearer 头。
 - **GBrain** —— 长期知识库 peer service。入库走横向 GBrain bridge
-  （`paca/integrations/gbrain.py`），不是本模块独占。
+  （`next_signal/integrations/gbrain.py`），不是本模块独占。
 - **Obsidian Git plugin** —— wiki repo ↔ GitHub 同步走 vault 内的 plugin，
-  不在 paca 进程里。详见下面 "Wiki ↔ GitHub 同步" 一节。
+  不在 next-signal 进程里。详见下面 "Wiki ↔ GitHub 同步" 一节。
 
 ## 数据存哪
 
@@ -70,17 +70,17 @@ KB **检索**是横向基础设施（不在本模块）：`search_knowledge` 在
 ## 怎么用
 
 ```bash
-uv run paca knowledge ingest <url|staged-file>
-uv run paca knowledge ingest <url> --category knowledge/ai-ml   # 指定落点文件夹（跳过自动分类）
-uv run paca knowledge ingest <url> --progress                   # 每个 pipeline step 一行 JSON 事件 + 末行结果 JSON
-uv run paca knowledge gbrain-search "query"
-uv run paca run-workflow knowledge_ingest            # re-ingest 变更文件 + 刷新所有 Related 区块
-uv run paca knowledge review                         # 对照 wiki 与 knowledge_reviews（入列新的 / 移除已删的）
+uv run next-signal knowledge ingest <url|staged-file>
+uv run next-signal knowledge ingest <url> --category knowledge/ai-ml   # 指定落点文件夹（跳过自动分类）
+uv run next-signal knowledge ingest <url> --progress                   # 每个 pipeline step 一行 JSON 事件 + 末行结果 JSON
+uv run next-signal knowledge gbrain-search "query"
+uv run next-signal run-workflow knowledge_ingest            # re-ingest 变更文件 + 刷新所有 Related 区块
+uv run next-signal knowledge review                         # 对照 wiki 与 knowledge_reviews（入列新的 / 移除已删的）
 ```
 
 `--category` 必须是 `configs/knowledge_taxonomy.yaml` 里的某个 path，非法值在 fetch 之前
 loud fail。`--progress` 给 dashboard 的入库进度面板用（见下）。
-本地文件输入只接受 `PACA_AGENT_TMP_DIR` 下的 staged file；`/radar` 的 Folo ingest 也遵守
+本地文件输入只接受 `NEXT_SIGNAL_AGENT_TMP_DIR` 下的 staged file；`/radar` 的 Folo ingest 也遵守
 这个边界，先把 full-text HTML 写到该目录，再把文件路径交给通用 knowledge pipeline。
 
 ## 知识回顾（间隔重复）
@@ -99,7 +99,7 @@ ingest 是写入侧，回顾是读取侧。每篇 wiki 文档在 `knowledge_revi
   常青轮换功能，而不是把阶段列表加长。
 - **卡片内容** —— 卡片直接复用文档自己的 frontmatter `summary`，所以回顾层**不调 LLM**、
   行里也不存生成文本。手写、没有 `summary` 的文档回退到正文首段。
-- **对账（reconciliation）** —— `paca knowledge review` 遍历 wiki，把未知文档入列
+- **对账（reconciliation）** —— `next-signal knowledge review` 遍历 wiki，把未知文档入列
   （按曲线 seed），把文件已删的行移除。wiki 根缺失或空时直接拒绝，而不是把 "没有文件" 读成
   "全部删了"。`captured_at` 从 frontmatter 解析，优先级 `captured_at` → `updated_at` →
   `created_at` → mtime，与 dashboard wiki 视图一致。
@@ -140,7 +140,7 @@ dashboard 设置面板里选的内容语言走。
 这是有意的，也和 radar 阅读器一致——那边早就是翻译过的标题配源语言文章。
 
 - **探测**出的语言在 `fetch()` 里每条算一次（确定性算法，不走 LLM，见
-  `paca.core.language_detect`），挂在 `KnowledgeArtifact.detected_language` 上，只作为
+  `next_signal.core.language_detect`），挂在 `KnowledgeArtifact.detected_language` 上，只作为
   `language=` 传给正文清洗 agent。frontmatter 那步不传 override，自己解析设置。
 - `tags` **豁免**，任何语言下都保持小写英文——走的是针对该字段的专门 prompt 指令，不是
   语言 policy 机制（同一次调用里某个字段需要跟别的字段不一样，就留在 prompt 层单独处理，
@@ -202,9 +202,9 @@ prompt 设计的「没有明确归属就交给人归档」的出口——带规�
 自动迁移。把 frontmatter 挪回操作者的设置，看上去正好会把这个风险带回来——切一下设置、
 re-index 一遍、所有文件改名。
 
-实际不会，因为 re-index 根本不重写 frontmatter。`paca run-workflow knowledge_ingest` 跑的是
+实际不会，因为 re-index 根本不重写 frontmatter。`next-signal run-workflow knowledge_ingest` 跑的是
 `reindex_wiki`：它对每个 wiki markdown 文件算摘要，把变了的重新 embed 进 GBrain，frontmatter
-agent 不在这条路径上。唯一会写 `title` 的是一次全新的 `paca knowledge ingest <source>`，
+agent 不在这条路径上。唯一会写 `title` 的是一次全新的 `next-signal knowledge ingest <source>`，
 一次一篇、且是刻意触发的。所以改设置只影响之后的入库，已有文档的文件名和 frontmatter 语言
 会一直保持不变——包括在这次拆分之前入库的整个知识库，会一直停在各自的源语言，直到某个来源
 被重新入库为止。
@@ -231,9 +231,9 @@ agent 不在这条路径上。唯一会写 `title` 的是一次全新的 `paca k
 
 ## Wiki ↔ GitHub 同步
 
-`digitalpaca-wiki/` 到 GitHub 的同步**不在 paca 进程里**，由 vault 内的
-[Obsidian Git plugin](https://github.com/Vinzent03/obsidian-git) 负责，跟 paca 完全解耦。
-paca 这边只保证 wiki 落盘那一刻跟 GBrain 同步成功；剩下定时推到 GitHub 是 plugin 的事。
+`digitalpaca-wiki/` 到 GitHub 的同步**不在 next-signal 进程里**，由 vault 内的
+[Obsidian Git plugin](https://github.com/Vinzent03/obsidian-git) 负责，跟 next-signal 完全解耦。
+next-signal 这边只保证 wiki 落盘那一刻跟 GBrain 同步成功；剩下定时推到 GitHub 是 plugin 的事。
 
 ### 凭据
 
@@ -263,12 +263,12 @@ gh auth setup-git   # 让 git HTTPS ops 通过 gh CLI 已登录的 PAT 走 keych
 ### 链路全景
 
 ```
-paca knowledge ingest
+next-signal knowledge ingest
   → fetch + clean + classify + persist
   → 写 wiki/<category>/<slug>/<slug>.md + images/
   → gbrain put + embed   ← 失败这里 loud fail，但 artifact 留在磁盘
-  → 成功 → paca 收工，wiki 文件留下
-       ↓ (paca 不再参与)
+  → 成功 → next-signal 收工，wiki 文件留下
+       ↓ (next-signal 不再参与)
 Obsidian Git plugin（每 30 min）
   → git add -A && git commit && git push
 ```
@@ -280,8 +280,8 @@ Obsidian Git plugin（每 30 min）
 `dashboard-knowledge-ingest`、`dashboard-knowledge-review`。
 
 当前状态：artifact pipeline、GBrain ingest/search、weekly re-ingest workflow baseline、
-`paca doctor` GBrain health check、间隔重复回顾层（`knowledge_reviews` 表、固定艾宾浩斯
-曲线、`paca knowledge review`、`/knowledge` 回顾区块）、dashboard `/knowledge` redesigned
+`next-signal doctor` GBrain health check、间隔重复回顾层（`knowledge_reviews` 表、固定艾宾浩斯
+曲线、`next-signal knowledge review`、`/knowledge` 回顾区块）、dashboard `/knowledge` redesigned
 页面均已就位。
 Dashboard 端提供 wiki tree、ANN search、preview pane 和 `Re-index` 触发；界面文案走
 dashboard i18n（默认英文，可切中文），wiki 文档内容本身不翻译。
@@ -297,11 +297,11 @@ taxonomy 条目），**不碰 GBrain 索引和 raw 归档**——索引一致性
 `/knowledge` 还有一个入库表单（URL 输入 + 可选 folder `<select>`，按 taxonomy namespace
 分组、option `title` 显示 scope）和「进行中的入库」面板。两个入库入口（knowledge 表单 +
 `/radar` 的 Ingest to wiki）都走 dashboard 的共享内存 job registry（`lib/ingest/jobs.ts`，
-spawn `paca knowledge ingest … --progress`），面板通过 SSE（`/api/knowledge/ingest/stream`）
+spawn `next-signal knowledge ingest … --progress`），面板通过 SSE（`/api/knowledge/ingest/stream`）
 订阅，按 source 标签实时显示 fetch/clean/enrich/classify/persist 五步进度。
 
 `/radar` 入口会先把 radar row 解析成普通 ingest 输入：Folo source 用 `source_id` 调
-`folocli entry get` 拉全文，stage 为 `PACA_AGENT_TMP_DIR/radar-ingest/*.html` 后 ingest；
+`folocli entry get` 拉全文，stage 为 `NEXT_SIGNAL_AGENT_TMP_DIR/radar-ingest/*.html` 后 ingest；
 非 Folo source 校验 `radar_items.url` 后直接 ingest URL。knowledge pipeline 本身不认识
 `radar://` 这类内部引用，只处理 URL 或 staged file。registry 是单进程内存态：dashboard
 重启会丢掉进行中 job 的进度视图（子进程和 artifact 写入不受影响）。runner 防御性跳过

@@ -1,6 +1,6 @@
 # info-radar analysis goals — 用户实际目标。
 #
-# 每次改完下一次 `paca info-radar analyze` 会立刻用上（goals 在 batch 开始
+# 每次改完下一次 `next-signal info-radar analyze` 会立刻用上（goals 在 batch 开始
 # 时一次性 load）。
 
 goals:

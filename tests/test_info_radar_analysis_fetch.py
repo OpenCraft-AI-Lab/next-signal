@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from paca.workflows.info_radar_analysis.stages import fetch as fetch_mod
+from next_signal.workflows.info_radar_analysis.stages import fetch as fetch_mod
 
 # Long enough to clear _MIN_ARTICLE_CHARS — a real article body.
 _BODY = "正文段落。" * 60

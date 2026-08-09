@@ -1,7 +1,6 @@
 /**
  * Continuous score-color ramp shared by ScoreChip, the histogram, the
  * filter-bar range slider, and the design-system gradient stripe.
- * Mirrors `dashboard/design/data.js::PACA.scoreHue / scoreLOff`.
  *
  *   orange(low ~28°) → yellow(~55°) → green(high ~143°)
  *

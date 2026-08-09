@@ -133,7 +133,7 @@ function runChromePdf(targetUrl: string, outPath: string): Promise<void> {
         // Advance virtual time so React hydration / fonts settle before print.
         "--virtual-time-budget=10000",
         // Isolated profile so a running Chrome doesn't lock the default one.
-        `--user-data-dir=${path.join(os.tmpdir(), "paca-radar-chrome")}`,
+        `--user-data-dir=${path.join(os.tmpdir(), "ns-radar-chrome")}`,
         `--print-to-pdf=${outPath}`,
         targetUrl,
       ],

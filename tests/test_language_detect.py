@@ -7,7 +7,7 @@ repeatable as a mocked one.
 
 from __future__ import annotations
 
-from paca.core.language_detect import detect_language
+from next_signal.core.language_detect import detect_language
 
 
 def test_chinese_dominant_text_detects_zh() -> None:

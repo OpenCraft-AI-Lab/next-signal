@@ -5,20 +5,20 @@ from pathlib import Path
 
 import pytest
 
-from paca.integrations import gbrain
-import paca.workflows.stages.knowledge_ingest.artifact_editor as artifact_editor_mod
-import paca.workflows.stages.knowledge_ingest.classify as classify_mod
-import paca.workflows.stages.knowledge_ingest.fetch as pipeline_fetch
-import paca.workflows.stages.knowledge_ingest.persist as persist_mod
-from paca.core import paths
-from paca.workflows.stages.knowledge_ingest import KnowledgeArtifact
-from paca.workflows import knowledge_ingest
+from next_signal.integrations import gbrain
+import next_signal.workflows.stages.knowledge_ingest.artifact_editor as artifact_editor_mod
+import next_signal.workflows.stages.knowledge_ingest.classify as classify_mod
+import next_signal.workflows.stages.knowledge_ingest.fetch as pipeline_fetch
+import next_signal.workflows.stages.knowledge_ingest.persist as persist_mod
+from next_signal.core import paths
+from next_signal.workflows.stages.knowledge_ingest import KnowledgeArtifact
+from next_signal.workflows import knowledge_ingest
 
 
 @pytest.fixture
 def wiki_paths(tmp_path, monkeypatch):
-    monkeypatch.setenv("PACA_WIKI_DIR", str(tmp_path / "wiki"))
-    monkeypatch.setenv("PACA_WIKI_RAW_DIR", str(tmp_path / "raw"))
+    monkeypatch.setenv("WIKI_DIR", str(tmp_path / "wiki"))
+    monkeypatch.setenv("WIKI_RAW_DIR", str(tmp_path / "raw"))
     monkeypatch.setattr(paths, "AGENT_TMP_DIR", tmp_path / "agent-tmp")
     monkeypatch.setattr(knowledge_ingest, "_MANIFEST", tmp_path / "knowledge_ingest_manifest.json")
     # persist queries GBrain for the Related section after a successful ingest

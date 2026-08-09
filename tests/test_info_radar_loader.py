@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from paca.collectors.info_radar.loader import load_sources
+from next_signal.collectors.info_radar.loader import load_sources
 
 
 def _write(path: Path, body: str) -> None:

@@ -95,7 +95,7 @@ profiles:
   #   temperature: 0.4
 
 # Embedder profiles for dedup / similarity. Uses the local OMLX
-# OpenAI-compatible `/v1/embeddings` endpoint (see paca.core.models.get_embedder).
+# OpenAI-compatible `/v1/embeddings` endpoint (see next_signal.core.models.get_embedder).
 # Qwen3-Embedding-0.6B-8bit emits 1024-dim vectors which match the
 # radar_pushed_topics.embedding column. Swapping to a different-dim model
 # REQUIRES a column migration.

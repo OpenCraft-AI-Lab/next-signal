@@ -1,4 +1,4 @@
-"""Coverage for the per-agent language-policy resolver (paca.core.language).
+"""Coverage for the per-agent language-policy resolver (next_signal.core.language).
 
 Split out of test_context.py alongside the module split: shared static
 context and language-policy resolution used to live in the same module, but
@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from paca.core import language as lang
+from next_signal.core import language as lang
 
 
 @pytest.fixture(autouse=True)

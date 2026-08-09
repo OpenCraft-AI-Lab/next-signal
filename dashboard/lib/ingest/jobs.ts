@@ -37,13 +37,13 @@ const LOG_PATH = path.join(os.homedir(), ".next-signal", "dashboard-actions.log"
 type Registry = { jobs: Map<string, IngestJob>; emitter: EventEmitter };
 
 function registry(): Registry {
-  const g = globalThis as typeof globalThis & { pacaIngestJobs?: Registry };
-  if (!g.pacaIngestJobs) {
+  const g = globalThis as typeof globalThis & { nsIngestJobs?: Registry };
+  if (!g.nsIngestJobs) {
     const emitter = new EventEmitter();
     emitter.setMaxListeners(0); // one listener per open SSE connection
-    g.pacaIngestJobs = { jobs: new Map(), emitter };
+    g.nsIngestJobs = { jobs: new Map(), emitter };
   }
-  return g.pacaIngestJobs;
+  return g.nsIngestJobs;
 }
 
 export function ingestEmitter(): EventEmitter {
@@ -104,7 +104,7 @@ export function startIngestJob(
   jobs.set(id, job);
   emit(job);
 
-  const argv = ["run", "paca", "knowledge", "ingest", value];
+  const argv = ["run", "next-signal", "knowledge", "ingest", value];
   if (opts.category) argv.push("--category", opts.category);
   argv.push("--progress");
   void logLine(`[${job.startedAt}] [ingest:${opts.source}:${id}] spawn: uv ${argv.join(" ")}`);

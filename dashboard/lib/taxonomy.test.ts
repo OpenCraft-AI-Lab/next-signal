@@ -25,7 +25,7 @@ categories:
 `;
 
 async function tmpTaxonomy(): Promise<string> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "paca-taxonomy-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ns-taxonomy-"));
   const file = path.join(dir, "knowledge_taxonomy.yaml");
   await writeFile(file, TAXONOMY, "utf8");
   return file;

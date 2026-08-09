@@ -54,7 +54,7 @@ function normalizeRows(value: unknown): SubscriptionRow[] {
 
 export async function getSubscriptions(): Promise<SubscriptionsState> {
   try {
-    const result = await execFileAsync("uv", ["run", "paca", "info-radar", "subscriptions", "--json"], {
+    const result = await execFileAsync("uv", ["run", "next-signal", "info-radar", "subscriptions", "--json"], {
       cwd: REPO_ROOT,
       maxBuffer: 1024 * 1024,
       timeout: 90_000,

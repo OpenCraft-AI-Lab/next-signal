@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from paca.workflows.stages.knowledge_ingest.schemas import FrontmatterDraft, category_model
+from next_signal.workflows.stages.knowledge_ingest.schemas import FrontmatterDraft, category_model
 
 
 def test_frontmatter_normalizes_tags() -> None:

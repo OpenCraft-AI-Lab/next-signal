@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from paca.collectors.info_radar import runner
-from paca.collectors.info_radar.loader import SourceSpec
+from next_signal.collectors.info_radar import runner
+from next_signal.collectors.info_radar.loader import SourceSpec
 
 
 def _spec(name: str, *, argv: list[str] | None = None) -> SourceSpec:
@@ -163,11 +163,11 @@ def test_disabled_source_skipped(monkeypatch, fake_run, fake_store):
     assert runner.run_all() == []
 
 
-# ---- manual-run thin shell (paca.workflows.info_radar_pull) -----------------
+# ---- manual-run thin shell (next_signal.workflows.info_radar_pull) -----------------
 
 
 def test_pull_shell_summarizes_results(monkeypatch):
-    from paca.workflows import info_radar_pull
+    from next_signal.workflows import info_radar_pull
 
     results = [
         runner.SourceResult(name="a", written=2, skipped=1, error=None),
@@ -185,7 +185,7 @@ def test_pull_shell_summarizes_results(monkeypatch):
 
 
 def test_pull_shell_factory_fails_loud():
-    from paca.workflows import info_radar_pull
+    from next_signal.workflows import info_radar_pull
 
     with pytest.raises(NotImplementedError, match="not an AgentOS workflow"):
         info_radar_pull.factory()

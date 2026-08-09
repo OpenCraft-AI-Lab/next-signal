@@ -1,4 +1,4 @@
-# paca dashboard
+# next-signal dashboard
 
 > [English](./README.md) · **简体中文**
 
@@ -10,19 +10,19 @@
 
 - Node 20+
 - pnpm（没有的话 `npm install -g pnpm`；推荐 pnpm 11+）
-- `uv` 在 `PATH` 上（server action 调 `paca ...` 用）
+- `uv` 在 `PATH` 上（server action 调 `next-signal ...` 用）
 - `gbrain` 在 `PATH` 上（knowledge 搜索的 server action 用）
 - `npx` / Folo 认证供 `/subscriptions` 用（`FOLO_TOKEN` 或 `~/.folo/config.json`）
 
 ## 运行
 
-推荐入口走 `paca` CLI，这样两个后端共用一个二进制：
+推荐入口走 `next-signal` CLI，这样两个后端共用一个二进制：
 
 ```bash
-uv run paca dashboard             # http://localhost:3000，带 HMR
-uv run paca dashboard --port 3001 # 自定义端口
-uv run paca dashboard --build     # `pnpm build`
-uv run paca dashboard --start     # `pnpm start`（需要先 --build）
+uv run next-signal dashboard             # http://localhost:3000，带 HMR
+uv run next-signal dashboard --port 3001 # 自定义端口
+uv run next-signal dashboard --build     # `pnpm build`
+uv run next-signal dashboard --start     # `pnpm start`（需要先 --build）
 ```
 
 它是 `pnpm` 的薄封装：`os.execvp` 会替换掉 python 进程，所以 Ctrl-C / SIGTERM
@@ -37,18 +37,18 @@ pnpm test         # dashboard 聚焦 helper 测试
 pnpm typecheck
 ```
 
-## dashboard **不**依赖 `paca serve`
+## dashboard **不**依赖 `next-signal serve`
 
-`paca serve`（AgentOS 在 `:7777`）和 `paca dashboard`（Next 在 `:3000`）是
+`next-signal serve`（AgentOS 在 `:7777`）和 `next-signal dashboard`（Next 在 `:3000`）是
 **完全解耦的两个进程**。dashboard 现有的每个功能，要么直接读 Postgres，要么
-spawn 一次性 `paca` CLI 子进程 —— 没有任何一个走 AgentOS 的 HTTP 调用。
+spawn 一次性 `next-signal` CLI 子进程 —— 没有任何一个走 AgentOS 的 HTTP 调用。
 
-| 做这件事 | 需要 `paca serve` 吗？ |
+| 做这件事 | 需要 `next-signal serve` 吗？ |
 | --- | --- |
 | 浏览 `/radar`，点 Ingest / Pull+Analyze | ❌ 不需要 |
 | 搜索 `/knowledge`，点 Re-index | ❌ 不需要 |
-| 手动跑 workflow（`paca info-radar pull/analyze`、`paca run-workflow knowledge_ingest`） | ❌ 不需要（CLI 子进程，直接写 Postgres） |
-| 调试新的 agent / workflow | ✅ 需要（或者用 `paca run-agent`） |
+| 手动跑 workflow（`next-signal info-radar pull/analyze`、`next-signal run-workflow knowledge_ingest`） | ❌ 不需要（CLI 子进程，直接写 Postgres） |
+| 调试新的 agent / workflow | ✅ 需要（或者用 `next-signal run-agent`） |
 
 `NEXT_PUBLIC_AGENT_OS_URL` 已经预接好（默认 `http://localhost:7777`），留给将来
 真的有页面需要调 AgentOS HTTP 端点的那天 —— 目前没有。
@@ -57,12 +57,12 @@ spawn 一次性 `paca` CLI 子进程 —— 没有任何一个走 AgentOS 的 HT
 
 | 名称 | 默认值 | 谁在用 |
 | --- | --- | --- |
-| `PACA_WIKI_DIR` | （无 —— 必填） | `/knowledge`（树 + re-index） |
+| `WIKI_DIR` | （无 —— 必填） | `/knowledge`（树 + re-index） |
 | `NEXT_PUBLIC_AGENT_OS_URL` | `http://localhost:7777` | 浏览器端调 AgentOS（目前没有） |
 | `DATABASE_URL` | （Postgres URL） | `dashboard-radar`（直接读 DB） |
-| `PACA_DATABASE_URL` | `DATABASE_URL` | 可选的 dashboard 专用 Postgres URL |
+| `NEXT_SIGNAL_DATABASE_URL` | `DATABASE_URL` | 可选的 dashboard 专用 Postgres URL |
 | `INFO_RADAR_TIMEZONE` | `America/Los_Angeles` | `/radar` 按日历天分组 + recap 区间 |
-| `FOLO_TOKEN` | （Folo CLI session 文件） | `/subscriptions`，经 `paca info-radar subscriptions --json` |
+| `FOLO_TOKEN` | （Folo CLI session 文件） | `/subscriptions`，经 `next-signal info-radar subscriptions --json` |
 | `FOLO_CLI_ARGV` | `npx --yes folocli@0.0.5` | 可选，覆盖 Folo CLI 启动方式 |
 
 ## 视觉设计系统
@@ -128,7 +128,7 @@ server component —— 动效来自 `app/globals.css` 里的 `.brand-*` 钩子�
 
 dashboard 的界面文案**默认英文**，通过 nav 上的语言选择器切换：触发器显示**当前**
 语言，菜单列出所有可选语言。菜单里的语言名一律自称、绝不翻译（`English`、`中文`）
-—— 语言菜单必须让读不懂当前界面语言的人也能看懂。选择存在 `paca_locale` cookie 里
+—— 语言菜单必须让读不懂当前界面语言的人也能看懂。选择存在 `ns_locale` cookie 里
 （`en` / `zh`），`app/layout.tsx` 会设置对应的文档 `lang`。
 
 翻译文本在 [`lib/i18n/dictionaries.ts`](./lib/i18n/dictionaries.ts)。**只有界面文案
@@ -140,7 +140,7 @@ dashboard 的界面文案**默认英文**，通过 nav 上的语言选择器切�
 独立的设置，独立的控件：nav 上的**齿轮按钮**打开设置面板，里面是*内容*语言 ——
 pipeline 用什么语言写 radar 分析和 wiki frontmatter。它写入
 `~/.next-signal/language.json` 的 `content_language`，所有走 `global` policy 的
-`paca` agent 都读这个文件（见
+`next-signal` agent 都读这个文件（见
 [`docs/zh/modules/core.md`](../docs/zh/modules/core.md#输出语言)）。
 
 这和上面的界面语言刻意保持独立。用一种语言看界面、用另一种语言生成内容是被支持的
@@ -179,8 +179,8 @@ tracker 是实时算出来的：`radar_items.fetched_at` 给出各 source 的拉
 `novelOnly=0|1`、`minScore=0..100`（步长 5）、`day=YYYY-MM-DD`、`lastFeedOnly=0|1`。
 详情页链接会保留这些参数，所以上一条/下一条始终停留在同一个过滤后的、按天限定的列表里。
 
-`Pull + Analyze` 先 await `uv run paca info-radar pull`，然后以 detached 方式启动
-`uv run paca info-radar analyze`。pull 失败会在 toast 里显示；analyze 失败进入
+`Pull + Analyze` 先 await `uv run next-signal info-radar pull`，然后以 detached 方式启动
+`uv run next-signal info-radar analyze`。pull 失败会在 toast 里显示；analyze 失败进入
 dashboard 的 action log，事实源是刷新后的 Postgres 状态。dashboard 还会写
 `~/.next-signal/radar-state.json`，这样零结果的点击和 `Last feed` 视图反映的是
 操作者最近一次点击，而不是数据库里陈旧的聚簇。单条的 `Ingest` 会按 id 重新读取该
@@ -200,7 +200,7 @@ item 后创建一个受跟踪的 knowledge ingest job；Folo 行会先 stage 成
 ## Subscriptions
 
 `/subscriptions` 是只读的。它调用
-`uv run paca info-radar subscriptions --json`，把 Folo CLI 的信封结构归一化成
+`uv run next-signal info-radar subscriptions --json`，把 Folo CLI 的信封结构归一化成
 dashboard 行，然后在客户端做搜索/分类过滤。这个页面**从不**新增、编辑、删除或以
 任何方式修改 Folo 订阅。
 

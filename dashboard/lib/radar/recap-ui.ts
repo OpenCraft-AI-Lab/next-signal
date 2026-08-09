@@ -6,4 +6,4 @@
  * a server component yields a client reference, not the string — so the name
  * must not live in the component file.
  */
-export const RECAP_COLLAPSED_COOKIE = "paca_recap_collapsed";
+export const RECAP_COLLAPSED_COOKIE = "ns_recap_collapsed";

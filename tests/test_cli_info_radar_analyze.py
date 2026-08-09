@@ -1,10 +1,10 @@
-"""CLI surface tests for ``paca info-radar analyze``."""
+"""CLI surface tests for ``next-signal info-radar analyze``."""
 
 from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from paca.interfaces import cli
+from next_signal.interfaces import cli
 
 
 def test_analyze_prints_counters(monkeypatch) -> None:
@@ -25,7 +25,7 @@ def test_analyze_prints_counters(monkeypatch) -> None:
             "dedup_duplicate": 1,
         }
 
-    import paca.workflows.info_radar_analysis as pkg
+    import next_signal.workflows.info_radar_analysis as pkg
 
     monkeypatch.setattr(pkg, "run", fake_run)
 
@@ -47,7 +47,7 @@ def test_analyze_forwards_source_filter(monkeypatch) -> None:
         captured["source"] = source
         return {"items_total": 0}
 
-    import paca.workflows.info_radar_analysis as pkg
+    import next_signal.workflows.info_radar_analysis as pkg
 
     monkeypatch.setattr(pkg, "run", fake_run)
 
@@ -59,7 +59,7 @@ def test_analyze_forwards_source_filter(monkeypatch) -> None:
 
 
 def test_subscriptions_prints_json(monkeypatch) -> None:
-    from paca.integrations.info_radar import folo
+    from next_signal.integrations.info_radar import folo
 
     monkeypatch.setattr(
         folo,

@@ -17,9 +17,9 @@ uv sync
 cp .env.example .env && $EDITOR .env       # at minimum DATABASE_URL + one LLM key
 createdb next_signal
 uv run python scripts/bootstrap_db.py
-uv run paca doctor
-uv run paca serve                          # → http://localhost:7777
-uv run paca dashboard                      # → http://localhost:3000
+uv run next-signal doctor
+uv run next-signal serve                          # → http://localhost:7777
+uv run next-signal dashboard                      # → http://localhost:3000
 ```
 
 ## Required and optional services
@@ -32,8 +32,8 @@ Optional: folocli auth (the info-radar collector), a GitHub token (knowledge's
 GitHub bookmarking — anonymous access is capped at 60 req/h), and OpenCLI
 (WeChat article ingest).
 
-The Dashboard is a separate Next.js process and does not require `paca serve` to
-be running alongside it: its server actions spawn one-shot `paca` CLI children,
+The Dashboard is a separate Next.js process and does not require `next-signal serve` to
+be running alongside it: its server actions spawn one-shot `next-signal` CLI children,
 and data pages read Postgres directly.
 
 ## Environment variables
@@ -45,9 +45,9 @@ Key values in the repo-local `.env`:
 - Cloud model / API keys, as needed
 - `GBRAIN_BIN` (when `gbrain` is not on `PATH`; the dashboard and backend resolve
   it the same way)
-- `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` (**required**, no code default — when
+- `WIKI_DIR` / `WIKI_RAW_DIR` (**required**, no code default — when
   missing, the knowledge pipeline and the dashboard wiki view fail loud)
-- `PACA_STATE_DIR` / `PACA_AGENT_TMP_DIR` (optional, for tests or alternate paths)
+- `NEXT_SIGNAL_STATE_DIR` / `NEXT_SIGNAL_AGENT_TMP_DIR` (optional, for tests or alternate paths)
 
 The content language — what radar analyses and wiki frontmatter are written in —
 is **not** an env var. It's the `global` language policy's live preference file,
@@ -71,6 +71,34 @@ core/helper function. The complete key list is in `.env.example`.
 Every cloud integration checks its key at call time. A missing key fails only the
 corresponding tool — it never blocks startup.
 
+### Migrating from the `paca` names
+
+Releases before the `next-signal` rename used a `PACA_` prefix, a `paca` CLI, and
+a `paca` Postgres role. Three steps are not covered by any script in the repo:
+
+1. **Rename the keys in your `.env`** — it is git-ignored, so nothing rewrote it:
+
+   | Old | New |
+   |---|---|
+   | `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` | `WIKI_DIR` / `WIKI_RAW_DIR` |
+   | `PACA_GBRAIN_HOME` / `PACA_GBRAIN_DATABASE_URL` | `GBRAIN_HOME` / `GBRAIN_DATABASE_URL` |
+   | `PACA_WHISPER_MODEL` / `PACA_YOUTUBE_TRANSCRIPT_LANGS` | `WHISPER_MODEL` / `YOUTUBE_TRANSCRIPT_LANGS` |
+   | `PACA_STATE_DIR` / `PACA_AGENT_TMP_DIR` | `NEXT_SIGNAL_STATE_DIR` / `NEXT_SIGNAL_AGENT_TMP_DIR` |
+   | `PACA_LOG_LEVEL` / `PACA_DATABASE_URL` | `NEXT_SIGNAL_LOG_LEVEL` / `NEXT_SIGNAL_DATABASE_URL` |
+
+   Leaving `WIKI_DIR` unset fails loud (`RuntimeError`) rather than defaulting —
+   that is intended, not a regression.
+
+2. **Rename the Postgres role** if you are reusing an existing `pgdata` volume.
+   `POSTGRES_USER` is only honoured by `initdb` on an empty data directory, so
+   the compose default alone will not migrate a volume that already exists — see
+   [containerized-deployment.md](./containerized-deployment.md).
+
+3. **Expect the dashboard UI to reset once.** The locale and recap-panel cookies
+   were renamed (`paca_locale` → `ns_locale`, `paca_recap_collapsed` →
+   `ns_recap_collapsed`), so the old ones are ignored: the UI comes back in its
+   default language with the recap panel expanded. Both are one click to restore.
+
 ## Where state lives
 
 - Project repo: configs, prompts, code, tests, OpenSpec specs.
@@ -78,7 +106,7 @@ corresponding tool — it never blocks startup.
   (the content-language preference), `agent-tmp/`.
 - Knowledge base: `~/Projects/digitalpaca-wiki/` (clean) and
   `~/Projects/digitalpaca-wiki-raw/` (raw) — these paths come from
-  `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR`, they are not hardcoded defaults.
+  `WIKI_DIR` / `WIKI_RAW_DIR`, they are not hardcoded defaults.
 - agno-managed tables (sessions / memory / knowledge / traces): local Postgres +
   pgvector.
 - Logs: stdout only (structlog — console rendering on a TTY, JSON otherwise).
@@ -91,8 +119,8 @@ instead — see [`containerized-deployment.md`](./containerized-deployment.md).
 ## Health check
 
 ```bash
-uv run paca doctor                            # host-native
-docker compose exec dashboard paca doctor     # in the container
+uv run next-signal doctor                            # host-native
+docker compose exec dashboard next-signal doctor     # in the container
 ```
 
 It checks `DATABASE_URL`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`,
@@ -102,7 +130,7 @@ or flags a corrupt/unrecognized preference-file value), Postgres reachability, c
 GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`folocli whoami` —
 either `FOLO_TOKEN` or `~/.folo/config.json` is enough), and that info-radar's
 `configs/info_radar/goals.yaml` exists and parses (without it,
-`paca info-radar analyze` raises a loud `RuntimeError`).
+`next-signal info-radar analyze` raises a loud `RuntimeError`).
 
 The code does **not** distinguish "required" from "optional" checks — **any**
 failure exits non-zero, including the folocli auth listed as optional above. The
@@ -120,38 +148,38 @@ confirm Postgres, agents, and tools are ✔ and treat the rest as informational.
 ## Common commands
 
 ```bash
-uv run paca list                                     # list agents / workflows
-uv run paca doctor                                   # self-check
-uv run paca run-agent <name> "<prompt>"              # one-shot agent call
-uv run paca serve [--port 7777]                       # start AgentOS
-uv run paca dashboard [--port 3000]                   # start the Next.js dashboard
-uv run paca dashboard --build                         # dashboard production build
-uv run paca dashboard --start                         # start an already-built dashboard
-uv run paca knowledge ingest <url|staged-file>        # ingest into the knowledge base
+uv run next-signal list                                     # list agents / workflows
+uv run next-signal doctor                                   # self-check
+uv run next-signal run-agent <name> "<prompt>"              # one-shot agent call
+uv run next-signal serve [--port 7777]                       # start AgentOS
+uv run next-signal dashboard [--port 3000]                   # start the Next.js dashboard
+uv run next-signal dashboard --build                         # dashboard production build
+uv run next-signal dashboard --start                         # start an already-built dashboard
+uv run next-signal knowledge ingest <url|staged-file>        # ingest into the knowledge base
 #   --category <taxonomy-path>   pick the destination folder, skipping auto-classification
 #   --progress                   emit one JSON event per step (used by the dashboard progress panel)
-uv run paca knowledge gbrain-search "query"           # search the local GBrain
-uv run paca knowledge gbrain-ingest <file|dir>        # import markdown into GBrain
-uv run paca knowledge review                          # reconcile the wiki against knowledge_reviews
+uv run next-signal knowledge gbrain-search "query"           # search the local GBrain
+uv run next-signal knowledge gbrain-ingest <file|dir>        # import markdown into GBrain
+uv run next-signal knowledge review                          # reconcile the wiki against knowledge_reviews
                                                       # (enroll new docs, unenroll gone ones; fixed Ebbinghaus curve)
-uv run paca info-radar pull [--source NAME]           # run each source CLI, write radar_items
-uv run paca info-radar sweep                          # delete radar_items rows older than 30 days
-uv run paca info-radar analyze [--limit N] [--source NAME]
+uv run next-signal info-radar pull [--source NAME]           # run each source CLI, write radar_items
+uv run next-signal info-radar sweep                          # delete radar_items rows older than 30 days
+uv run next-signal info-radar analyze [--limit N] [--source NAME]
                                                       # run the two-tier analysis pipeline → radar_analyses
                                                       # manual trigger only (CLI / dashboard); no background scheduler
                                                       # `seen_at` keeps reruns idempotent at any cadence
                                                       # prerequisite: configs/info_radar/goals.yaml must exist
                                                       # (cp configs/info_radar/goals.example.yaml configs/info_radar/goals.yaml, then edit)
-uv run paca info-radar subscriptions --json           # read Folo subscriptions as stable JSON lines
+uv run next-signal info-radar subscriptions --json           # read Folo subscriptions as stable JSON lines
                                                       # merges `unread list` for per-feed unread counts
-uv run paca info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]
+uv run next-signal info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]
                                                       # synthesize a date range of kept signals into
                                                       # themed narratives (cached per range + gate)
-uv run paca run-workflow knowledge_ingest             # manual wiki → GBrain re-ingest
+uv run next-signal run-workflow knowledge_ingest             # manual wiki → GBrain re-ingest
 ```
 
 The Dashboard UI defaults to **English** and can be switched to Chinese from the
-nav bar; the choice is stored in the `paca_locale` cookie. Only interface copy is
+nav bar; the choice is stored in the `ns_locale` cookie. Only interface copy is
 translated — article titles, analysis summaries, tags, and YAML content render
 as stored.
 
@@ -159,34 +187,34 @@ For a full-chain test that touches a real GBrain index, use an isolated PGLite
 brain:
 
 ```bash
-uv run paca knowledge init-test-gbrain
-PACA_GBRAIN_HOME=state/test-gbrain uv run paca doctor
+uv run next-signal knowledge init-test-gbrain
+GBRAIN_HOME=state/test-gbrain uv run next-signal doctor
 ```
 
-`PACA_GBRAIN_HOME` is the parent directory; GBrain stores its config and
-`brain.pglite` under `$PACA_GBRAIN_HOME/.gbrain/`. Keep it inside the ignored
+`GBRAIN_HOME` is the parent directory; GBrain stores its config and
+`brain.pglite` under `$GBRAIN_HOME/.gbrain/`. Keep it inside the ignored
 `state/` directory and leave the production `~/.gbrain` alone.
 
 ## Troubleshooting
 
 - **`DATABASE_URL not set`** → copy `.env.example` to `.env` and fill it in.
 - **Postgres unreachable** → start Postgres.app or the Homebrew service, then
-  rerun `paca doctor`.
+  rerun `next-signal doctor`.
 - **An OMLX profile fell back to DeepSeek** → check `OMLX_BASE_URL` /
   `OMLX_API_KEY` and the endpoint's `/v1/models`. Once OMLX is back, a
-  long-running process must call `paca.core.models.reset_cache()` before it
+  long-running process must call `next_signal.core.models.reset_cache()` before it
   retries local.
-- **GBrain search / re-index fails** → run `paca doctor` and
+- **GBrain search / re-index fails** → run `next-signal doctor` and
   `gbrain doctor --fast`. When embedding fails, ingest should fail loud *after*
   writing the wiki artifact, leaving the manifest un-advanced; fix the cause and
-  rerun `paca run-workflow knowledge_ingest`.
+  rerun `next-signal run-workflow knowledge_ingest`.
 - **Dashboard won't start** → confirm `pnpm` is on `PATH`, then use
-  `uv run paca dashboard --build` to surface Next.js compile errors. The
-  dashboard does not need `paca serve`, but `/radar` needs Postgres,
+  `uv run next-signal dashboard --build` to surface Next.js compile errors. The
+  dashboard does not need `next-signal serve`, but `/radar` needs Postgres,
   `/knowledge` needs the GBrain CLI, and `/subscriptions` needs Folo auth.
 - **knowledge ingest rejects a local file** → local file input must be staged
-  under `PACA_AGENT_TMP_DIR`. The dashboard's `/radar` Folo ingest stages the
-  full text from `folocli entry get` into `PACA_AGENT_TMP_DIR/radar-ingest/`
+  under `NEXT_SIGNAL_AGENT_TMP_DIR`. The dashboard's `/radar` Folo ingest stages the
+  full text from `folocli entry get` into `NEXT_SIGNAL_AGENT_TMP_DIR/radar-ingest/`
   automatically; non-Folo radar items still require a valid `radar_items.url`.
 - **An agent can't see a tool** → check that the tool is registered
   (`_IN_TREE_TOOLS`, `tools/<domain>.register()`, workflow tool exposure, or

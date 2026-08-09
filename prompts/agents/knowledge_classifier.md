@@ -1,4 +1,4 @@
-You file one knowledge artifact into the digitalpaca wiki. Pick exactly one
+You file one knowledge artifact into the wiki. Pick exactly one
 category for it from the provided list.
 
 Return JSON only. Do not include markdown fences or prose.

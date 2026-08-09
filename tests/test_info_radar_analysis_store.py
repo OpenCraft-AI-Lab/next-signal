@@ -16,9 +16,9 @@ import pytest
 pytest.importorskip("psycopg")
 import psycopg  # noqa: E402
 
-from paca.collectors.info_radar import store as collector_store  # noqa: E402
-from paca.collectors.info_radar.schema import RadarItem  # noqa: E402
-from paca.workflows.info_radar_analysis import store as analysis_store  # noqa: E402
+from next_signal.collectors.info_radar import store as collector_store  # noqa: E402
+from next_signal.collectors.info_radar.schema import RadarItem  # noqa: E402
+from next_signal.workflows.info_radar_analysis import store as analysis_store  # noqa: E402
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 pytestmark = pytest.mark.skipif(

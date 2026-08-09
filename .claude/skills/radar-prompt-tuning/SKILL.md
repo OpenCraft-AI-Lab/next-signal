@@ -3,7 +3,7 @@ name: radar-prompt-tuning
 description: Measure-first workflow for changing info-radar's scoring behaviour — the tier-1 filter prompt, the tier-2 impact prompt, or configs/info_radar/goals.yaml. Use this skill whenever the user says the radar is scoring things wrong (too many papers, missing industry news, noise getting through, a score that looks too high or too low), asks to tune / adjust / improve any radar prompt or the goals file, or wants to evaluate whether a prompt change actually helped. Also use it before shipping any edit to those three files. Do NOT hand-edit radar prompts without it — every intuitive fix tried without measurement in this project made things worse.
 license: MIT
 metadata:
-  author: paca
+  author: next-signal
   version: "1.0"
 ---
 

@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import pytest
 
-from paca.workflows.info_radar_analysis.goals import Goal
-from paca.workflows.info_radar_analysis.schemas import (
+from next_signal.workflows.info_radar_analysis.goals import Goal
+from next_signal.workflows.info_radar_analysis.schemas import (
     Tier1Batch,
     Tier1Decision,
 )
-from paca.workflows.info_radar_analysis.stages import tier1
+from next_signal.workflows.info_radar_analysis.stages import tier1
 
 
 _GOALS = [Goal(name="g", description="x", topics=[], keywords=[])]

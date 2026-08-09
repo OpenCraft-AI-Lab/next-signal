@@ -5,15 +5,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-import paca.workflows.stages.knowledge_ingest.persist as persist_mod
-from paca.core import paths
-from paca.workflows.stages.knowledge_ingest import KnowledgeArtifact
-from paca.workflows.stages.knowledge_ingest.persist import _artifact_slug, persist, related_slugs
+import next_signal.workflows.stages.knowledge_ingest.persist as persist_mod
+from next_signal.core import paths
+from next_signal.workflows.stages.knowledge_ingest import KnowledgeArtifact
+from next_signal.workflows.stages.knowledge_ingest.persist import _artifact_slug, persist, related_slugs
 
 
 @pytest.fixture(autouse=True)
 def _wiki_dir(tmp_path, monkeypatch):
-    monkeypatch.setenv("PACA_WIKI_DIR", str(tmp_path / "wiki"))
+    monkeypatch.setenv("WIKI_DIR", str(tmp_path / "wiki"))
     monkeypatch.setattr(persist_mod, "gbrain_ingest", lambda path, slug=None: {"ok": True})
     # Related-section step needs both a quiet gbrain_query and an in-place
     # writer that no-ops in tests by default — specific tests can restore

@@ -15,8 +15,8 @@ from typing import Any
 
 import pytest
 
-from paca.workflows import info_radar_recap as recap
-from paca.workflows.info_radar_recap import RecapOutput, Theme
+from next_signal.workflows import info_radar_recap as recap
+from next_signal.workflows.info_radar_recap import RecapOutput, Theme
 
 
 def _item(item_id: int, score: int = 50) -> dict[str, Any]:
@@ -255,7 +255,7 @@ def test_payload_carries_summaries_and_never_impact_md(fake_store, monkeypatch):
         name = "radar_recap"
 
     monkeypatch.setattr(
-        "paca.agents.loader.build_from_name", lambda name: _DummyAgent()
+        "next_signal.agents.loader.build_from_name", lambda name: _DummyAgent()
     )
 
     def fake_run_structured(agent, agent_input, schema, **kw):  # noqa: ARG001
@@ -264,7 +264,7 @@ def test_payload_carries_summaries_and_never_impact_md(fake_store, monkeypatch):
             headline="h", themes=[Theme(title="t", narrative="n", item_ids=[1])]
         )
 
-    monkeypatch.setattr("paca.agents.structured.run_structured", fake_run_structured)
+    monkeypatch.setattr("next_signal.agents.structured.run_structured", fake_run_structured)
     fake_store["candidates"] = [_item(1)]
     fake_store["considered"] = 1
     recap.run(since="2026-07-13", until="2026-07-19")

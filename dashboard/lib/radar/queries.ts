@@ -587,7 +587,7 @@ export async function getLastFeedSummary(): Promise<LastFeedSummary> {
   // Prefer the click timestamp from run-state.json — it reflects the
   // operator's most recent intent. The DB fallback (max fetched_at /
   // analyzed_at) only kicks in when the state file is missing, e.g.
-  // first dashboard run, log rotation, or a manual `paca info-radar`
+  // first dashboard run, log rotation, or a manual `next-signal info-radar`
   // CLI invocation outside the dashboard.
   if (!row) {
     return {

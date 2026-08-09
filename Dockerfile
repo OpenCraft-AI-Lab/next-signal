@@ -46,8 +46,8 @@ RUN npm install --no-audit --no-fund \
 # Result: /src/dist/src/main.js + /src/node_modules (runtime only)
 
 # ---------------------------------------------------------------------------
-# Stage 3 — Python deps + editable paca install (uv).
-# The project is installed EDITABLE at /app so paca.core.paths.PROJECT_ROOT
+# Stage 3 — Python deps + editable next-signal install (uv).
+# The project is installed EDITABLE at /app so next_signal.core.paths.PROJECT_ROOT
 # (parents[3] of paths.py) resolves to /app at runtime. Keep WORKDIR=/app
 # identical in the runtime stage or the editable link breaks.
 # ---------------------------------------------------------------------------
@@ -69,15 +69,15 @@ COPY prompts ./prompts
 COPY scripts ./scripts
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
-# Result: /app/.venv (deps + editable paca) and the source tree at /app.
+# Result: /app/.venv (deps + editable next-signal) and the source tree at /app.
 
 # ---------------------------------------------------------------------------
 # Stage 4 — build the Next.js dashboard (pnpm).
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS dash-build
-# PACA_WIKI_DIR is a dummy value so build-time path guards don't throw.
+# WIKI_DIR is a dummy value so build-time path guards don't throw.
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    PACA_WIKI_DIR=/wiki
+    WIKI_DIR=/wiki
 RUN corepack enable
 WORKDIR /app/dashboard
 # Dependency layer — cached until the lockfile changes.
@@ -107,15 +107,15 @@ COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/nod
 RUN corepack enable pnpm && corepack prepare pnpm@11.8.0 --activate
 
 WORKDIR /app
-# Python venv + source (editable paca) — must land at the same /app path.
+# Python venv + source (editable next-signal) — must land at the same /app path.
 COPY --from=py-build /app /app
 # Built dashboard (overlays the dashboard dir with node_modules + .next).
 COPY --from=dash-build /app/dashboard /app/dashboard
 # Peer tools.
 COPY --from=gbrain-build /src/bin/gbrain /usr/local/bin/gbrain
 COPY --from=opencli-build /src /opt/opencli
-# uv binary — the dashboard launches paca CLI children via `uv run paca`
-# (dashboard/lib/actions/spawn-paca.ts et al.), so uv must be on PATH at
+# uv binary — the dashboard launches next-signal CLI children via `uv run next-signal`
+# (dashboard/lib/actions/spawn-cli.ts et al.), so uv must be on PATH at
 # runtime, not just in the py-build stage.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -124,7 +124,7 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     NEXT_TELEMETRY_DISABLED=1 \
     GBRAIN_BIN=/usr/local/bin/gbrain \
     OPENCLI_BIN=/opt/opencli/dist/src/main.js \
-    PACA_STATE_DIR=/state \
+    NEXT_SIGNAL_STATE_DIR=/state \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     UV_NO_SYNC=1
 RUN chmod +x /usr/local/bin/gbrain && mkdir -p /state
@@ -132,4 +132,4 @@ RUN chmod +x /usr/local/bin/gbrain && mkdir -p /state
 # tini reaps the pnpm/next/uvicorn child trees cleanly on SIGTERM.
 ENTRYPOINT ["/usr/bin/tini", "--"]
 # Default command; docker-compose overrides per service.
-CMD ["paca", "dashboard", "--start", "--port", "3000"]
+CMD ["next-signal", "dashboard", "--start", "--port", "3000"]

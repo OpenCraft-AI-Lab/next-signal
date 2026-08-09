@@ -2,7 +2,7 @@
 
 Replays the real stages over already-pulled `radar_items` and reports what
 language each LLM-written field actually came back in. Writes nothing to any
-production table — results land as JSON under `PACA_AGENT_TMP_DIR/lang-probe/`.
+production table — results land as JSON under `NEXT_SIGNAL_AGENT_TMP_DIR/lang-probe/`.
 
 Why this exists separately from `radar_eval.py`: that harness measures *scores*
 against hand-labelled expectations. This one measures language, which is a
@@ -27,7 +27,7 @@ Usage::
 `--target` is required on `run`, and means different things per agent:
 
 - `radar` / `frontmatter` resolve the `global` policy, so `--target` is the
-  language to aim at. This points `paca.core.language.global_language` at it for
+  language to aim at. This points `next_signal.core.language.global_language` at it for
   this process only, never writing the real preference file (the dashboard's
   settings panel owns it).
 - `cleaner` resolves `same_as_source`, where the expected output is each item's
@@ -53,24 +53,24 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
-from paca.agents.loader import build_from_name
-from paca.agents.structured import run_structured
-from paca.core import language as language_module
-from paca.core.db import database_url
-from paca.core.language import LANGUAGE_TOKEN
-from paca.core.language_detect import detect_language
-from paca.core.paths import AGENT_TMP_DIR
-from paca.workflows.info_radar_analysis.goals import load_goals
-from paca.workflows.info_radar_analysis.runner import _BATCH_SIZE
-from paca.workflows.info_radar_analysis.stages import fetch, tier1, tier2
-from paca.workflows.stages.knowledge_ingest.artifact_editor import (
+from next_signal.agents.loader import build_from_name
+from next_signal.agents.structured import run_structured
+from next_signal.core import language as language_module
+from next_signal.core.db import database_url
+from next_signal.core.language import LANGUAGE_TOKEN
+from next_signal.core.language_detect import detect_language
+from next_signal.core.paths import AGENT_TMP_DIR
+from next_signal.workflows.info_radar_analysis.goals import load_goals
+from next_signal.workflows.info_radar_analysis.runner import _BATCH_SIZE
+from next_signal.workflows.info_radar_analysis.stages import fetch, tier1, tier2
+from next_signal.workflows.stages.knowledge_ingest.artifact_editor import (
     _MAX_MARKDOWN_CHARS as _PROD_MAX_MARKDOWN_CHARS,
 )
-from paca.workflows.stages.knowledge_ingest.artifact_editor import (
+from next_signal.workflows.stages.knowledge_ingest.artifact_editor import (
     _content_length,
     _strip_code_fence,
 )
-from paca.workflows.stages.knowledge_ingest.schemas import FrontmatterDraft
+from next_signal.workflows.stages.knowledge_ingest.schemas import FrontmatterDraft
 
 OUT_DIR = AGENT_TMP_DIR / "lang-probe"
 CACHE_PATH = OUT_DIR / "content_cache.json"

@@ -5,14 +5,14 @@ from pathlib import Path
 
 import pytest
 
-import paca.workflows.stages.knowledge_ingest.fetch as fetch_mod
-from paca.core import paths
+import next_signal.workflows.stages.knowledge_ingest.fetch as fetch_mod
+from next_signal.core import paths
 
 
 @pytest.fixture
 def wiki_paths(tmp_path, monkeypatch):
-    monkeypatch.setenv("PACA_WIKI_DIR", str(tmp_path / "wiki"))
-    monkeypatch.setenv("PACA_WIKI_RAW_DIR", str(tmp_path / "raw"))
+    monkeypatch.setenv("WIKI_DIR", str(tmp_path / "wiki"))
+    monkeypatch.setenv("WIKI_RAW_DIR", str(tmp_path / "raw"))
     monkeypatch.setattr(paths, "AGENT_TMP_DIR", tmp_path / "agent-tmp")
     return tmp_path
 

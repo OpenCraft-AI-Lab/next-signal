@@ -1,4 +1,4 @@
-# digitalpaca-wiki 分类法。
+# 知识库分类法。
 #
 # ingest 一篇 artifact 时,category 必须取下面 categories 里的某个 path。
 # 文件夹路径 = GBrain page 身份 + re-ingest manifest key —— 改名会让所有文件

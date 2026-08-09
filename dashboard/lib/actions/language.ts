@@ -10,12 +10,12 @@ const RECOGNIZED = new Set(["zh", "en"]);
 /**
  * Read the live content-language preference.
  *
- * Deliberately more forgiving than `paca.core.language`, which raises on a
+ * Deliberately more forgiving than `next_signal.core.language`, which raises on a
  * corrupt or unrecognized file: this value is read on every page render (the
  * nav is in the root layout), so raising here would take the whole dashboard
  * down over a state file — including the settings panel the operator would
  * use to rewrite it. Falls back to `DEFAULT_LOCALE` and logs. The loud path
- * still exists where it matters: pipeline runs raise, and `paca doctor`
+ * still exists where it matters: pipeline runs raise, and `next-signal doctor`
  * reports the file.
  */
 export async function getContentLanguage(): Promise<Locale> {
@@ -38,11 +38,11 @@ export async function getContentLanguage(): Promise<Locale> {
 }
 
 /**
- * Write the live content-language preference, read by every `paca` pipeline
- * container's `global` policy (`paca.core.language.global_language`).
+ * Write the live content-language preference, read by every `next-signal` pipeline
+ * container's `global` policy (`next_signal.core.language.global_language`).
  *
  * Called from the nav settings panel. This is NOT the UI-chrome locale — that
- * one lives in the `paca_locale` cookie and is set by `LanguageToggle`. The
+ * one lives in the `ns_locale` cookie and is set by `LanguageToggle`. The
  * two are independent settings and may hold different values. Atomic write
  * (temp file + rename) so a concurrent read never sees a torn file.
  */

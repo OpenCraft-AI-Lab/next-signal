@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from paca.tools._json_extract import extract_json_object
+from next_signal.tools._json_extract import extract_json_object
 
 
 @pytest.mark.parametrize(

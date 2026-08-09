@@ -32,7 +32,7 @@ import {
 const execFileAsync = promisify(execFile);
 
 /**
- * Spawn `paca info-radar analyze` TRACKED — non-detached, with the child
+ * Spawn `next-signal info-radar analyze` TRACKED — non-detached, with the child
  * reference held on `globalThis` so it (and its exit handlers) are not GC'd.
  * The dashboard process stays the parent so the child's exit reliably flips
  * `analyzeRunning` back to false, which the live progress bar polls. stdout/
@@ -48,9 +48,9 @@ async function spawnAnalyzeTracked(): Promise<void> {
   await mkdir(path.dirname(logPath), { recursive: true });
   const handle = await open(logPath, "a");
   await handle.write(
-    `[${new Date().toISOString()}] [radar-analyze] spawn: uv run paca info-radar analyze\n`,
+    `[${new Date().toISOString()}] [radar-analyze] spawn: uv run next-signal info-radar analyze\n`,
   );
-  const child = spawn("uv", ["run", "paca", "info-radar", "analyze"], {
+  const child = spawn("uv", ["run", "next-signal", "info-radar", "analyze"], {
     cwd: REPO_ROOT,
     env: { ...process.env },
     stdio: ["ignore", handle.fd, handle.fd],
@@ -59,11 +59,11 @@ async function spawnAnalyzeTracked(): Promise<void> {
   await handle.close();
 
   const g = globalThis as typeof globalThis & {
-    pacaRadarAnalyze?: ChildProcess;
+    nsRadarAnalyze?: ChildProcess;
   };
-  g.pacaRadarAnalyze = child;
+  g.nsRadarAnalyze = child;
   const finish = (): void => {
-    if (g.pacaRadarAnalyze === child) g.pacaRadarAnalyze = undefined;
+    if (g.nsRadarAnalyze === child) g.nsRadarAnalyze = undefined;
     void recordAnalyzeFinish();
   };
   child.on("close", finish);
@@ -124,7 +124,7 @@ export async function runPullAndAnalyze(
   const pullStartedAt = new Date().toISOString();
 
   try {
-    await execFileAsync("uv", ["run", "paca", "info-radar", "pull"], {
+    await execFileAsync("uv", ["run", "next-signal", "info-radar", "pull"], {
       cwd: REPO_ROOT,
       maxBuffer: 1024 * 1024,
     });

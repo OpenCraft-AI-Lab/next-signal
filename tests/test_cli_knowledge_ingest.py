@@ -4,8 +4,8 @@ import json
 
 from typer.testing import CliRunner
 
-import paca.workflows.knowledge_ingest as knowledge_ingest
-from paca.interfaces.cli import app
+import next_signal.workflows.knowledge_ingest as knowledge_ingest
+from next_signal.interfaces.cli import app
 
 runner = CliRunner()
 

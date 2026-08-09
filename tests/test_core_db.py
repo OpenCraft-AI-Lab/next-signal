@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from paca.core import db as db_mod
+from next_signal.core import db as db_mod
 
 
 class _FakeCursor:
@@ -52,15 +52,15 @@ def test_database_url_requires_env(monkeypatch) -> None:
 
 
 def test_database_url_passthrough(monkeypatch) -> None:
-    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost:5432/paca")
-    assert db_mod.database_url() == "postgresql://localhost:5432/paca"
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost:5432/next_signal")
+    assert db_mod.database_url() == "postgresql://localhost:5432/next_signal"
 
 
 def test_database_url_rewrites_scheme_for_sqlalchemy(monkeypatch) -> None:
-    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost:5432/paca")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost:5432/next_signal")
     assert (
         db_mod.database_url(for_sqlalchemy=True)
-        == "postgresql+psycopg://localhost:5432/paca"
+        == "postgresql+psycopg://localhost:5432/next_signal"
     )
 
 

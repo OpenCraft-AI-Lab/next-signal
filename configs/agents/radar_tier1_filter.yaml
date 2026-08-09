@@ -11,5 +11,5 @@ extra:
   # `reason` is persisted to radar_analyses.tier1_reason and rendered on the
   # item detail page, so it needs the language rule. `global` is already the
   # loader's default for a missing key -- declared explicitly here so that's
-  # visible without reading paca.agents.loader.
+  # visible without reading next_signal.agents.loader.
   output_language: global

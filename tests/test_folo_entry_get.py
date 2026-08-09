@@ -1,4 +1,4 @@
-"""Tests for ``paca.integrations.info_radar.folo.entry_get``."""
+"""Tests for ``next_signal.integrations.info_radar.folo.entry_get``."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from paca.integrations.info_radar import folo
+from next_signal.integrations.info_radar import folo
 
 
 def _result(stdout: str = "", stderr: str = "", returncode: int = 0) -> subprocess.CompletedProcess:

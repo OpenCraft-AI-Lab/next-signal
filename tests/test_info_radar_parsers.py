@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from paca.collectors.info_radar.parsers.folo import folo_timeline
+from next_signal.collectors.info_radar.parsers.folo import folo_timeline
 
 
 def _envelope(entries: list[dict]) -> str:

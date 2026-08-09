@@ -6,8 +6,8 @@
 
 A single-user, desktop-only local console: read info-radar output, manage the
 knowledge base, edit goals, and inventory Folo subscriptions. It is a separate
-Next.js 15 process (`:3000`) that **does not depend on `paca serve`** — every
-feature either reads Postgres directly or spawns a one-shot `paca` CLI child.
+Next.js 15 process (`:3000`) that **does not depend on `next-signal serve`** — every
+feature either reads Postgres directly or spawns a one-shot `next-signal` CLI child.
 
 > The complete account of how to run it, its env vars, the design system, i18n,
 > the dependency policy, and radar/goals/subscriptions page behavior lives in
@@ -46,13 +46,13 @@ dashboard/
   action (`lib/goals.ts`).
 - **Ingest progress is single-process in-memory state**: both ingest entrypoints
   (the `/knowledge` form and `/radar` Ingest) share the job registry in
-  `lib/ingest/jobs.ts`, which spawns `paca knowledge ingest --progress` and pushes
+  `lib/ingest/jobs.ts`, which spawns `next-signal knowledge ingest --progress` and pushes
   over SSE to the panel. Restarting the dashboard loses the **progress view** of
   in-flight jobs (the child process and artifact writes are unaffected);
   `/radar`'s analyze progress is best-effort in the same way
   (`radar-state.json`).
 - **Data language is never translated**: i18n covers interface copy only
-  (`paca_locale` cookie, defaults to English). Article titles, analysis
+  (`ns_locale` cookie, defaults to English). Article titles, analysis
   summaries, tags, and YAML values render as stored.
 - **Config writes are atomic and mirror the loader contract**: both `/goals` and
   `/knowledge`'s taxonomy edits validate against the Python loader's schema

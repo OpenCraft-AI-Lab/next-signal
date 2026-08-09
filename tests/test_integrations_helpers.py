@@ -6,18 +6,18 @@ import os
 
 import pytest
 
-from paca.integrations import _helpers as h
+from next_signal.integrations import _helpers as h
 
 
 def test_env_missing_raises_with_hint() -> None:
-    os.environ.pop("PACA_NEVER_SET_THIS", None)
-    with pytest.raises(RuntimeError, match="PACA_NEVER_SET_THIS"):
-        h.env("PACA_NEVER_SET_THIS", hint="from the test")
+    os.environ.pop("NEXT_SIGNAL_NEVER_SET_THIS", None)
+    with pytest.raises(RuntimeError, match="NEXT_SIGNAL_NEVER_SET_THIS"):
+        h.env("NEXT_SIGNAL_NEVER_SET_THIS", hint="from the test")
 
 
 def test_env_returns_value(monkeypatch) -> None:
-    monkeypatch.setenv("PACA_TEST_VAR", "  yes  ")
-    assert h.env("PACA_TEST_VAR") == "yes"
+    monkeypatch.setenv("NEXT_SIGNAL_TEST_VAR", "  yes  ")
+    assert h.env("NEXT_SIGNAL_TEST_VAR") == "yes"
 
 
 def test_truncate_short_passthrough() -> None:

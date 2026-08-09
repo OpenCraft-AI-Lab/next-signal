@@ -1,4 +1,4 @@
-"""Tests for ``paca.integrations.info_radar.folo.subscription_list``.
+"""Tests for ``next_signal.integrations.info_radar.folo.subscription_list``.
 
 ``subscription_list`` shells out twice — ``subscription list`` for the inventory
 and ``unread list`` for the counts — so the ``subprocess.run`` stand-in here
@@ -12,7 +12,7 @@ import subprocess
 
 import pytest
 
-from paca.integrations.info_radar import folo
+from next_signal.integrations.info_radar import folo
 
 _NO_UNREAD = {"ok": True, "data": {"total": 0, "items": []}}
 

@@ -1,6 +1,6 @@
 "use server";
 
-import { spawnPacaDetached } from "@/lib/actions/spawn-paca";
+import { spawnCliDetached } from "@/lib/actions/spawn-cli";
 import {
   getDictionary,
   normalizeLocale,
@@ -18,7 +18,7 @@ const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
  * `/api/radar/recap` for the row's status afterwards.
  *
  * Range values arrive from the client, so they're shape-checked before being
- * passed on. `spawnPacaDetached` uses an argv array rather than a shell, so
+ * passed on. `spawnCliDetached` uses an argv array rather than a shell, so
  * this is about failing fast on garbage rather than about injection.
  */
 export async function generateRecap(
@@ -48,7 +48,7 @@ export async function generateRecap(
   if (key.novelOnly) argv.push("--novel-only");
   if (regenerate) argv.push("--regenerate");
 
-  return spawnPacaDetached(argv, {
+  return spawnCliDetached(argv, {
     verb: t.radar.recap.verb,
     logTag: "radar-recap",
   });

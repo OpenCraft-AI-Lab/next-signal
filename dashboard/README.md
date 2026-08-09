@@ -1,4 +1,4 @@
-# paca dashboard
+# next-signal dashboard
 
 > **English** · [简体中文](./README.zh-CN.md)
 
@@ -11,20 +11,20 @@ no auth, no mobile. Cross-module conventions live in
 
 - Node 20+
 - pnpm (install via `npm install -g pnpm` if missing — pnpm 11+ recommended)
-- `uv` on `PATH` (used by server actions to invoke `paca ...`)
+- `uv` on `PATH` (used by server actions to invoke `next-signal ...`)
 - `gbrain` on `PATH` (used by the knowledge search server action)
 - `npx` / Folo auth for `/subscriptions` (`FOLO_TOKEN` or `~/.folo/config.json`)
 
 ## Run
 
-The recommended entrypoint goes through the `paca` CLI so both backends share
+The recommended entrypoint goes through the `next-signal` CLI so both backends share
 one binary:
 
 ```bash
-uv run paca dashboard             # http://localhost:3000, HMR
-uv run paca dashboard --port 3001 # custom port
-uv run paca dashboard --build     # `pnpm build`
-uv run paca dashboard --start     # `pnpm start` (requires prior --build)
+uv run next-signal dashboard             # http://localhost:3000, HMR
+uv run next-signal dashboard --port 3001 # custom port
+uv run next-signal dashboard --build     # `pnpm build`
+uv run next-signal dashboard --start     # `pnpm start` (requires prior --build)
 ```
 
 It's a thin wrapper over `pnpm`: `os.execvp` replaces the python process so
@@ -40,19 +40,19 @@ pnpm test         # focused dashboard helper tests
 pnpm typecheck
 ```
 
-## The dashboard does NOT depend on `paca serve`
+## The dashboard does NOT depend on `next-signal serve`
 
-`paca serve` (AgentOS at `:7777`) and `paca dashboard` (Next at `:3000`) are
+`next-signal serve` (AgentOS at `:7777`) and `next-signal dashboard` (Next at `:3000`) are
 **fully decoupled processes**. Every dashboard feature today either reads
-Postgres directly or spawns a one-shot `paca` CLI child — none make HTTP calls
+Postgres directly or spawns a one-shot `next-signal` CLI child — none make HTTP calls
 to AgentOS.
 
-| Doing this | Need `paca serve`? |
+| Doing this | Need `next-signal serve`? |
 | --- | --- |
 | Browsing `/radar`, clicking Ingest / Pull+Analyze | ❌ no |
 | Searching `/knowledge`, clicking Re-index | ❌ no |
-| Running workflows manually (`paca info-radar pull/analyze`, `paca run-workflow knowledge_ingest`) | ❌ no (CLI child, writes Postgres directly) |
-| Debugging new agents / workflows | ✅ yes (or use `paca run-agent`) |
+| Running workflows manually (`next-signal info-radar pull/analyze`, `next-signal run-workflow knowledge_ingest`) | ❌ no (CLI child, writes Postgres directly) |
+| Debugging new agents / workflows | ✅ yes (or use `next-signal run-agent`) |
 
 `NEXT_PUBLIC_AGENT_OS_URL` is pre-wired (default `http://localhost:7777`) for
 the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
@@ -61,12 +61,12 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 
 | Name | Default | Used by |
 | --- | --- | --- |
-| `PACA_WIKI_DIR` | (none — required) | `/knowledge` (tree + re-index) |
+| `WIKI_DIR` | (none — required) | `/knowledge` (tree + re-index) |
 | `NEXT_PUBLIC_AGENT_OS_URL` | `http://localhost:7777` | Browser-side AgentOS calls (none yet) |
 | `DATABASE_URL` | (Postgres URL) | `dashboard-radar` (direct DB reads) |
-| `PACA_DATABASE_URL` | `DATABASE_URL` | Optional dashboard-specific Postgres URL |
+| `NEXT_SIGNAL_DATABASE_URL` | `DATABASE_URL` | Optional dashboard-specific Postgres URL |
 | `INFO_RADAR_TIMEZONE` | `America/Los_Angeles` | Calendar-day grouping and recap ranges for `/radar` |
-| `FOLO_TOKEN` | (Folo CLI session file) | `/subscriptions` via `paca info-radar subscriptions --json` |
+| `FOLO_TOKEN` | (Folo CLI session file) | `/subscriptions` via `next-signal info-radar subscriptions --json` |
 | `FOLO_CLI_ARGV` | `npx --yes folocli@0.0.5` | Optional override for the Folo CLI launcher |
 
 ## Visual design system
@@ -143,7 +143,7 @@ language picker, whose trigger shows the *current* locale and whose menu lists
 every available one. Locale names there are self-labelled and never translated
 (`English`, `中文`) — the menu has to be readable to someone who cannot read the
 language the UI is currently in. The selected locale is stored in the
-`paca_locale` cookie (`en` / `zh`), and `app/layout.tsx` sets the matching
+`ns_locale` cookie (`en` / `zh`), and `app/layout.tsx` sets the matching
 document `lang`.
 
 Translations live in [`lib/i18n/dictionaries.ts`](./lib/i18n/dictionaries.ts).
@@ -157,7 +157,7 @@ names is rendered as stored.
 Separate setting, separate control: the **gear button** in the nav opens a
 settings panel holding the *content* language — what the pipeline writes radar
 analyses and wiki frontmatter in. It writes `content_language` into
-`~/.next-signal/language.json`, which every `paca` agent on the `global` policy
+`~/.next-signal/language.json`, which every `next-signal` agent on the `global` policy
 reads (see [`docs/modules/core.md`](../docs/modules/core.md#output-language)).
 
 This is deliberately independent of the UI locale above. Reading the interface in
@@ -202,8 +202,8 @@ Filter state is URL-backed via `nuqs`: `sort=score-desc|score-asc|newest`,
 `lastFeedOnly=0|1`. Detail links preserve those params so prev/next stays
 inside the same filtered, day-scoped list.
 
-`Pull + Analyze` awaits `uv run paca info-radar pull`, then starts
-`uv run paca info-radar analyze` detached. Pull failures surface in the toast;
+`Pull + Analyze` awaits `uv run next-signal info-radar pull`, then starts
+`uv run next-signal info-radar analyze` detached. Pull failures surface in the toast;
 analyze failures land in the dashboard action log and the source of truth is the
 Postgres state after refresh. The dashboard also writes
 `~/.next-signal/radar-state.json` so zero-result clicks and
@@ -226,7 +226,7 @@ add so downstream analysis history is never silently retargeted.
 ## Subscriptions
 
 `/subscriptions` is read-only. It calls
-`uv run paca info-radar subscriptions --json`, normalizes the Folo CLI envelope
+`uv run next-signal info-radar subscriptions --json`, normalizes the Folo CLI envelope
 into dashboard rows, then filters search/category client-side. The page never
 adds, edits, deletes, or otherwise mutates Folo subscriptions.
 

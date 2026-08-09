@@ -2,7 +2,7 @@
 #
 # Copy this file to `goals.yaml` in the same directory and edit it to describe
 # what you actually want to learn from your feeds. The two-tier analysis
-# workflow (paca/workflows/info_radar_analysis/) ALL revolves around these
+# workflow (next_signal/workflows/info_radar_analysis/) ALL revolves around these
 # goals: tier-1 drops items that have no plausible bearing on any goal, and
 # tier-2 writes the impact analysis grounded in them.
 #

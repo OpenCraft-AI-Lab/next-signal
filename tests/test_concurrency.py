@@ -13,8 +13,8 @@ import time
 
 import pytest
 
-from paca.core import models as models_mod
-from paca.core.concurrency import UNLIMITED, ProviderConcurrency
+from next_signal.core import models as models_mod
+from next_signal.core.concurrency import UNLIMITED, ProviderConcurrency
 
 
 @pytest.fixture(autouse=True)

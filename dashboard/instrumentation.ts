@@ -5,7 +5,7 @@
  * Seeds the shared content-language preference file if it doesn't exist yet,
  * so a freshly started dashboard — before anyone has ever touched the
  * language toggle — still leaves the pipeline in a defined state rather than
- * relying solely on `paca.core.language`'s hardcoded fallback. Never
+ * relying solely on `next_signal.core.language`'s hardcoded fallback. Never
  * overwrites an existing file (see `ensureContentLanguage`), so this can't
  * clobber a preference a user already set.
  */

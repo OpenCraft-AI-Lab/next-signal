@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from paca.core import context as ctx
+from next_signal.core import context as ctx
 
 
 @pytest.fixture(autouse=True)

@@ -1,6 +1,6 @@
 # core-cli
 
-The `paca` CLI is the operator entry point. All commands run via `uv run paca …`.
+The `next-signal` CLI is the operator entry point. All commands run via `uv run next-signal …`.
 
 ## Purpose
 

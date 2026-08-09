@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from paca.core import models as models_mod
+from next_signal.core import models as models_mod
 
 
 class _FakeResponse:

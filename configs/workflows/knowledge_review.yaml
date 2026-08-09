@@ -2,7 +2,7 @@ name: knowledge_review
 kind: workflow
 enabled: true
 description: Reconcile the wiki against knowledge_reviews and generate cached recall points for due docs along a fixed Ebbinghaus curve.
-factory: paca.workflows.knowledge_review:factory
+factory: next_signal.workflows.knowledge_review:factory
 expose:
   # Not an agno/AgentOS workflow — no LLM exposure to the dashboard UI; the CLI
   # invokes via extra.run_now below. factory above raises if AgentOS ever tries
@@ -11,4 +11,4 @@ expose:
   tool:
     enabled: false
 extra:
-  run_now: paca.workflows.knowledge_review:run
+  run_now: next_signal.workflows.knowledge_review:run

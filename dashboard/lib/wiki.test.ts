@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { listWikiTree, type WikiNode } from "./wiki";
 
 async function buildWiki(): Promise<string> {
-  const root = await mkdtemp(path.join(os.tmpdir(), "paca-wiki-"));
+  const root = await mkdtemp(path.join(os.tmpdir(), "ns-wiki-"));
   // loose .md in a nested folder
   await mkdir(path.join(root, "investing", "quant"), { recursive: true });
   await writeFile(path.join(root, "investing", "quant", "note.md"), "# note\n");
@@ -21,7 +21,7 @@ async function buildWiki(): Promise<string> {
     path.join(root, "articles", "my-article", "my-article.md"),
     "# article\n",
   );
-  process.env.PACA_WIKI_DIR = root;
+  process.env.WIKI_DIR = root;
   return root;
 }
 

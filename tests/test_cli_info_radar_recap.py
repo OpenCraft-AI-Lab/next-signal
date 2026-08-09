@@ -1,12 +1,12 @@
-"""CLI surface tests for ``paca info-radar recap``."""
+"""CLI surface tests for ``next-signal info-radar recap``."""
 
 from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from paca.interfaces import cli
+from next_signal.interfaces import cli
 
-import paca.workflows.info_radar_recap as pkg
+import next_signal.workflows.info_radar_recap as pkg
 
 
 _DONE = {

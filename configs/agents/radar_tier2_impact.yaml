@@ -11,5 +11,5 @@ extra:
   # title/summary/impact are all user-facing prose on the analysis card, so
   # they need the language rule. `global` is already the loader's default for
   # a missing key -- declared explicitly here so that's visible without
-  # reading paca.agents.loader.
+  # reading next_signal.agents.loader.
   output_language: global

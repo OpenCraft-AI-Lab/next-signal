@@ -5,8 +5,8 @@
 ## 解决什么
 
 单用户、桌面端的本地操作台：阅读 info-radar 输出、管理知识库、
-编辑 goals、盘点 Folo 订阅。独立 Next.js 15 进程（`:3000`），**不依赖 `paca serve`**——
-所有功能要么直接读 Postgres，要么 spawn 一次性 `paca` CLI 子进程。
+编辑 goals、盘点 Folo 订阅。独立 Next.js 15 进程（`:3000`），**不依赖 `next-signal serve`**——
+所有功能要么直接读 Postgres，要么 spawn 一次性 `next-signal` CLI 子进程。
 
 > 运行方式、env 变量、design system、i18n、依赖策略、radar/goals/subscriptions
 > 页面行为的完整说明在 [`dashboard/README.zh-CN.md`](../../../dashboard/README.zh-CN.md)——那是
@@ -42,10 +42,10 @@ dashboard/
   `execFile` 同步等待；goals 保存则完全不 spawn 子进程，直接在 server action 里
   做 in-process fs 读写（`lib/goals.ts`）。
 - **入库进度是单进程内存态**：两个入库入口（`/knowledge` 表单、`/radar` Ingest）共用
-  `lib/ingest/jobs.ts` 的 job registry，spawn `paca knowledge ingest --progress` 并经
+  `lib/ingest/jobs.ts` 的 job registry，spawn `next-signal knowledge ingest --progress` 并经
   SSE 推到面板。dashboard 重启会丢进行中 job 的**进度视图**（子进程和 artifact 写入
   不受影响）；`/radar` 的 analyze 进度同理 best-effort（`radar-state.json`）。
-- **数据语言不翻译**：i18n 只覆盖界面文案（`paca_locale` cookie，默认英文）；文章标题、
+- **数据语言不翻译**：i18n 只覆盖界面文案（`ns_locale` cookie，默认英文）；文章标题、
   分析摘要、tag、YAML 值按原样渲染。
 - **写配置走原子写 + loader 契约镜像**：`/goals` 与 `/knowledge` 的 taxonomy 改写都先按
   Python loader 的 schema 校验、再 temp-file rename 落盘。`/knowledge` 的 taxonomy 用

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from paca.tools.knowledge import search as search_mod
+from next_signal.tools.knowledge import search as search_mod
 
 
 def test_search_knowledge_normalizes_gbrain_json(monkeypatch) -> None:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from paca.workflows.stages.knowledge_ingest.related_section import (
+from next_signal.workflows.stages.knowledge_ingest.related_section import (
     render_related_section,
     resolve_slugs_to_wiki_paths,
     upsert_related_section,

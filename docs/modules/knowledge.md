@@ -10,11 +10,11 @@ and GBrain provides indexing and hybrid search.
 
 ## Where the code lives
 
-`src/paca/tools/knowledge/` — agent-facing knowledge tools.
-`src/paca/integrations/knowledge/` — OpenCLI (WeChat) / Bilibili / GitHub adapters.
-`src/paca/workflows/knowledge_ingest.py` — the centralized workflow factory.
-`src/paca/workflows/stages/knowledge_ingest/` — workflow-private pipeline stages.
-`src/paca/workflows/knowledge_review/` — the spaced-repetition review scheduler
+`src/next_signal/tools/knowledge/` — agent-facing knowledge tools.
+`src/next_signal/integrations/knowledge/` — OpenCLI (WeChat) / Bilibili / GitHub adapters.
+`src/next_signal/workflows/knowledge_ingest.py` — the centralized workflow factory.
+`src/next_signal/workflows/stages/knowledge_ingest/` — workflow-private pipeline stages.
+`src/next_signal/workflows/knowledge_review/` — the spaced-repetition review scheduler
 (curve + reconciliation in `__init__.py`, Postgres I/O in `store.py`).
 
 ## Agents
@@ -35,9 +35,9 @@ Knowledge-domain tools:
   enrich → classify → persist).
 
 KB **retrieval** is cross-cutting infrastructure and does not belong to this
-module: `search_knowledge` lives in `paca/tools/knowledge/search.py`;
+module: `search_knowledge` lives in `next_signal/tools/knowledge/search.py`;
 `gbrain_search` / `gbrain_get` / `gbrain_query` / `gbrain_ingest` live in
-`paca/tools/gbrain.py`; and the GBrain bridge is `paca/integrations/gbrain.py`.
+`next_signal/tools/gbrain.py`; and the GBrain bridge is `next_signal/integrations/gbrain.py`.
 Agents in any module can reference these tools by name.
 
 ## External systems
@@ -47,7 +47,7 @@ Agents in any module can reference these tools by name.
   into the raw store, then rewrites the markdown image links to local relative
   paths by slot index. `OPENCLI_BIN` is required and read at call time.
 - **MarkItDown** — converts YouTube / PDF / HTML / Office / text-like files to
-  markdown (cross-cutting adapter: `paca/integrations/markitdown.py`).
+  markdown (cross-cutting adapter: `next_signal/integrations/markitdown.py`).
 - **Bilibili** — prefers public subtitles; when there are none, downloads
   temporary audio, transcribes locally, then deletes the temporary media. It also
   exports a lightweight `bilibili_fetch_captions` (subtitles + title +
@@ -65,10 +65,10 @@ Agents in any module can reference these tools by name.
   go out anonymously (60/h rate limit, fine for occasional personal bookmarking);
   when set, it is read at call time and added as a Bearer header.
 - **GBrain** — the long-term knowledge-base peer service. Ingest goes through the
-  cross-cutting GBrain bridge (`paca/integrations/gbrain.py`); it is not owned by
+  cross-cutting GBrain bridge (`next_signal/integrations/gbrain.py`); it is not owned by
   this module.
 - **Obsidian Git plugin** — wiki repo ↔ GitHub sync runs as a plugin inside the
-  vault, not in the paca process. See "Wiki ↔ GitHub sync" below.
+  vault, not in the next-signal process. See "Wiki ↔ GitHub sync" below.
 
 ## Where data lives
 
@@ -81,18 +81,18 @@ Agents in any module can reference these tools by name.
 ## How to use it
 
 ```bash
-uv run paca knowledge ingest <url|staged-file>
-uv run paca knowledge ingest <url> --category knowledge/ai-ml   # pick the destination folder (skips auto-classification)
-uv run paca knowledge ingest <url> --progress                   # one JSON event per pipeline step, plus a final result JSON line
-uv run paca knowledge gbrain-search "query"
-uv run paca run-workflow knowledge_ingest            # re-ingest changed files + refresh every Related block
-uv run paca knowledge review                         # reconcile the wiki against knowledge_reviews (enroll new / unenroll gone)
+uv run next-signal knowledge ingest <url|staged-file>
+uv run next-signal knowledge ingest <url> --category knowledge/ai-ml   # pick the destination folder (skips auto-classification)
+uv run next-signal knowledge ingest <url> --progress                   # one JSON event per pipeline step, plus a final result JSON line
+uv run next-signal knowledge gbrain-search "query"
+uv run next-signal run-workflow knowledge_ingest            # re-ingest changed files + refresh every Related block
+uv run next-signal knowledge review                         # reconcile the wiki against knowledge_reviews (enroll new / unenroll gone)
 ```
 
 `--category` must be a path that exists in `configs/knowledge_taxonomy.yaml`;
 invalid values fail loud before the fetch. `--progress` feeds the dashboard's
 ingest progress panel (see below). Local file input is accepted only for files
-staged under `PACA_AGENT_TMP_DIR`; `/radar`'s Folo ingest respects that boundary
+staged under `NEXT_SIGNAL_AGENT_TMP_DIR`; `/radar`'s Folo ingest respects that boundary
 too, writing the full-text HTML into that directory first and then handing the
 file path to the generic knowledge pipeline.
 
@@ -118,7 +118,7 @@ Ebbinghaus curve so captured material is refreshed before it decays.
 - **Card content** — the card reuses the doc's own frontmatter `summary`, so
   the review layer makes **no LLM call** and stores no generated text. A
   hand-created doc with no `summary` falls back to its first body paragraph.
-- **Reconciliation** — `paca knowledge review` walks the wiki, enrolls
+- **Reconciliation** — `next-signal knowledge review` walks the wiki, enrolls
   unknown docs (seeded per the curve), and unenrolls docs whose files are gone.
   It refuses to act on a missing or empty wiki rather than reading "no files" as
   "everything deleted". `captured_at` is resolved from frontmatter with the same
@@ -181,7 +181,7 @@ source-language article.
 
 - The **detected** language is computed once per item in `fetch()`
   (deterministically, not via an LLM call — see
-  `paca.core.language_detect`), carried on `KnowledgeArtifact.detected_language`,
+  `next_signal.core.language_detect`), carried on `KnowledgeArtifact.detected_language`,
   and passed as `language=` to the body cleaner only. The frontmatter step is
   built with no override and resolves the setting on its own.
 - `tags` are **exempt** and stay lowercase English in every language — via a
@@ -264,10 +264,10 @@ files project-wide with no automatic migration. Putting frontmatter back on the
 operator's setting looks like it should reintroduce exactly that — flip the
 setting, re-index, every file renamed.
 
-It does not, because re-index never rewrites frontmatter. `paca run-workflow
+It does not, because re-index never rewrites frontmatter. `next-signal run-workflow
 knowledge_ingest` runs `reindex_wiki`, which digests each wiki markdown file and
 re-embeds the changed ones into GBrain; the frontmatter agent is not in that path.
-The only code that writes `title` is a fresh `paca knowledge ingest <source>`, one
+The only code that writes `title` is a fresh `next-signal knowledge ingest <source>`, one
 document at a time and deliberately. Changing the setting therefore affects future
 ingests only, and existing documents keep their filenames and their frontmatter
 language indefinitely — including a library ingested before this split, which stays
@@ -309,9 +309,9 @@ in its source languages until each source is ingested again.
 
 ## Wiki ↔ GitHub sync
 
-Syncing `digitalpaca-wiki/` to GitHub happens **outside the paca process**,
+Syncing `digitalpaca-wiki/` to GitHub happens **outside the next-signal process**,
 handled by the [Obsidian Git plugin](https://github.com/Vinzent03/obsidian-git)
-inside the vault and fully decoupled from paca. paca only guarantees that the
+inside the vault and fully decoupled from next_signal. next-signal only guarantees that the
 moment the wiki hits disk, it is in sync with GBrain; pushing to GitHub on a
 schedule is the plugin's job.
 
@@ -345,12 +345,12 @@ into the plugin settings — not needed for a single desktop setup.
 ### End-to-end picture
 
 ```
-paca knowledge ingest
+next-signal knowledge ingest
   → fetch + clean + classify + persist
   → writes wiki/<category>/<slug>/<slug>.md + images/
   → gbrain put + embed   ← fails loud here, but the artifact stays on disk
-  → success → paca is done, the wiki files remain
-       ↓ (paca no longer involved)
+  → success → next-signal is done, the wiki files remain
+       ↓ (next-signal no longer involved)
 Obsidian Git plugin (every 30 min)
   → git add -A && git commit && git push
 ```
@@ -362,9 +362,9 @@ Specs: [`openspec/specs/knowledge-pipeline/`](../../openspec/specs/knowledge-pip
 `dashboard-knowledge-ingest`, `dashboard-knowledge-review`.
 
 Current status: the artifact pipeline, GBrain ingest/search, the weekly
-re-ingest workflow baseline, the `paca doctor` GBrain health check, the
+re-ingest workflow baseline, the `next-signal doctor` GBrain health check, the
 spaced-repetition review layer (`knowledge_reviews` table, the fixed
-Ebbinghaus curve, `paca knowledge review`, and the `/knowledge` review section),
+Ebbinghaus curve, `next-signal knowledge review`, and the `/knowledge` review section),
 and the redesigned dashboard `/knowledge` page are all in place. The dashboard provides
 the wiki tree, ANN search, a preview pane, and a `Re-index` trigger; interface
 copy goes through dashboard i18n (defaults to English, switchable to Chinese),
@@ -389,13 +389,13 @@ what `Re-index` is for. The tree and taxonomy rewrite logic lives in
 and an "in-progress ingests" panel. Both ingest entrypoints (the knowledge form
 and `/radar`'s Ingest to wiki) go through the dashboard's shared in-memory job
 registry (`lib/ingest/jobs.ts`, spawning
-`paca knowledge ingest … --progress`), and the panel subscribes over SSE
+`next-signal knowledge ingest … --progress`), and the panel subscribes over SSE
 (`/api/knowledge/ingest/stream`) to show live fetch/clean/enrich/classify/persist
 progress per source label.
 
 The `/radar` entrypoint first resolves a radar row into ordinary ingest input:
 Folo sources use `source_id` with `folocli entry get` to pull the full text,
-stage it as `PACA_AGENT_TMP_DIR/radar-ingest/*.html`, and then ingest; non-Folo
+stage it as `NEXT_SIGNAL_AGENT_TMP_DIR/radar-ingest/*.html`, and then ingest; non-Folo
 sources validate `radar_items.url` and ingest the URL directly. The knowledge
 pipeline itself does not understand internal references like `radar://` — it only
 handles URLs and staged files. The registry is single-process in-memory state, so

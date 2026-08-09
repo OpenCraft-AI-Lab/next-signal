@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from paca.integrations import gbrain
+from next_signal.integrations import gbrain
 
 
 def test_has_cjk_truth_table() -> None:

@@ -18,11 +18,11 @@ from urllib.parse import urlparse
 import psycopg
 from psycopg import sql
 
-from paca.core.db import missing_business_columns
+from next_signal.core.db import missing_business_columns
 
 CREATE_EXTENSION = "CREATE EXTENSION IF NOT EXISTS vector"
 
-# paca.collectors.info_radar state.
+# next_signal.collectors.info_radar state.
 CREATE_RADAR_ITEMS = """
 CREATE TABLE IF NOT EXISTS radar_items (
     id              BIGSERIAL PRIMARY KEY,
@@ -41,7 +41,7 @@ CREATE INDEX IF NOT EXISTS radar_items_fetched_at_idx ON radar_items (fetched_at
 CREATE INDEX IF NOT EXISTS radar_items_unseen_idx ON radar_items (fetched_at) WHERE seen_at IS NULL;
 """
 
-# paca.workflows.info_radar_analysis: long-term memory of pushed topics so the
+# next_signal.workflows.info_radar_analysis: long-term memory of pushed topics so the
 # dedup gate can detect a paraphrase of something already presented. Embedding
 # dim is fixed at 1024 to match the default `Qwen3-Embedding-0.6B-8bit` embedder
 # profile (see design.md §D5); swapping embedders requires a column migration.
@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS radar_pushed_topics_embedding_idx
     WITH (lists = 100);
 """
 
-# paca.workflows.info_radar_analysis: one row per radar_items row that's been
+# next_signal.workflows.info_radar_analysis: one row per radar_items row that's been
 # through the analysis pipeline. UNIQUE(radar_item_id) makes re-runs idempotent.
 # ON DELETE CASCADE: when the 30-day sweep drops a radar_items row, its
 # analysis row goes with it (analysis is downstream-bounded).
@@ -92,7 +92,7 @@ CREATE INDEX IF NOT EXISTS radar_analyses_unpushed_idx
     WHERE verdict='keep' AND dedup_status='novel' AND pushed_at IS NULL;
 """
 
-# paca.workflows.info_radar_recap: one cached recap per (range, quality gate).
+# next_signal.workflows.info_radar_recap: one cached recap per (range, quality gate).
 # The UNIQUE key is the recap's identity, so a repeat request is a cache hit and
 # a regenerate is an in-place upsert.
 #
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS radar_recaps (
 );
 """
 
-# paca.workflows.knowledge_review: one row per wiki doc, scheduling it back onto
+# next_signal.workflows.knowledge_review: one row per wiki doc, scheduling it back onto
 # the reader's screen along a fixed Ebbinghaus curve. `doc_path` is the
 # wiki-root-relative path — the same identity the ingest manifest uses — so
 # reconciliation, not a foreign key, keeps the table and the filesystem tree in

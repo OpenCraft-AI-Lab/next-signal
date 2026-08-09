@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from paca.agents import loader
-from paca.core import language as language_module
-from paca.core.config import AgentConfig, load_agent
+from next_signal.agents import loader
+from next_signal.core import language as language_module
+from next_signal.core.config import AgentConfig, load_agent
 
 
 def test_build_db_free_agent_does_not_touch_db(monkeypatch) -> None:
@@ -48,7 +48,7 @@ def test_build_db_free_agent_does_not_touch_db(monkeypatch) -> None:
 def _compose(
     monkeypatch, *, instructions, extra, lang="zh", shared="HOUSE RULES BLOCK", override=None
 ):
-    """Patch `global_language` at its source (paca.core.language) rather than
+    """Patch `global_language` at its source (next_signal.core.language) rather than
     the value `_compose_instructions` receives directly — this exercises the
     real `normalize_policy`/`resolve_language` dispatch, including `off`
     never touching `global_language` at all and `same_as_source` ignoring it

@@ -5,7 +5,7 @@ import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 
 const MIN = 180;
 const MAX = 600;
 const DEFAULT = 248;
-const STORAGE_KEY = "paca:know-sidebar-w";
+const STORAGE_KEY = "ns:know-sidebar-w";
 
 /**
  * Wraps the wiki sidebar with a draggable right edge so users can widen it to

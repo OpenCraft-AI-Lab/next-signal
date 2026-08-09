@@ -1,13 +1,13 @@
 ---
 name: code-review
-description: Code review for the next-signal (paca) project. Two modes — light (review the current diff and flag docs that need syncing) and full (audit the whole project for bugs, convention violations, and docs/code drift). Use this skill whenever the user asks to review code, review changes, review a diff / branch / PR, check work before committing or merging, audit the project, verify the code follows project conventions, or check whether docs and code are still consistent — even if they do not say the word "review" explicitly.
+description: Code review for the next-signal (next-signal) project. Two modes — light (review the current diff and flag docs that need syncing) and full (audit the whole project for bugs, convention violations, and docs/code drift). Use this skill whenever the user asks to review code, review changes, review a diff / branch / PR, check work before committing or merging, audit the project, verify the code follows project conventions, or check whether docs and code are still consistent — even if they do not say the word "review" explicitly.
 license: MIT
 metadata:
-  author: paca
+  author: next-signal
   version: "1.0"
 ---
 
-# Code review (paca)
+# Code review (next-signal)
 
 Review code against `next-signal`'s own conventions, not generic
 best practice. The value of this skill is that it knows *this* project: the
@@ -90,7 +90,7 @@ Spawn these in one batch (use `Explore` or `general-purpose`):
   file under `integrations/` and `tools/`, plus `scripts/bootstrap_db.py` and
   any `subprocess` use. This is the project's attack surface — give it a
   dedicated pass, do not let it ride along inside the architecture review.
-- **Code-quality agent** — read `src/paca/` for obvious bugs plus the
+- **Code-quality agent** — read `src/next_signal/` for obvious bugs plus the
   Concurrency & async, Database, Tests, and Encoding & i18n checklist groups:
   unbounded LLM fan-out, blocking calls on async paths, DB access that bypasses
   the right connection path, business-table changes the bootstrap DDL never
@@ -206,18 +206,18 @@ SQL, or path handling elsewhere — against:
 
 ### Concurrency & async
 - LLM calls respect the per-provider concurrency caps in `configs/models.yaml`
-  (`paca.core.concurrency`); OMLX is capped low because it is a single local
+  (`next_signal.core.concurrency`); OMLX is capped low because it is a single local
   box. No unbounded fan-out — a loop issuing one LLM call per item must go
   through the concurrency limiter.
 - `async` code does not block the event loop with sync I/O (raw `requests`,
   blocking DB calls, `time.sleep`).
-- After OMLX recovers, the model cache needs `paca.core.models.reset_cache()`
+- After OMLX recovers, the model cache needs `next_signal.core.models.reset_cache()`
   to retry it — a long-lived process that pinned the cloud fallback must not
   stay stuck there.
 
 ### Database
 - agno-managed tables (sessions / memory / knowledge / traces) go through the
-  `paca.core.db.get_db()` singleton — never a hand-rolled `PostgresDb(...)`,
+  `next_signal.core.db.get_db()` singleton — never a hand-rolled `PostgresDb(...)`,
   and never redefine tables agno provisions itself.
 - Business tables (`radar_items`, `radar_analyses`, `radar_pushed_topics`) use
   short-lived `psycopg.connect(database_url())`. If their shape changes, the DDL
@@ -277,7 +277,7 @@ accurate. This is the core of light mode — code and docs drift silently.
 | Changed in the diff | Docs / specs to check |
 |---|---|
 | Added/removed/renamed a tool or integration | `CLAUDE.md` tool lists, `docs/modules/<domain>.md` tool tables, the relevant `register()` |
-| New module, moved file, new directory under `src/paca/` | `docs/architecture.md` code-layer diagram, `CLAUDE.md` 代码组织铁律 |
+| New module, moved file, new directory under `src/next_signal/` | `docs/architecture.md` code-layer diagram, `CLAUDE.md` 代码组织铁律 |
 | `configs/agents|workflows|teams/*.yaml` added/changed | `docs/modules/*.md` agent tables, `docs/development.md` runnable section |
 | New/removed capability, or a behavior change that makes an existing `openspec/specs/` description stale | a matching delta under `openspec/changes/`. If the change was made directly (not via opsx), the diff/PR needs a one-line justification for why it was trivial enough to skip a change — a bare "no delta" is not enough. See CLAUDE.md's OpenSpec slash aliases section for the trivial/non-trivial line. |
 | New/changed CLI subcommand | `docs/operations.md` 常用命令, `CLAUDE.md` CLI 子命令 list |
@@ -285,9 +285,9 @@ accurate. This is the core of light mode — code and docs drift silently.
 | New env var / external service | `.env.example`, `docs/operations.md` 环境变量 table |
 | New dependency | `pyproject.toml` (via `uv add`) — confirm it was not hand-edited |
 | `docker-compose.yml`, `Dockerfile`, `.dockerignore`, or `scripts/container_bootstrap.sh` | `.claude/skills/docker-verify/SKILL.md` (paths live vs baked, service access, timings), `docs/containerized-deployment.md` + `docs/zh/` mirror |
-| A `build_from_name` / `get_model` / `get_embedder` call added to a path listed as model-free (notably anything under `src/paca/collectors/`) | `.claude/skills/docker-verify/SKILL.md` LLM-cost safety map — a stale entry there causes unintended token spend |
+| A `build_from_name` / `get_model` / `get_embedder` call added to a path listed as model-free (notably anything under `src/next_signal/collectors/`) | `.claude/skills/docker-verify/SKILL.md` LLM-cost safety map — a stale entry there causes unintended token spend |
 | An agent's `extra.output_language` / policy changed, or any agent renamed | `scripts/lang_probe.py`, `scripts/radar_eval.py` — the measurement harnesses build the *shipped* agents and encode assumptions about their policy (a `same_as_source` agent needs a `language=` override; a `global` one needs `global_language` patched). A stale harness either aborts or, worse, measures the wrong prompt |
-| A business table's DDL changed in `scripts/bootstrap_db.py` | `paca.core.db.BUSINESS_TABLE_COLUMNS` — the runtime schema contract `paca doctor` checks against. A column the runtime reads but the contract omits is a 500 nobody is warned about |
+| A business table's DDL changed in `scripts/bootstrap_db.py` | `next_signal.core.db.BUSINESS_TABLE_COLUMNS` — the runtime schema contract `next-signal doctor` checks against. A column the runtime reads but the contract omits is a 500 nobody is warned about |
 
 A doc-sync finding is not optional cleanup — list it as a required follow-up.
 

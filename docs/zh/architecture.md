@@ -2,7 +2,7 @@
 
 > [English](../architecture.md) · **中文**
 
-next-signal（Python 包名 `paca`）是一个本地优先的 info-radar + knowledge 框架，
+next-signal（Python 包名 `next_signal`）是一个本地优先的 info-radar + knowledge 框架，
 基于 [agno](https://github.com/agno-agi/agno) 2.6+ 构建。
 
 ## 心智模型：runnable 底盘 + 能力积木
@@ -11,26 +11,26 @@ next-signal（Python 包名 `paca`）是一个本地优先的 info-radar + knowl
 
 - **runnable** —— agent / workflow / team，统一由 `configs/{agents,workflows,teams}/`
   声明和加载。
-- **tools** —— agent-facing 业务动作，按领域放在 `src/paca/tools/<domain>/`，横向通用工具
-  直接放 `src/paca/tools/`。
+- **tools** —— agent-facing 业务动作，按领域放在 `src/next_signal/tools/<domain>/`，横向通用工具
+  直接放 `src/next_signal/tools/`。
 - **integrations** —— provider / CLI / HTTP adapter，按领域放在
-  `src/paca/integrations/<domain>/`，横向通用 adapter 直接放 `src/paca/integrations/`。
-- **workflows** —— 集中编排 agent / tool / stage，放在 `src/paca/workflows/`。
+  `src/next_signal/integrations/<domain>/`，横向通用 adapter 直接放 `src/next_signal/integrations/`。
+- **workflows** —— 集中编排 agent / tool / stage，放在 `src/next_signal/workflows/`。
 
-一个 AgentOS 进程承载所有 runnable 和工具能力（`paca serve`，:7777，目前没有内建的
+一个 AgentOS 进程承载所有 runnable 和工具能力（`next-signal serve`，:7777，目前没有内建的
 聊天入口挂在它上面）。CLI 通过 centralized runnable loader 调同一组
 workflow / agent；Dashboard 是独立 Next.js 进程，目前读 Postgres 或启动一次性
-`paca` CLI 子进程，不依赖 `paca serve` 在线。
+`next-signal` CLI 子进程，不依赖 `next-signal serve` 在线。
 
 ## 运行时拓扑
 
 ```text
-paca AgentOS FastAPI (:7777)
+next-signal AgentOS FastAPI (:7777)
   - specialist agents / workflows
   - tool registry
 
 CLI -------------------------> runnable loader / workflow run_now
-Dashboard (:3000 Next.js) ---> Postgres reads + one-shot `paca` CLI children
+Dashboard (:3000 Next.js) ---> Postgres reads + one-shot `next-signal` CLI children
 
 shared lower layers:
   模型工厂（OMLX 优先，云回落）
@@ -40,7 +40,7 @@ shared lower layers:
 ## 代码分层
 
 ```
-src/paca/
+src/next_signal/
   core/              共享基础设施：config / db / models / paths / logging / context
   agents/loader.py   通用 agent 装配（YAML → agno.Agent）
   orchestrator/      runnable loader / workflow tools / runtime 装配
@@ -80,7 +80,7 @@ interfaces / api
 - `core` 不 import 任何上层。
 - `tools` 可以编排 `integrations`（向下依赖 OK）；`integrations` 不反向 import `tools` / agents。
 - workflow 可以组合 agents / tools / private stages；workflow-private helper 放
-  `src/paca/workflows/stages/<workflow>/`。
+  `src/next_signal/workflows/stages/<workflow>/`。
 - `registry.py` / `os_app.py` 是装配模块，位于整个 stack 之上。
 - 如果发现需要 `core` import `tools`，或 integration 反向 import tool / agent，停下来重新设计。
 
@@ -105,15 +105,15 @@ interfaces / api
 ## 新能力怎么插进底盘
 
 1. 新 agent：`configs/agents/<name>.yaml` + `prompts/agents/<name>.md`。
-2. 新 tool：放 `src/paca/tools/<domain>/`，在该 package 的 `register()` 暴露稳定名字。
-3. 新 integration：放 `src/paca/integrations/<domain>/` 或横向 `src/paca/integrations/`。
-4. 新 workflow：`configs/workflows/<name>.yaml` 声明，复杂的在 `src/paca/workflows/<name>.py` 实现 factory。
-5. 新 team：`configs/teams/<name>.yaml` 声明；复杂 routing 才加 `src/paca/teams/<name>.py`。
-6. 新 collector（周期性 CLI 数据搬运，无 LLM）：实现在 `src/paca/collectors/<name>/`，
-   手动 run 接入靠 `src/paca/workflows/<name>.py` 薄壳（YAML 设 `expose.agent_os: false`，
-   `extra.run_now` 指向 collector 入口，由 `paca run-workflow <name>` 调用）。
+2. 新 tool：放 `src/next_signal/tools/<domain>/`，在该 package 的 `register()` 暴露稳定名字。
+3. 新 integration：放 `src/next_signal/integrations/<domain>/` 或横向 `src/next_signal/integrations/`。
+4. 新 workflow：`configs/workflows/<name>.yaml` 声明，复杂的在 `src/next_signal/workflows/<name>.py` 实现 factory。
+5. 新 team：`configs/teams/<name>.yaml` 声明；复杂 routing 才加 `src/next_signal/teams/<name>.py`。
+6. 新 collector（周期性 CLI 数据搬运，无 LLM）：实现在 `src/next_signal/collectors/<name>/`，
+   手动 run 接入靠 `src/next_signal/workflows/<name>.py` 薄壳（YAML 设 `expose.agent_os: false`，
+   `extra.run_now` 指向 collector 入口，由 `next-signal run-workflow <name>` 调用）。
 7. collector 之上的 analysis workflow（LLM-driven 消费 collector 的业务表）：
-   `src/paca/workflows/<name>_analysis/` 作为 package 实现，stages 拆到
+   `src/next_signal/workflows/<name>_analysis/` 作为 package 实现，stages 拆到
    `stages/`；agent + prompt 用标准 YAML/markdown 路径；手动 run 接入同样靠
    thin shell `extra.run_now`；`seen_at` 列归 analysis 写，collector 不碰。
    currently shipped: `info_radar_analysis`。
@@ -121,4 +121,4 @@ interfaces / api
 完整步骤见 [开发指南](./development.md)。能力的规范契约在
 [`openspec/specs/`](../../openspec/specs/)。各方向的深入文档（底盘 / 知识 / 信息流 /
 操作台）在 [`docs/modules/`](./modules/core.md)；agent / 工具的全景清单不在
-文档维护——`uv run paca list` 与 `src/paca/registry.py` 是 source of truth。
+文档维护——`uv run next-signal list` 与 `src/next_signal/registry.py` 是 source of truth。

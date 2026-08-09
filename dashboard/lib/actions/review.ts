@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { spawnPacaDetached } from "@/lib/actions/spawn-paca";
+import { spawnCliDetached } from "@/lib/actions/spawn-cli";
 import {
   getDictionary,
   normalizeLocale,
@@ -38,7 +38,7 @@ export async function markReviewSeen(
 }
 
 /**
- * Kick off `paca knowledge review`: reconcile the wiki against the review table
+ * Kick off `next-signal knowledge review`: reconcile the wiki against the review table
  * (enroll new docs, unenroll gone ones). Detached and returns immediately —
  * walking the wiki is fast, but the shared launcher's contract is fire-and-report
  * "started", and this keeps the "seen" path and this path uniform.
@@ -47,8 +47,8 @@ export async function refreshReviews(
   localeValue?: Locale,
 ): Promise<{ ok: boolean; message: string }> {
   const t = getDictionary(normalizeLocale(localeValue));
-  const result = await spawnPacaDetached(["knowledge", "review"], {
-    extraEnv: { PACA_WIKI_DIR: wikiRoot() },
+  const result = await spawnCliDetached(["knowledge", "review"], {
+    extraEnv: { WIKI_DIR: wikiRoot() },
     verb: t.knowledge.review.refreshVerb,
     logTag: "knowledge-review",
   });

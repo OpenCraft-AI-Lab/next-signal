@@ -11,12 +11,12 @@ per-provider 并发。改任何业务模块之前先懂这一层——两个产�
 
 ## 代码位置
 
-- `src/paca/core/models.py` —— 模型工厂（profile → agno Model）+ embedder + OMLX 端点
-- `src/paca/core/config.py` —— 全部 YAML loader（strict pydantic，未知 key loud fail）
-- `src/paca/core/db.py` —— `database_url()` + agno 自管表的 `get_db()` 单例
-- `src/paca/core/context.py` —— shared context 拼接
-- `src/paca/core/concurrency.py` —— per-provider 推理并发 semaphore
-- `src/paca/core/paths.py` / `logging.py` / `fileio.py` —— 路径约定 / structlog / 原子写
+- `src/next_signal/core/models.py` —— 模型工厂（profile → agno Model）+ embedder + OMLX 端点
+- `src/next_signal/core/config.py` —— 全部 YAML loader（strict pydantic，未知 key loud fail）
+- `src/next_signal/core/db.py` —— `database_url()` + agno 自管表的 `get_db()` 单例
+- `src/next_signal/core/context.py` —— shared context 拼接
+- `src/next_signal/core/concurrency.py` —— per-provider 推理并发 semaphore
+- `src/next_signal/core/paths.py` / `logging.py` / `fileio.py` —— 路径约定 / structlog / 原子写
 
 ## 模型体系
 
@@ -37,9 +37,9 @@ per-provider 并发。改任何业务模块之前先懂这一层——两个产�
   放宽实验做过、无效，结论固化在 `configs/models.yaml` 注释里。
 - **回落链**：构建 provider 时抛 `RuntimeError`（典型：OMLX 端点不可达）→ 自动改建
   `fallback_profile`；`KeyError` / `ValueError`（程序员错误）不回落、直接抛。
-  结果是 lru-cached 的——**OMLX 恢复后必须 `paca.core.models.reset_cache()` 才会重试本地**，
-  长驻进程（`paca serve`）尤其注意。
-- OMLX 端点只从 `paca.core.models.omlx_endpoint()` 读（`OMLX_BASE_URL` / `OMLX_API_KEY`），
+  结果是 lru-cached 的——**OMLX 恢复后必须 `next_signal.core.models.reset_cache()` 才会重试本地**，
+  长驻进程（`next-signal serve`）尤其注意。
+- OMLX 端点只从 `next_signal.core.models.omlx_endpoint()` 读（`OMLX_BASE_URL` / `OMLX_API_KEY`），
   其他地方不要复制这段读取逻辑。
 - Qwen3 细节固化在 `_build_omlx`：关 thinking、sampling 参数、结构化输出走 OpenAI 标准
   `response_format` json_schema（OMLX 侧 xgrammar 约束解码），agno 的 native structured
@@ -69,7 +69,7 @@ embedder 调用也占同一配额（本地 LLM 和 embedding 共抢一块 GPU）
 
 按用途选，不混用：
 
-- **agno 自管表**（sessions / memory / knowledge / traces）→ `paca.core.db.get_db()` 单例。
+- **agno 自管表**（sessions / memory / knowledge / traces）→ `next_signal.core.db.get_db()` 单例。
   URL 走 `database_url(for_sqlalchemy=True)`，自动把 scheme 改写成
   `postgresql+psycopg://`（psycopg v3）。agno 自动建表，不要重复定义。
 - **业务表**（`radar_items` / `radar_analyses` / `radar_pushed_topics` / `radar_recaps` /
@@ -81,7 +81,7 @@ embedder 调用也占同一配额（本地 LLM 和 embedding 共抢一块 GPU）
 
 `prompts/_shared/*.md` 按文件名字母序拼接（两位数前缀控顺序：`00_house_rules.md`、
 `10_user_profile.md`），以 markdown 横线分隔，**append** 到每个 agent 的 instructions 末尾
-（`paca.core.context.shared_context()`）。
+（`next_signal.core.context.shared_context()`）。
 
 - `_*.md` 前缀：**不加载**也不提交——纯草稿。
 - `99_*.md`：**会加载**（排序在最后）但被 gitignore——本地个人层，机器有效、仓库无痕。
@@ -95,7 +95,7 @@ agent 自己的 instructions 在最前，shared 块作为限定条件跟在后�
 ## 输出语言
 
 每个要为读者写**散文字段**的 agent 都在自己的 YAML 里声明一个语言 policy
-（`extra.output_language`），由 `paca.core.language` 解析：
+（`extra.output_language`），由 `next_signal.core.language` 解析：
 
 - `off`——完全不加语言规则（裸 `false` 出于向后兼容也等价于这个）。用于不产出散文的
   agent：输出会被丢弃的（`radar_dedup_judge`），或输出是标识符而非散文的
@@ -113,7 +113,7 @@ agent 自己的 instructions 在最前，shared 块作为限定条件跟在后�
 - `same_as_source`——从调用方传入的 `language=` override 解析，不读任何全局设置；调用方
   （某个 workflow stage）必须传入，否则 build agent 时 `RuntimeError`。只有两个 agent 用
   它，即知识库的两个正文清洗 agent：目标是**文章自己的**语言，由
-  `paca.core.language_detect.detect_language()` 对每个条目探测一次——一个确定性、非 LLM 的
+  `next_signal.core.language_detect.detect_language()` 对每个条目探测一次——一个确定性、非 LLM 的
   Unicode 文字比例启发式，绝不用 LLM 调用（让 LLM 自己判断该用什么语言,会重新引入这套
   机制本要消除的那种采样方差问题）。
 - `fixed:<lang>`——一个字面量、无条件的目标，忽略偏好文件和任何 override。
@@ -144,11 +144,11 @@ agent 自己的 instructions 在最前，shared 块作为限定条件跟在后�
   `radar_dedup_judge` 仍是 `off`：它的 `reason` 既不入库也不渲染。
 - 规则刻意写成无条件句——条件句形式（"如果 goals 是中文…"）在中文 goals + 英文文章下实测
   tier-2 summary 命中 0/64，改成无条件后 63/63。
-- 两个读者，两种失败模式，这是有意的：`paca.core.language` 在偏好文件损坏或值不认识时
+- 两个读者，两种失败模式，这是有意的：`next_signal.core.language` 在偏好文件损坏或值不认识时
   抛错，因为 pipeline 不能用一个没人选过的语言生成内容。dashboard 自己的读取器
   （`lib/actions/language.ts::getContentLanguage`）则改成 log + 回落到默认值——nav 在每个
   页面都渲染，在那里抛错会让整个 dashboard 挂掉，包括用来修这个值的那块设置面板。
-  `paca doctor` 仍然是唯一那个 loud 的检查。
+  `next-signal doctor` 仍然是唯一那个 loud 的检查。
 
 ## 不变量
 
@@ -157,8 +157,8 @@ agent 自己的 instructions 在最前，shared 块作为限定条件跟在后�
 - 失败要 loud：配置缺失 / 端点配置坏 → `RuntimeError`，不静默 default。
 - telemetry 全关：`AgentOS(telemetry=False)`，直接构造 `Agent` 也要 `telemetry=False`。
 
-agent / 工具的全景清单不在文档里维护：`uv run paca list` 列 runnable，
-`src/paca/registry.py` + 各 `tools/<domain>/register()` 是工具面的 source of truth。
+agent / 工具的全景清单不在文档里维护：`uv run next-signal list` 列 runnable，
+`src/next_signal/registry.py` + 各 `tools/<domain>/register()` 是工具面的 source of truth。
 
 ## 规范
 

@@ -7,9 +7,9 @@ import subprocess
 
 import pytest
 
-from paca.integrations import gbrain
-from paca.integrations.knowledge import bilibili
-from paca.integrations.knowledge import github as github_adapter
+from next_signal.integrations import gbrain
+from next_signal.integrations.knowledge import bilibili
+from next_signal.integrations.knowledge import github as github_adapter
 
 
 def test_gbrain_missing_cli_raises(monkeypatch) -> None:
@@ -36,10 +36,10 @@ def test_gbrain_run_returns_structured_result(monkeypatch) -> None:
     assert result["command"] == ["search", "test"]
 
 
-def test_gbrain_env_maps_paca_home_to_gbrain_home(tmp_path, monkeypatch) -> None:
+def test_gbrain_env_maps_gbrain_home_from_env(tmp_path, monkeypatch) -> None:
     home = tmp_path / "gbrain-test"
-    monkeypatch.setenv("PACA_GBRAIN_HOME", str(home))
-    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost:5432/paca")
+    monkeypatch.setenv("GBRAIN_HOME", str(home))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost:5432/next_signal")
     monkeypatch.delenv("GBRAIN_DATABASE_URL", raising=False)
 
     env = gbrain.gbrain_env()
@@ -49,7 +49,7 @@ def test_gbrain_env_maps_paca_home_to_gbrain_home(tmp_path, monkeypatch) -> None
 
 
 def test_gbrain_env_resolves_relative_home_from_project_root(monkeypatch) -> None:
-    monkeypatch.setenv("PACA_GBRAIN_HOME", "state/test-gbrain")
+    monkeypatch.setenv("GBRAIN_HOME", "state/test-gbrain")
 
     env = gbrain.gbrain_env()
 
@@ -57,8 +57,8 @@ def test_gbrain_env_resolves_relative_home_from_project_root(monkeypatch) -> Non
 
 
 def test_gbrain_env_maps_dedicated_database_url(monkeypatch) -> None:
-    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost:5432/paca")
-    monkeypatch.setenv("PACA_GBRAIN_DATABASE_URL", "postgresql://localhost:5432/gbrain_test")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://localhost:5432/next_signal")
+    monkeypatch.setenv("GBRAIN_DATABASE_URL", "postgresql://localhost:5432/gbrain_test")
 
     env = gbrain.gbrain_env()
 
@@ -235,8 +235,8 @@ def test_github_401_falls_back_to_anonymous(monkeypatch) -> None:
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    os.environ.get("PACA_RUN_NETWORK_TESTS") != "1",
-    reason="hits real GitHub REST API; set PACA_RUN_NETWORK_TESTS=1 to run",
+    os.environ.get("NEXT_SIGNAL_RUN_NETWORK_TESTS") != "1",
+    reason="hits real GitHub REST API; set NEXT_SIGNAL_RUN_NETWORK_TESTS=1 to run",
 )
 def test_github_extract_smoke() -> None:
     """Hit a tiny public repo and assert the packet has the structured sections."""

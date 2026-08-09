@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from paca.workflows.stages.knowledge_ingest import KnowledgeArtifact
+from next_signal.workflows.stages.knowledge_ingest import KnowledgeArtifact
 
 
 def _base(**overrides) -> KnowledgeArtifact:

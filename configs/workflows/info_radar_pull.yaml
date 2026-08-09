@@ -2,7 +2,7 @@ name: info_radar_pull
 kind: workflow
 enabled: true
 description: Pull every enabled info-radar source CLI into the radar_items table.
-factory: paca.workflows.info_radar_pull:factory
+factory: next_signal.workflows.info_radar_pull:factory
 expose:
   # Not an agno/AgentOS workflow — no LLM, no UI. Invoked manually via
   # extra.run_now below; factory above raises if AgentOS ever tries to bind it.
@@ -10,4 +10,4 @@ expose:
   tool:
     enabled: false
 extra:
-  run_now: paca.workflows.info_radar_pull:run
+  run_now: next_signal.workflows.info_radar_pull:run

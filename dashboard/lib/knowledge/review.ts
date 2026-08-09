@@ -9,7 +9,7 @@ import { RADAR_TZ } from "@/lib/radar/queries";
 
 /**
  * Fixed Ebbinghaus offsets, in days after `captured_at`. Mirrors
- * `paca.workflows.knowledge_review.STAGES` — the Python side is the source of
+ * `next_signal.workflows.knowledge_review.STAGES` — the Python side is the source of
  * truth (and is where the arithmetic is unit-tested); this copy exists only so
  * the in-request "seen" advance can run without shelling out.
  *

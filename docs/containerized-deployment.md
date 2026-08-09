@@ -21,7 +21,7 @@ access Metal — MLX only works on bare-metal macOS. So the local model **cannot
 be containerized** at all.
 
 That blocker disappears the moment you commit to the **cloud-LLM path**: every
-remaining component (paca, the Next.js dashboard, Postgres, and the Node CLIs)
+remaining component (next-signal, the Next.js dashboard, Postgres, and the Node CLIs)
 runs fine in Linux containers, reaching cloud models over HTTPS.
 
 - **Docker Compose** — reproducible (`docker compose up`), declarative, trivially
@@ -53,11 +53,11 @@ flowchart TB
         subgraph compose["docker compose"]
             direction TB
             subgraph appc["app (one image)"]
-                paca["paca<br/>CLI (spawned by dashboard)"]
+                next-signal["next-signal<br/>CLI (spawned by dashboard)"]
                 dash["dashboard<br/>Next.js :3000"]
                 tools["gbrain · opencli · folocli"]
             end
-            pg[("Postgres 16 + pgvector<br/>paca main DB")]
+            pg[("Postgres 16 + pgvector<br/>next-signal main DB")]
             gstore[("gbrain storage<br/>gbrain DB on Postgres")]
         end
         omlx["(A) OMLX / MLX server<br/>Qwen3 on Metal GPU<br/>LOCAL LLM — embeddings"]
@@ -68,7 +68,7 @@ flowchart TB
     end
 
     user -->|"localhost :3000"| dash
-    paca -->|":5432 internal"| pg
+    next-signal -->|":5432 internal"| pg
     tools --> gstore
     appc -->|"(A) host.docker.internal:OMLX_PORT — stays on host"| omlx
     appc ==>|"(B) outbound HTTPS/WSS — leaves the machine"| cloud
@@ -76,7 +76,7 @@ flowchart TB
     classDef container fill:#e6f0ff,stroke:#3b6fb0,color:#0b2545;
     classDef local fill:#e8f5e9,stroke:#3a9d4a,color:#12401b;
     classDef ext fill:#fdeaea,stroke:#c0392b,color:#5a1a13;
-    class paca,dash,tools,pg,gstore container;
+    class next-signal,dash,tools,pg,gstore container;
     class omlx local;
     class cloud ext;
     linkStyle 3 stroke:#3a9d4a,stroke-width:2px;
@@ -94,10 +94,10 @@ flowchart TB
   HTTP fetches — outbound HTTPS/WSS from the `app` container.
 
 One service is enough besides Postgres: a single `app` image that bundles
-every runnable piece. The dashboard and `paca` **must share one image**
-because the dashboard's server actions spawn `paca` CLI children (and shell out
+every runnable piece. The dashboard and `next-signal` **must share one image**
+because the dashboard's server actions spawn `next-signal` CLI children (and shell out
 to `gbrain` / `folocli`) as subprocesses — see
-`dashboard/lib/actions/spawn-paca.ts`.
+`dashboard/lib/actions/spawn-cli.ts`.
 
 ---
 
@@ -110,13 +110,13 @@ Three buckets — the honest split is not just container vs. host, but also
 
 | Component | Container | Notes |
 |---|---|---|
-| Postgres 16 + pgvector | `postgres` | paca's main DB: agno sessions/memory/traces + business tables |
-| paca (Python 3.11 + uv) | `app` | CLI entrypoint, spawned by the dashboard |
-| Next.js dashboard | `app` | Built with pnpm, serves `:3000`; spawns `paca` CLI children, so it shares the image |
+| Postgres 16 + pgvector | `postgres` | next-signal's main DB: agno sessions/memory/traces + business tables |
+| next-signal (Python 3.11 + uv) | `app` | CLI entrypoint, spawned by the dashboard |
+| Next.js dashboard | `app` | Built with pnpm, serves `:3000`; spawns `next-signal` CLI children, so it shares the image |
 | gbrain binary | `app` | Bun-compiled from a pinned upstream clone at build time (Bun lives only in the builder stage) |
 | opencli (Node) | `app` | `weixin download` uses plain HTTP; no browser bundled or needed |
 | folocli | `app` | Pulled via `npx --yes` at runtime; talks to the cloud Folo backend |
-| gbrain storage | `postgres` | Its own `gbrain` database on the same Postgres server (`PACA_GBRAIN_DATABASE_URL`). The bun-compiled binary can't run PGLite (extension bundles aren't embedded), and pgvector already ships `vector` + `pg_trgm` — so gbrain uses its Postgres engine |
+| gbrain storage | `postgres` | Its own `gbrain` database on the same Postgres server (`GBRAIN_DATABASE_URL`). The bun-compiled binary can't run PGLite (extension bundles aren't embedded), and pgvector already ships `vector` + `pg_trgm` — so gbrain uses its Postgres engine |
 
 ### 3.2 On the parent OS (host)
 
@@ -124,7 +124,7 @@ Three buckets — the honest split is not just container vs. host, but also
 |---|---|
 | Docker Desktop / colima | The container runtime itself |
 | `.env` | Mounted read-only into `app`; kept out of the image because it holds live secrets |
-| `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | Knowledge content; bind-mounted so host and container agree. Paths must match `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` *inside* the container |
+| `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | Knowledge content; bind-mounted so host and container agree. Paths must match `WIKI_DIR` / `WIKI_RAW_DIR` *inside* the container |
 | `~/.next-signal/` state | knowledge_ingest_manifest.json, agent-tmp/ — named volume (or bind mount) so it survives rebuilds |
 | Published ports | `localhost:3000` is how you reach the container |
 | **OMLX / MLX model server** *(optional)* | **Cannot be containerized** (needs Metal GPU). Only required for info-radar `analyze` **embeddings**. Cloud chat models do not need it. If used, the container reaches it at `host.docker.internal:<port>` |
@@ -179,10 +179,10 @@ Rules:
 
 ## 5. Does OpenCLI need a browser?
 
-**No — not for the command paca uses.** OpenCLI has a "Browser Bridge" (a
+**No — not for the command next-signal uses.** OpenCLI has a "Browser Bridge" (a
 micro-daemon + Chrome extension) and a CDP mode, both of which attach to a real,
-logged-in Chrome *you* provide. But paca only calls `opencli weixin download`
-(`src/paca/integrations/knowledge/opencli.py`), whose implementation
+logged-in Chrome *you* provide. But next-signal only calls `opencli weixin download`
+(`src/next_signal/integrations/knowledge/opencli.py`), whose implementation
 (`OpenCLI/src/download/article-download.ts`) fetches over **plain HTTP** and
 converts HTML→markdown. Public WeChat Official Account articles are
 server-rendered and need no login, so the `app` image stays browser-free —
@@ -200,7 +200,7 @@ no Chrome, no Xvfb.
    `package.json` + lockfile); `uv sync` and `pnpm install` — before source — for
    layer caching.
 3. Pinned-clone + build gbrain (Bun) and opencli (npm) in the builder stage.
-4. Copy application source (paca `src/`, `configs/`, `prompts/`, `scripts/`,
+4. Copy application source (next-signal `src/`, `configs/`, `prompts/`, `scripts/`,
    dashboard app); `pnpm build` the dashboard.
 5. Runtime stage copies only artifacts. **Never bake** `.env`, secrets, `state/`,
    `.venv`, host `node_modules`, or wiki content. Use a `.dockerignore`.
@@ -216,12 +216,12 @@ no Chrome, no Xvfb.
 
 ### Entrypoint (every boot, idempotent)
 
-9. Run `scripts/container_bootstrap.sh` — paca's main-DB schema (pgvector
+9. Run `scripts/container_bootstrap.sh` — next-signal's main-DB schema (pgvector
    extension + business tables via `bootstrap_db.py`), then create the `gbrain`
    database and run `gbrain init` (Postgres engine). All idempotent.
-10. Optionally run `paca doctor` as a non-fatal log (OMLX / Anthropic will show ✗
+10. Optionally run `next-signal doctor` as a non-fatal log (OMLX / Anthropic will show ✗
     under cloud-only — expected; confirm Postgres / agents / tools are ✔).
-11. Launch the long-running process: `paca dashboard --start` (:3000).
+11. Launch the long-running process: `next-signal dashboard --start` (:3000).
 12. Publish port 3000 to the host; `restart: unless-stopped`.
 
 Ordering, in one line: **build image → start Postgres → wait healthy → mount
@@ -234,8 +234,8 @@ auto-restart, persist data in volumes.**
 
 The repo ships `Dockerfile`, `docker-compose.yml`, and `.dockerignore` at its
 root. Prerequisites: Docker Engine + Compose v2, and a `.env` (copy from
-`.env.example`) with at least a cloud LLM key and `PACA_WIKI_DIR` /
-`PACA_WIKI_RAW_DIR` set to the host paths of your wiki repos.
+`.env.example`) with at least a cloud LLM key and `WIKI_DIR` /
+`WIKI_RAW_DIR` set to the host paths of your wiki repos.
 
 > **Standing the stack up vs. verifying a change against it.** This section is
 > about the former. If you are checking whether an edit works — which loop to run
@@ -254,7 +254,7 @@ root. Prerequisites: Docker Engine + Compose v2, and a `.env` (copy from
 
 1. Install/start Docker Engine + Compose v2 (Docker Desktop or colima).
 2. `cp .env.example .env`, then edit it: set at least one cloud LLM key
-   (DeepSeek/Anthropic/OpenAI) and `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` to the
+   (DeepSeek/Anthropic/OpenAI) and `WIKI_DIR` / `WIKI_RAW_DIR` to the
    host paths of your wiki repos.
 3. Build and start the stack:
    ```bash
@@ -267,7 +267,7 @@ root. Prerequisites: Docker Engine + Compose v2, and a `.env` (copy from
    only if you want to wipe them.
 
 - **Services:** `postgres` (pgvector), `bootstrap` (one-shot schema), `dashboard`
-  (`paca dashboard --start`).
+  (`next-signal dashboard --start`).
 - **Config:** `.env` is injected via `env_file` (never baked into the image);
   `DATABASE_URL` and the in-container wiki/state paths are overridden in the
   compose `environment:` block. Peer-tool refs are build args
@@ -286,18 +286,18 @@ wired for Linux via `extra_hosts: host-gateway`.
 pins Linux installs to PyTorch's CPU-only wheel index (`tool.uv.sources` /
 `tool.uv.index`, see §8) so the build doesn't drag in the CUDA toolkit. If
 `pnpm build` fails because a dashboard page prerenders against Postgres/wiki,
-switch the `dashboard` command to dev mode: `["paca", "dashboard", "--port", "3000"]`.
+switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--port", "3000"]`.
 
 ---
 
 ## 8. Caveats specific to a cloud-only container
 
-1. **The embedder has no cloud fallback.** `paca.core.models.get_embedder` is
+1. **The embedder has no cloud fallback.** `next_signal.core.models.get_embedder` is
    OMLX-only. So info-radar `analyze` dedup **fails** in a pure container (it
    needs `Qwen3-Embedding` for similarity). Chat, agents, and dashboard pages
    work. To enable that pipeline, expose a host/remote OMLX endpoint via
    `OMLX_BASE_URL=http://host.docker.internal:<port>/v1`.
-2. **`paca doctor` exits non-zero if any check fails** — treat OMLX / Anthropic ✗
+2. **`next-signal doctor` exits non-zero if any check fails** — treat OMLX / Anthropic ✗
    as expected under cloud-only; do not let it block startup.
 3. **Secrets stay out of the image.** `.env` currently holds live keys; mount it at
    runtime, never `COPY` it into a layer or push it.
@@ -306,7 +306,7 @@ switch the `dashboard` command to dev mode: `["paca", "dashboard", "--port", "30
    `/knowledge` needs the gbrain CLI; `/subscriptions` needs Folo auth.
 5. **`openai-whisper` → torch is still the biggest single dependency.** whisper is
    used only by the Bilibili ingest integration, and only as an audio-transcription
-   fallback for subtitle-less videos (`src/paca/integrations/knowledge/bilibili.py`).
+   fallback for subtitle-less videos (`src/next_signal/integrations/knowledge/bilibili.py`).
    `pyproject.toml` routes Linux `torch` installs to PyTorch's CPU-only index
    (`tool.uv.sources` / `[[tool.uv.index]]` pointing at
    `download.pytorch.org/whl/cpu`) so the CUDA toolkit + nvidia-*/triton stack
@@ -314,13 +314,45 @@ switch the `dashboard` command to dev mode: `["paca", "dashboard", "--port", "30
    subtitle-less videos, making `openai-whisper`/`torch` optional dependencies
    in `pyproject.toml` shrinks the image further (that one fallback then fails
    loud when hit).
+6. **An existing `pgdata` volume keeps the old `paca` role.** The compose default
+   for `POSTGRES_USER` is now `next_signal`, but `POSTGRES_USER` is only honoured
+   by `initdb` on an *empty* data directory — a volume created before the
+   `next-signal` rename still has only the `paca` role, so every connection fails
+   with `role "next_signal" does not exist`. Rename it once, before the new
+   default takes effect.
+
+   Postgres refuses to rename the role you are connected as (`ERROR: session
+   user cannot be renamed`), and this image creates no second superuser — so the
+   rename needs a temporary one:
+
+   ```bash
+   docker compose exec -T postgres psql -U paca -d next_signal -c "CREATE ROLE tmp_rename SUPERUSER LOGIN;"
+   docker compose exec -T postgres psql -U tmp_rename -d next_signal -c "ALTER ROLE paca RENAME TO next_signal;" -c "ALTER ROLE next_signal WITH PASSWORD 'next_signal';"
+   docker compose exec -T postgres psql -U next_signal -d next_signal -c "DROP ROLE tmp_rename;"
+   ```
+
+   The second statement is not optional: `ALTER ROLE ... RENAME` clears the
+   stored password. Table data is untouched throughout — this renames a role,
+   not a schema. To skip the migration entirely, pin `POSTGRES_USER=paca` in
+   `.env` instead. Rollback is the same three steps with the names swapped.
+   Starting from an empty volume needs none of this.
+
+   One loose end the role rename leaves behind: gbrain caches its own
+   `database_url` in `$GBRAIN_HOME/.gbrain/config.json`, and the bootstrap
+   script runs `gbrain init --migrate-only` when that file already exists (see
+   `scripts/container_bootstrap.sh`) — so the cached URL keeps the old role
+   forever. It is harmless under compose, which always injects
+   `GBRAIN_DATABASE_URL` and that wins. But any gbrain invocation *without* that
+   variable will authenticate as a role that no longer exists. Either keep the
+   variable set, or refresh the cache once by deleting that `config.json` and
+   re-running the `bootstrap` service.
 
 ---
 
 ## 9. TL;DR
 
 Two containers: `postgres` (`pgvector/pgvector:pg16`) + one `app` image bundling
-Python(uv)+paca, Node(pnpm)+dashboard, plus gbrain (Bun-built) and opencli
+Python(uv)+next-signal, Node(pnpm)+dashboard, plus gbrain (Bun-built) and opencli
 (HTTP-only), both pinned-cloned from upstream at build time. The host keeps only
 the Docker runtime, the mounted files (`.env`, wiki, state), and — *only if you
 opt into embeddings* — a host OMLX server. Everything else is either in the

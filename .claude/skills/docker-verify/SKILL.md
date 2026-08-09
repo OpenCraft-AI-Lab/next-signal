@@ -1,13 +1,13 @@
 ---
 name: docker-verify
-description: How to verify a change against next-signal's containerized stack (Postgres, dashboard, paca CLI). Use this skill whenever runtime or end-to-end verification is needed in Docker — running the paca CLI or a workflow in a container, inspecting the database, checking a dashboard page or API route, confirming that a change actually landed, or working out whether the container is running current code after an edit. Also use it before running anything that might spend model tokens, to pick a model-free command instead.
+description: How to verify a change against next-signal's containerized stack (Postgres, dashboard, next-signal CLI). Use this skill whenever runtime or end-to-end verification is needed in Docker — running the next-signal CLI or a workflow in a container, inspecting the database, checking a dashboard page or API route, confirming that a change actually landed, or working out whether the container is running current code after an edit. Also use it before running anything that might spend model tokens, to pick a model-free command instead.
 license: MIT
 metadata:
-  author: paca
+  author: next-signal
   version: "1.0"
 ---
 
-# Verifying in Docker (paca)
+# Verifying in Docker (next-signal)
 
 `CLAUDE.md` requires runtime / end-to-end verification to happen in containers,
 not on the host. This skill is the how: which loop to run for a given edit, how
@@ -35,7 +35,7 @@ there. Before trusting any result, know which loop you owe.
 | nothing — just inspecting | `docker compose exec -T <svc> <cmd>` | instant |
 
 Measured on a warm cache: no-op build **3s**, `up -d dashboard` **4.3s**,
-`run --rm dashboard paca list` **4.8s**. The Python rebuild loop is cheap — do
+`run --rm dashboard next-signal list` **4.8s**. The Python rebuild loop is cheap — do
 not avoid it. Only `dashboard/` edits are genuinely slow, because `pnpm build`
 re-runs.
 
@@ -95,13 +95,13 @@ dashboard` returns the identical container ID.
 
 ⚠️ **Not the default. Read the caveat before using it.**
 
-`paca` is installed editable and the CLI is short-lived, so a copied-in `.py`
+`next-signal` is installed editable and the CLI is short-lived, so a copied-in `.py`
 takes effect on the *next* invocation — the fastest possible loop for a one-line
 fix:
 
 ```bash
-docker compose cp src/paca/workflows/foo.py dashboard:/app/src/paca/workflows/foo.py
-docker compose exec -T dashboard paca <cmd>
+docker compose cp src/next_signal/workflows/foo.py dashboard:/app/src/next_signal/workflows/foo.py
+docker compose exec -T dashboard next-signal <cmd>
 ```
 
 **Caveats, both mandatory:**
@@ -120,8 +120,8 @@ skip this section entirely and just rebuild — it costs seconds.
 ### `exec` is the default, `run --rm` is for one-shots
 
 ```bash
-docker compose exec -T dashboard paca doctor        # reuse running container
-docker compose run --rm -T dashboard paca list      # fresh container, ~4.8s
+docker compose exec -T dashboard next-signal doctor        # reuse running container
+docker compose run --rm -T dashboard next-signal list      # fresh container, ~4.8s
 ```
 
 Use `run --rm` when the target service is not running, when you do not want to
@@ -143,19 +143,19 @@ Postgres is **not published to the host** — `localhost:5432` is refused. All
 inspection goes through the service container:
 
 ```bash
-docker compose exec -T postgres psql -U paca -d next_signal -c '\dt'
+docker compose exec -T postgres psql -U next_signal -d next_signal -c '\dt'
 ```
 
 `-d next_signal` is **mandatory**. psql defaults to a database named after the
-user, and `paca` does not exist — omitting it fails with
-`database "paca" does not exist`.
+user, and `next-signal` does not exist — omitting it fails with
+`database "next_signal" does not exist`.
 
-Two databases on the one server: `next_signal` (paca's own) and `gbrain`
-(gbrain's store, `PACA_GBRAIN_DATABASE_URL`).
+Two databases on the one server: `next_signal` (next-signal's own) and `gbrain`
+(gbrain's store, `GBRAIN_DATABASE_URL`).
 
 Five business tables: `radar_items`, `radar_analyses`, `radar_pushed_topics`,
 `radar_recaps`, `knowledge_reviews` — the keys of
-`paca.core.db.BUSINESS_TABLE_COLUMNS`, which `paca doctor` checks the live
+`next_signal.core.db.BUSINESS_TABLE_COLUMNS`, which `next-signal doctor` checks the live
 schema against. (`knowledge_tag_labels` was listed here but exists in no DDL,
 no query, and no database.)
 
@@ -167,7 +167,7 @@ breakage, and does not mean bootstrap failed.
 round trip — `knowledge_reviews` has `next_due_at`, not `due_at`.
 
 ```bash
-docker compose exec -T postgres psql -U paca -d next_signal -c '\d radar_items'
+docker compose exec -T postgres psql -U next_signal -d next_signal -c '\d radar_items'
 ```
 
 ### Dashboard
@@ -193,21 +193,21 @@ the change is specifically in a model path.
 
 | Model-free — verify freely | Spends tokens |
 |---|---|
-| `paca list`, `paca doctor` | `paca run-agent` |
-| `paca knowledge review` | `paca knowledge ingest` |
-| `paca info-radar pull` / `sweep` | `paca run-workflow knowledge_ingest` |
-| `paca info-radar subscriptions --json` | `paca info-radar analyze` |
-| all dashboard pages, all `/api/radar/*` GETs | `paca info-radar recap` |
+| `next-signal list`, `next-signal doctor` | `next-signal run-agent` |
+| `next-signal knowledge review` | `next-signal knowledge ingest` |
+| `next-signal info-radar pull` / `sweep` | `next-signal run-workflow knowledge_ingest` |
+| `next-signal info-radar subscriptions --json` | `next-signal info-radar analyze` |
+| all dashboard pages, all `/api/radar/*` GETs | `next-signal info-radar recap` |
 | `psql`, `gbrain` health | |
 
 Dashboard controls map the same way: **Review** and **Pull** are free;
 **Analyze**, **Recap**, and **Re-index** are not.
 
-`paca info-radar pull` is the workhorse for verifying the collector path — real
+`next-signal info-radar pull` is the workhorse for verifying the collector path — real
 network, real DB writes, no model, and idempotent (re-running reports items as
 skipped rather than duplicating them).
 
-The safe list is only true while `src/paca/collectors/` stays free of
+The safe list is only true while `src/next_signal/collectors/` stays free of
 `build_from_name` / `get_model` / `get_embedder`. If you add a model call to a
 path listed as free, update this table in the same change.
 
@@ -215,31 +215,31 @@ path listed as free, update this table in the same change.
 
 ## Two things that look like failures but aren't
 
-### `paca doctor` exits 1 by design
+### `next-signal doctor` exits 1 by design
 
 Under the cloud-only container profile, `OMLX_BASE_URL` and any unset model key
 report ✗ and force a non-zero exit. **Read the check lines, not the exit code.**
 The stack is healthy when `DATABASE_URL`, `Postgres`, `configured agents`, and
 `registered tools` all show ✔.
 
-### `sh -lc` erases `paca` from PATH
+### `sh -lc` erases `next-signal` from PATH
 
 A login shell re-sources `/etc/profile` and drops the Dockerfile's
 `/app/.venv/bin`:
 
 ```bash
-docker compose exec -T dashboard sh -lc 'command -v paca'   # → empty. WRONG.
-docker compose exec -T dashboard sh -c  'command -v paca'   # → /app/.venv/bin/paca
+docker compose exec -T dashboard sh -lc 'command -v next-signal'   # → empty. WRONG.
+docker compose exec -T dashboard sh -c  'command -v next-signal'   # → /app/.venv/bin/next-signal
 ```
 
-Use `sh -c`, or exec `paca` directly with no shell at all. If `paca` is suddenly
+Use `sh -c`, or exec `next-signal` directly with no shell at all. If `next-signal` is suddenly
 "not found", this is why — the image is fine.
 
 ---
 
 ## Watching dashboard-triggered work
 
-Dashboard server actions spawn `paca` **detached** and return immediately. The
+Dashboard server actions spawn `next-signal` **detached** and return immediately. The
 toast says *started*, never *completed* — it carries no information about
 success.
 
@@ -319,7 +319,7 @@ of `0`.
 **The portable fix is the same everywhere — redirect, then check unpiped:**
 
 ```bash
-docker compose exec -T dashboard paca doctor > out.txt 2>&1
+docker compose exec -T dashboard next-signal doctor > out.txt 2>&1
 echo $?          # honest status; $LASTEXITCODE in PowerShell
 ```
 
@@ -363,11 +363,11 @@ gap.
 Run the command, then prove it landed:
 
 ```bash
-docker compose exec -T dashboard paca knowledge review
+docker compose exec -T dashboard next-signal knowledge review
 # → knowledge review: enrolled=1 unenrolled=0 due=0     (first run)
 # → knowledge review: enrolled=0 unenrolled=0 due=0     (already enrolled — idempotent)
 
-docker compose exec -T postgres psql -U paca -d next_signal \
+docker compose exec -T postgres psql -U next_signal -d next_signal \
   -c 'select doc_path, captured_at, stage, next_due_at from knowledge_reviews;'
 # → the enrolled row, with its scheduled next_due_at
 ```

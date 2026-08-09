@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("psycopg")
 import psycopg  # noqa: E402
 
-from paca.workflows.knowledge_review import store  # noqa: E402
+from next_signal.workflows.knowledge_review import store  # noqa: E402
 
 
 DATABASE_URL = os.environ.get("DATABASE_URL")

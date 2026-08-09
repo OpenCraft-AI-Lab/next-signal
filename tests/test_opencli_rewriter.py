@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from paca.integrations.knowledge.opencli import rewrite_image_links
+from next_signal.integrations.knowledge.opencli import rewrite_image_links
 
 
 def _make_images(tmp_path: Path, names: list[str]) -> Path:

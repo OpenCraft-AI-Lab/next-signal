@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from paca.core import config
+from next_signal.core import config
 
 
 def test_models_yaml_loads() -> None:
@@ -51,6 +51,6 @@ def test_knowledge_frontmatter_loads_as_db_free_agent() -> None:
 def test_workflow_yaml_loads_with_exposure() -> None:
     cfg = config.load_workflow("knowledge_ingest")
     assert cfg.name == "knowledge_ingest"
-    assert cfg.factory == "paca.workflows.knowledge_ingest:build"
+    assert cfg.factory == "next_signal.workflows.knowledge_ingest:build"
     assert cfg.expose.tool.enabled is True
     assert cfg.expose.tool.name == "knowledge_ingest_workflow"

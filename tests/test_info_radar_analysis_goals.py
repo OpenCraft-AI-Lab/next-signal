@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from paca.workflows.info_radar_analysis.goals import Goal, load_goals, render_goals_block
+from next_signal.workflows.info_radar_analysis.goals import Goal, load_goals, render_goals_block
 
 
 def _write(path: Path, body: str) -> None:

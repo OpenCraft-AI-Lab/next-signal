@@ -4,7 +4,7 @@ Replays the real analysis stages over a curated, hand-labelled subset of
 ``radar_items`` and records every verdict / score into dedicated ``radar_eval_*``
 tables, so prompt edits can be measured instead of argued about.
 
-Why a separate harness rather than ``paca info-radar analyze``:
+Why a separate harness rather than ``next-signal info-radar analyze``:
 
   * ``radar_analyses`` is ``UNIQUE(radar_item_id)`` with ``ON CONFLICT DO
     NOTHING`` and the runner calls ``mark_seen`` before fetch — production rows
@@ -46,15 +46,15 @@ from typing import Any
 import psycopg
 import yaml
 
-from paca.core.db import database_url
-from paca.core.paths import CONFIGS_DIR, PROMPTS_DIR
-from paca.workflows.info_radar_analysis.goals import goals_path, load_goals
-from paca.workflows.info_radar_analysis.stages import fetch, tier1, tier2
+from next_signal.core.db import database_url
+from next_signal.core.paths import CONFIGS_DIR, PROMPTS_DIR
+from next_signal.workflows.info_radar_analysis.goals import goals_path, load_goals
+from next_signal.workflows.info_radar_analysis.stages import fetch, tier1, tier2
 
 log = logging.getLogger("radar_eval")
 
 # Mirror the production chunk size so tier-1 sees the same batch context.
-from paca.workflows.info_radar_analysis.runner import _BATCH_SIZE
+from next_signal.workflows.info_radar_analysis.runner import _BATCH_SIZE
 
 # Qualified with the `i` alias — every query below joins radar_items AS i
 # alongside radar_eval_cases AS c, which also has an `id`.

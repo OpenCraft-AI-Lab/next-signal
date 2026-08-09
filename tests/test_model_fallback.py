@@ -12,8 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from paca.core import models as models_mod
-from paca.core.config import ModelProfile
+from next_signal.core import models as models_mod
+from next_signal.core.config import ModelProfile
 
 
 @pytest.fixture(autouse=True)

@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-import paca.workflows.stages.knowledge_ingest.artifact_editor as artifact_editor_mod
-from paca.workflows.stages.knowledge_ingest import KnowledgeArtifact
-from paca.workflows.stages.knowledge_ingest.artifact_editor import clean_body, write_frontmatter
+import next_signal.workflows.stages.knowledge_ingest.artifact_editor as artifact_editor_mod
+from next_signal.workflows.stages.knowledge_ingest import KnowledgeArtifact
+from next_signal.workflows.stages.knowledge_ingest.artifact_editor import clean_body, write_frontmatter
 
 
 def _artifact(

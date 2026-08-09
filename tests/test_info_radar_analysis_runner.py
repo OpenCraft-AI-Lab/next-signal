@@ -11,13 +11,13 @@ from typing import Any
 
 import pytest
 
-from paca.workflows.info_radar_analysis import runner
-from paca.workflows.info_radar_analysis.goals import Goal
-from paca.workflows.info_radar_analysis.schemas import (
+from next_signal.workflows.info_radar_analysis import runner
+from next_signal.workflows.info_radar_analysis.goals import Goal
+from next_signal.workflows.info_radar_analysis.schemas import (
     Tier1Verdict,
     Tier2Analysis,
 )
-from paca.workflows.info_radar_analysis.stages import dedup as dedup_mod
+from next_signal.workflows.info_radar_analysis.stages import dedup as dedup_mod
 
 
 _GOAL = Goal(

@@ -13,12 +13,12 @@ reading and manual triggering.
 
 ## Where the code lives
 
-`src/paca/collectors/info_radar/` — the LLM-free collector, source CLI →
+`src/next_signal/collectors/info_radar/` — the LLM-free collector, source CLI →
 `radar_items`.
-`src/paca/integrations/info_radar/` — provider adapters (Folo, YouTube subtitles).
-`src/paca/workflows/info_radar_pull.py` — the collector's manual-run thin shell.
-`src/paca/workflows/info_radar_analysis/` — the two-tier LLM analysis pipeline.
-`src/paca/workflows/info_radar_recap/` — range-scoped recap synthesis.
+`src/next_signal/integrations/info_radar/` — provider adapters (Folo, YouTube subtitles).
+`src/next_signal/workflows/info_radar_pull.py` — the collector's manual-run thin shell.
+`src/next_signal/workflows/info_radar_analysis/` — the two-tier LLM analysis pipeline.
+`src/next_signal/workflows/info_radar_recap/` — range-scoped recap synthesis.
 
 ## Agents
 
@@ -31,22 +31,22 @@ reading and manual triggering.
 
 ## Tools
 
-- info-radar collector: `uv run paca info-radar pull [--source NAME]`.
-- info-radar analysis: `uv run paca info-radar analyze [--limit N] [--source NAME]`.
-- info-radar recap: `uv run paca info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]`.
-- Folo subscriptions inventory: `uv run paca info-radar subscriptions --json`.
+- info-radar collector: `uv run next-signal info-radar pull [--source NAME]`.
+- info-radar analysis: `uv run next-signal info-radar analyze [--limit N] [--source NAME]`.
+- info-radar recap: `uv run next-signal info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]`.
+- Folo subscriptions inventory: `uv run next-signal info-radar subscriptions --json`.
 
 ## External systems
 
-- **Folo CLI** (`paca.integrations.info_radar.folo`) — info-radar source, full
+- **Folo CLI** (`next_signal.integrations.info_radar.folo`) — info-radar source, full
   content, subscriptions, and unread counts. Defaults to `npx --yes folocli@0.0.5`,
   overridable with `FOLO_CLI_ARGV`. The subscriptions inventory merges two
   commands: `subscription list` carries no unread field, so `unread list` supplies
   the per-feed counts, joined on `feedId`. The dashboard's `/radar` Ingest first pulls the full text
   with `folocli entry get <source_id>` and stages it as HTML under
-  `PACA_AGENT_TMP_DIR` before handing off to the knowledge pipeline; non-Folo
+  `NEXT_SIGNAL_AGENT_TMP_DIR` before handing off to the knowledge pipeline; non-Folo
   sources still go through `radar_items.url`.
-- **YouTube native subtitles** (`paca.integrations.info_radar.youtube_subs`) —
+- **YouTube native subtitles** (`next_signal.integrations.info_radar.youtube_subs`) —
   audio-free subtitle enrichment for YouTube items.
 
 ## Where data lives
@@ -206,7 +206,7 @@ that day. Each run records a `prompt_digest` — a hash of both prompts plus
 
 `scripts/lang_probe.py` is the companion harness for output *language* rather
 than score. It replays the same stages plus `knowledge_frontmatter`, writes only
-JSON under `PACA_AGENT_TMP_DIR/lang-probe/`, and reports the share of
+JSON under `NEXT_SIGNAL_AGENT_TMP_DIR/lang-probe/`, and reports the share of
 generations that came back in the wrong language. Repeats are mandatory there:
 frontmatter's defect is nondeterministic — the same article flipped language
 between runs — so a single pass can pass while the bug is present.
@@ -262,7 +262,7 @@ Specs: [`openspec/specs/info-radar/`](../../openspec/specs/info-radar/),
 Current status: info-radar pull, analysis, recap, the dashboard reader, the
 goals editor, and the Folo subscriptions table are all in place. There is no background
 scheduler — both pull and analysis are **manually triggered**, via
-`paca info-radar pull|analyze`, `paca run-workflow <name>`, or the dashboard
+`next-signal info-radar pull|analyze`, `next-signal run-workflow <name>`, or the dashboard
 `/radar` page's Pull + Analyze.
 
 The dashboard's `Pull + Analyze` shows **live analyze progress**: after pulling,
@@ -282,7 +282,7 @@ The `/radar` **Recap** panel picks a range (last 7 days / last 30 days / custom
 from–to, presets resolved in the radar timezone) and inherits the filter bar's
 score threshold and novel-only setting as its quality gate, so the recap and the
 item list describe the same population — and a different gate is a different
-cached recap. Generation spawns `paca info-radar recap` detached and polls
+cached recap. Generation spawns `next-signal info-radar recap` detached and polls
 `GET /api/radar/recap` for the row's `status`; on `running` → `done` the client
 calls `router.refresh()` so the server-rendered panel picks up the result.
 Failures surface the stored error rather than polling forever. The panel is

@@ -1,4 +1,4 @@
-export const LOCALE_COOKIE = "paca_locale";
+export const LOCALE_COOKIE = "ns_locale";
 export const DEFAULT_LOCALE = "en";
 export const LOCALES = ["en", "zh"] as const;
 
@@ -355,7 +355,7 @@ export const dictionaries = {
         "folocli cold start - fetching subscription list (can take 30s+)...",
       unable: "Unable to load Folo subscriptions",
       checkAuth: (message: string) =>
-        `${message}. Check Folo auth with uv run paca doctor.`,
+        `${message}. Check Folo auth with uv run next-signal doctor.`,
       empty: "Folo returned no subscriptions.",
       all: "All",
       searchPlaceholder: "Search feeds...",
@@ -720,7 +720,7 @@ export const dictionaries = {
       loading: "folocli 冷启动，正在获取订阅列表（可能需要 30 秒以上）...",
       unable: "无法加载 Folo 订阅",
       checkAuth: (message: string) =>
-        `${message}。用 uv run paca doctor 检查 Folo 登录状态。`,
+        `${message}。用 uv run next-signal doctor 检查 Folo 登录状态。`,
       empty: "Folo 没有返回订阅。",
       all: "全部",
       searchPlaceholder: "搜索 feed...",

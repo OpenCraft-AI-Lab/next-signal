@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { refreshReviews } from "@/lib/actions/review";
 
 /**
- * Refresh control: spawns `paca knowledge review` detached to reconcile the wiki
+ * Refresh control: spawns `next-signal knowledge review` detached to reconcile the wiki
  * against the review table, so the toast says "started", not "finished".
  */
 export function RefreshReviewsButton() {

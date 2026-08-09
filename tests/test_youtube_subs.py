@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from paca.integrations.info_radar import youtube_subs
+from next_signal.integrations.info_radar import youtube_subs
 
 
 # ---------------------------------------------------------------------------

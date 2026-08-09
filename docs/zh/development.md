@@ -21,7 +21,7 @@ Slash 别名（`.claude/commands/opsx/`）：`/opsx:explore`、`/opsx:propose`�
 
 ```bash
 uv sync                 # 同步依赖（改了 pyproject 后）
-uv run paca <cmd>        # 跑 CLI
+uv run next-signal <cmd>        # 跑 CLI
 uv run pytest -q         # 测试
 uv run ruff check src    # lint
 uv add <pkg>             # 加依赖（自动写 pyproject + uv.lock）
@@ -34,7 +34,7 @@ uv add <pkg>             # 加依赖（自动写 pyproject + uv.lock）
 1. 写 `configs/agents/<name>.yaml`，file stem 必须等于 yaml `name:` 字段（snake_case）。
 2. 指令文本放 `prompts/agents/<name>.md`（除非极短）。
 3. 模型按 profile 名引用（`configs/models.yaml`）；工具按注册名引用。
-4. 重启 `paca serve`，或 `paca run-agent <name> "..."` 烟测。
+4. 重启 `next-signal serve`，或 `next-signal run-agent <name> "..."` 烟测。
 
 ```yaml
 name: knowledge_frontmatter
@@ -78,9 +78,9 @@ Python code 只定义 loader / factory / schema。新增普通 agent 不写 Pyth
 
 工具 = agent 能直接调用的业务动作。
 
-- **横向工具**（跨领域通用，如 GBrain 检索）→ `src/paca/tools/`，
-  在 `paca/registry.py::_IN_TREE_TOOLS` 加一行。
-- **领域工具** → `src/paca/tools/<domain>/`，在该 package 的 `register()` 里
+- **横向工具**（跨领域通用，如 GBrain 检索）→ `src/next_signal/tools/`，
+  在 `next_signal/registry.py::_IN_TREE_TOOLS` 加一行。
+- **领域工具** → `src/next_signal/tools/<domain>/`，在该 package 的 `register()` 里
   `registry.register(...)`。
 
 命名用 `<integration>_<verb>` / `<domain>_<verb>` 前缀（`gbrain_search`），
@@ -90,13 +90,13 @@ Python code 只定义 loader / factory / schema。新增普通 agent 不写 Pyth
 
 集成 = 外部 provider 的低层 API / CLI adapter。
 
-- **通用 provider**（任何领域都可能用）→ `src/paca/integrations/`，
+- **通用 provider**（任何领域都可能用）→ `src/next_signal/integrations/`，
   在 `integrations/__init__.py` 的 `_MODULES` 加一行。
-- **领域 provider** → `src/paca/integrations/<domain>/`，由对应领域工具或 workflow stage 调用。
+- **领域 provider** → `src/next_signal/integrations/<domain>/`，由对应领域工具或 workflow stage 调用。
 
 ```python
 from agno.tools import tool
-from paca.integrations._helpers import env, http_client, to_jsonable
+from next_signal.integrations._helpers import env, http_client, to_jsonable
 
 @tool(show_result=False)
 def provider_action(query: str) -> dict:
@@ -111,7 +111,7 @@ def register(registry) -> None:
 ```
 
 只有 integration 本身就是 agent-facing capability 时才实现 `register()` 并进
-`paca/integrations/__init__.py` 的 `_MODULES`；普通领域 adapter 不直接注册给 agent，
+`next_signal/integrations/__init__.py` 的 `_MODULES`；普通领域 adapter 不直接注册给 agent，
 由 tool 或 workflow stage 调用。
 
 铁律：API key 在 call time 用 `env()` 读（不在 import time）；HTTP 走 `http_client()`；
@@ -120,20 +120,20 @@ def register(registry) -> None:
 ## 加一个 workflow
 
 多步骤 / 可调度 / 需要可观测可恢复的工作放 workflow。workflow 集中在
-`src/paca/workflows/`，并由 `configs/workflows/<name>.yaml` 声明。
+`src/next_signal/workflows/`，并由 `configs/workflows/<name>.yaml` 声明。
 
 ```yaml
 name: knowledge_ingest
 kind: workflow
 enabled: true
-factory: paca.workflows.knowledge_ingest:build
+factory: next_signal.workflows.knowledge_ingest:build
 expose:
   agent_os: true
   tool:
     enabled: true
     name: knowledge_ingest_workflow
 extra:
-  run_now: paca.workflows.knowledge_ingest:run
+  run_now: next_signal.workflows.knowledge_ingest:run
 ```
 
 **尚未实现**：纯 agent 串联、没有自定义 artifact / retry / 文件写入语义的简单线性
@@ -141,22 +141,22 @@ workflow，未来计划支持直接用 YAML `steps:` 声明。当前 `WorkflowCo
 schema（`extra="forbid"`），没有 `steps` 字段——直接写 `steps:` 的 YAML 会校验失败。
 要做这类 workflow，先扩展 centralized loader 和 `WorkflowConfig` 支持 `steps:` builder。
 
-只有 workflow 私有的 helper / stage 放 `src/paca/workflows/stages/<workflow>/`；可被多个
+只有 workflow 私有的 helper / stage 放 `src/next_signal/workflows/stages/<workflow>/`；可被多个
 workflow 或 agent 复用的动作提升到 `tools/` 或 `integrations/`。
 
 同一个 workflow 只有一个本体，是否暴露给 AgentOS 或 agent tool 由 `expose` 决定：
 
-- `expose.agent_os: true` → `paca.os_app` 通过 centralized loader 注册到 AgentOS。
-- `expose.tool.enabled: true` → `paca.orchestrator.workflow_tools` 注册一个 `WorkflowTools`
+- `expose.agent_os: true` → `next_signal.os_app` 通过 centralized loader 注册到 AgentOS。
+- `expose.tool.enabled: true` → `next_signal.orchestrator.workflow_tools` 注册一个 `WorkflowTools`
   toolkit，agent YAML 用这个 tool 名。
-- `extra.run_now` → `paca run-workflow <name>` 手动触发时调用的 function。不是每个 workflow 都必须支持。
+- `extra.run_now` → `next-signal run-workflow <name>` 手动触发时调用的 function。不是每个 workflow 都必须支持。
 
 不要为同一个 workflow 再写一份 `tools/<domain>/workflow_tools.py` wrapper。
 
 ## 加一个 team
 
 team 也走 runnable 配置。简单 team 只写 `configs/teams/<name>.yaml`；复杂 routing 才加
-`src/paca/teams/<name>.py` factory。当前仓库没有 shipped team——`configs/teams/`
+`src/next_signal/teams/<name>.py` factory。当前仓库没有 shipped team——`configs/teams/`
 为空，`list_teams()` 正常返回空列表；新加一个团队方向时才需要这层。
 
 ```yaml
@@ -168,12 +168,12 @@ members:
   - <agent_a>
   - <agent_b>
 instructions_file: teams/<team_name>.md
-factory: paca.teams.<team_name>:build
+factory: next_signal.teams.<team_name>:build
 ```
 
 新增一个产品方向时，优先新增领域目录而不是 `modules/`：
-`src/paca/tools/<domain>/`、`src/paca/integrations/<domain>/`、必要时
-`src/paca/workflows/<name>.py` 和 `configs/{agents,workflows,teams}/`。
+`src/next_signal/tools/<domain>/`、`src/next_signal/integrations/<domain>/`、必要时
+`src/next_signal/workflows/<name>.py` 和 `configs/{agents,workflows,teams}/`。
 
 ## 配置约定
 
@@ -201,8 +201,8 @@ folocli）都走 Docker，不在宿主机裸跑，让验证环境和真正 ship 
 ```bash
 docker compose build
 docker compose up
-docker compose exec dashboard paca doctor
-docker compose run --rm dashboard paca run-workflow knowledge_ingest
+docker compose exec dashboard next-signal doctor
+docker compose run --rm dashboard next-signal run-workflow knowledge_ingest
 ```
 
 完整设计与卷 / 环境变量映射见

@@ -11,11 +11,11 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 
 ## 代码位置
 
-`src/paca/collectors/info_radar/` —— 无 LLM collector，source CLI → `radar_items`。
-`src/paca/integrations/info_radar/` —— Folo / YouTube subtitle 等 provider adapter。
-`src/paca/workflows/info_radar_pull.py` —— collector 的 manual-run thin shell。
-`src/paca/workflows/info_radar_analysis/` —— 两层 LLM analysis pipeline。
-`src/paca/workflows/info_radar_recap/` —— 区间 recap 归纳。
+`src/next_signal/collectors/info_radar/` —— 无 LLM collector，source CLI → `radar_items`。
+`src/next_signal/integrations/info_radar/` —— Folo / YouTube subtitle 等 provider adapter。
+`src/next_signal/workflows/info_radar_pull.py` —— collector 的 manual-run thin shell。
+`src/next_signal/workflows/info_radar_analysis/` —— 两层 LLM analysis pipeline。
+`src/next_signal/workflows/info_radar_recap/` —— 区间 recap 归纳。
 
 ## Agents
 
@@ -28,21 +28,21 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 
 ## 工具
 
-- info-radar collector：`uv run paca info-radar pull [--source NAME]`。
-- info-radar analysis：`uv run paca info-radar analyze [--limit N] [--source NAME]`。
-- info-radar recap：`uv run paca info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]`。
-- Folo subscriptions inventory：`uv run paca info-radar subscriptions --json`。
+- info-radar collector：`uv run next-signal info-radar pull [--source NAME]`。
+- info-radar analysis：`uv run next-signal info-radar analyze [--limit N] [--source NAME]`。
+- info-radar recap：`uv run next-signal info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]`。
+- Folo subscriptions inventory：`uv run next-signal info-radar subscriptions --json`。
 
 ## 接的外部
 
-- **Folo CLI**（`paca.integrations.info_radar.folo`）—— info-radar source / full content /
+- **Folo CLI**（`next_signal.integrations.info_radar.folo`）—— info-radar source / full content /
   subscriptions / unread counts；默认 `npx --yes folocli@0.0.5`，可用 `FOLO_CLI_ARGV` 覆盖。
   subscriptions 盘点合并两个命令：`subscription list` 不带 unread 字段，每个 feed 的未读数
   由 `unread list` 提供，按 `feedId` join。
   Dashboard `/radar` 的 Ingest 会先用 `folocli entry get <source_id>` 拉全文并 stage 成
-  `PACA_AGENT_TMP_DIR` 下的 HTML，再交给 knowledge pipeline；非 Folo source 仍走
+  `NEXT_SIGNAL_AGENT_TMP_DIR` 下的 HTML，再交给 knowledge pipeline；非 Folo source 仍走
   `radar_items.url`。
-- **YouTube native subtitles**（`paca.integrations.info_radar.youtube_subs`）—— YouTube
+- **YouTube native subtitles**（`next_signal.integrations.info_radar.youtube_subs`）—— YouTube
   item 的无音频字幕补充。
 
 ## 数据存哪
@@ -154,7 +154,7 @@ dedup gate 嵌入的就是 tier-2 的 `summary`,所以被嵌入的文本现在�
 `goals.yaml` 的哈希——任何一组数字都能追溯到产生它的那份文本。
 
 `scripts/lang_probe.py` 是它的姊妹台,测的是输出**语言**而不是分数。它回放同样的 stage
-外加 `knowledge_frontmatter`,只往 `PACA_AGENT_TMP_DIR/lang-probe/` 写 JSON,报告有多少次
+外加 `knowledge_frontmatter`,只往 `NEXT_SIGNAL_AGENT_TMP_DIR/lang-probe/` 写 JSON,报告有多少次
 生成落在了错误的语言上。那里重复次数是必须的:frontmatter 的缺陷是**不确定性**的——同一篇
 文章在不同次运行之间会换语言——跑一遍很可能正好没撞上。
 
@@ -197,8 +197,8 @@ holdout 集由三个 agent 标注,它们只读 `goals.yaml`,被明确禁止读 `
 [`openspec/specs/dashboard-radar-reader/`](../../../openspec/specs/dashboard-radar-reader/)。
 
 当前状态：info-radar pull / analysis / recap / dashboard reader / goals editor / Folo
-subscriptions table 已就位。没有后台调度——pull 和 analysis **都靠手动触发**：`paca info-radar pull|analyze`、
-`paca run-workflow <name>` 或 dashboard `/radar` 的 Pull + Analyze。
+subscriptions table 已就位。没有后台调度——pull 和 analysis **都靠手动触发**：`next-signal info-radar pull|analyze`、
+`next-signal run-workflow <name>` 或 dashboard `/radar` 的 Pull + Analyze。
 
 dashboard `/radar` 的 `Pull + Analyze` 现在显示**实时 analyze 进度**：action 在 pull 后把
 未分析条目数（denominator）连同 `analyzeRunning` 标记写进
@@ -213,6 +213,6 @@ run（best-effort，子进程与 DB 写入不受影响）。
 `/radar` 的 **Recap** 面板选一个区间（最近 7 天 / 最近 30 天 / 自定义 from–to，预设在
 radar 时区解析），并继承 filter bar 当前的 score 阈值和 novel-only 作为质量门槛，所以
 recap 和下方条目列表描述的是同一批内容——换个门槛就是另一条缓存记录。生成走
-detached spawn `paca info-radar recap`，再轮询 `GET /api/radar/recap` 拿行的 `status`；
+detached spawn `next-signal info-radar recap`，再轮询 `GET /api/radar/recap` 拿行的 `status`；
 `running` → `done` 时客户端调 `router.refresh()`，由服务端渲染的面板接手结果。失败会
 展示存下来的错误，而不是一直轮询。`?export=1` 下整个面板不渲染。

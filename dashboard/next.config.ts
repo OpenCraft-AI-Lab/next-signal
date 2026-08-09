@@ -3,7 +3,7 @@ import path from "node:path";
 import type { NextConfig } from "next";
 
 // Load the repo-root `.env` so dashboard server code sees the same
-// DATABASE_URL / PACA_WIKI_DIR / OMLX_* the Python side reads. Next would
+// DATABASE_URL / WIKI_DIR / OMLX_* the Python side reads. Next would
 // normally only look for `dashboard/.env*`; this lightweight loader keeps
 // the operator from maintaining two env files. Done inline (no dotenv dep)
 // because the format we need is the trivial `KEY=value` subset.

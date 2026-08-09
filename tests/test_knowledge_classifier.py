@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 
-import paca.workflows.stages.knowledge_ingest.classify as classify_mod
-from paca.workflows.stages.knowledge_ingest import KnowledgeArtifact
-from paca.workflows.stages.knowledge_ingest.classify import classify_category
+import next_signal.workflows.stages.knowledge_ingest.classify as classify_mod
+from next_signal.workflows.stages.knowledge_ingest import KnowledgeArtifact
+from next_signal.workflows.stages.knowledge_ingest.classify import classify_category
 
 
 class _FakeResponse:

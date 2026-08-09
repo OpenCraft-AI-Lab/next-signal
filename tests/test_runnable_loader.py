@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from paca.orchestrator import runnable_loader as rl
+from next_signal.orchestrator import runnable_loader as rl
 
 
 def test_one_bad_agent_does_not_block_others(monkeypatch) -> None:
@@ -80,4 +80,4 @@ def test_load_factory_rejects_bad_ref() -> None:
 
 def test_load_factory_rejects_non_callable() -> None:
     with pytest.raises(RuntimeError, match="not callable"):
-        rl.load_factory("paca.core.paths:PROJECT_ROOT")
+        rl.load_factory("next_signal.core.paths:PROJECT_ROOT")

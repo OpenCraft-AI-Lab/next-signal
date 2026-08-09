@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from paca.workflows.info_radar_analysis.schemas import Tier2Analysis
-from paca.workflows.info_radar_analysis.stages.tier2 import _apply_ceilings
+from next_signal.workflows.info_radar_analysis.schemas import Tier2Analysis
+from next_signal.workflows.info_radar_analysis.stages.tier2 import _apply_ceilings
 
 
 def _analysis(score: int, tags: list[str]) -> Tier2Analysis:

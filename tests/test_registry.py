@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from paca import registry
+from next_signal import registry
 
 
 def test_registry_loads_all_expected_tools() -> None:
@@ -10,7 +10,7 @@ def test_registry_loads_all_expected_tools() -> None:
 
     # In-tree (gbrain) + workflow-exposed (knowledge_ingest) + knowledge-domain
     # tool package (search_knowledge). next-signal has no generic cloud-API
-    # integrations registered — see paca/integrations/__init__.py.
+    # integrations registered — see next_signal/integrations/__init__.py.
     expected = {
         "gbrain_search",
         "gbrain_get",

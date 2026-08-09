@@ -11,5 +11,5 @@ extra:
   # headline/theme narrative are user-facing prose in the recap view, so they
   # need the language rule. `global` is already the loader's default for a
   # missing key -- declared explicitly here so that's visible without reading
-  # paca.agents.loader.
+  # next_signal.agents.loader.
   output_language: global

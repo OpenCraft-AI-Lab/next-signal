@@ -27,7 +27,7 @@ test("parseGoalsYaml accepts valid goals", () => {
 });
 
 test("readGoals reports missing file without throwing", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "paca-goals-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ns-goals-"));
   const result = await readGoals(path.join(dir, "missing.yaml"));
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.missing, true);
@@ -76,7 +76,7 @@ test("validateGoals rejects non-string topics", () => {
 });
 
 test("writeGoalsAtomic writes canonical yaml", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "paca-goals-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ns-goals-"));
   const file = path.join(dir, "goals.yaml");
   await writeGoalsAtomic([{ name: "g", description: "d", topics: ["t"], keywords: [] }], file);
   const raw = await readFile(file, "utf8");
@@ -86,7 +86,7 @@ test("writeGoalsAtomic writes canonical yaml", async () => {
 
 test("renderGoalsYaml rejects invalid data before writing", async () => {
   assert.throws(() => renderGoalsYaml([{ name: "g", description: "" }]), /description/);
-  const dir = await mkdtemp(path.join(os.tmpdir(), "paca-goals-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ns-goals-"));
   const file = path.join(dir, "goals.yaml");
   await writeFile(file, VALID, "utf8");
   await assert.rejects(() => writeGoalsAtomic([], file), /non-empty list/);

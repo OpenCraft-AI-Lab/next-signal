@@ -13,8 +13,8 @@ name: next-signal
 
 # ---- Postgres connection, overridable from the environment/.env ----
 x-postgres-env: &postgres-env
-  POSTGRES_USER: ${POSTGRES_USER:-paca}
-  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-paca}
+  POSTGRES_USER: ${POSTGRES_USER:-next_signal}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-next_signal}
   POSTGRES_DB: ${POSTGRES_DB:-next_signal}
 
 # ---- Shared app-container config (image, env, mounts, host bridge) ----
@@ -32,23 +32,23 @@ x-app: &app
   environment:
     # These override whatever .env holds so the container is self-consistent:
     # point at the postgres SERVICE, and use in-container paths.
-    DATABASE_URL: postgresql://${POSTGRES_USER:-paca}:${POSTGRES_PASSWORD:-paca}@postgres:5432/${POSTGRES_DB:-next_signal}
-    PACA_STATE_DIR: /state
-    PACA_WIKI_DIR: /wiki
-    PACA_WIKI_RAW_DIR: /wiki-raw
-    PACA_GBRAIN_HOME: /state/gbrain          # gbrain config/cache dir (config.json persists here)
+    DATABASE_URL: postgresql://${POSTGRES_USER:-next_signal}:${POSTGRES_PASSWORD:-next_signal}@postgres:5432/${POSTGRES_DB:-next_signal}
+    NEXT_SIGNAL_STATE_DIR: /state
+    WIKI_DIR: /wiki
+    WIKI_RAW_DIR: /wiki-raw
+    GBRAIN_HOME: /state/gbrain          # gbrain config/cache dir (config.json persists here)
     # gbrain uses its POSTGRES engine against a dedicated DB in the same server.
     # The bun-compiled binary can't run PGLite (extension bundles aren't embedded),
     # and pgvector already ships `vector` + `pg_trgm`, so Postgres is the fit.
-    PACA_GBRAIN_DATABASE_URL: postgresql://${POSTGRES_USER:-paca}:${POSTGRES_PASSWORD:-paca}@postgres:5432/gbrain
+    GBRAIN_DATABASE_URL: postgresql://${POSTGRES_USER:-next_signal}:${POSTGRES_PASSWORD:-next_signal}@postgres:5432/gbrain
     OPENCLI_BIN: /opt/opencli/dist/src/main.js
     HOME: /root                              # writable HOME for npx (folocli) cache
   volumes:
     - pstate:/state
-    # Host knowledge dirs — sources come from .env (${PACA_WIKI_DIR} etc.),
+    # Host knowledge dirs — sources come from .env (${WIKI_DIR} etc.),
     # mounted read-write because ingest/re-index writes into them.
-    - ${PACA_WIKI_DIR:?set PACA_WIKI_DIR in .env}:/wiki
-    - ${PACA_WIKI_RAW_DIR:?set PACA_WIKI_RAW_DIR in .env}:/wiki-raw
+    - ${WIKI_DIR:?set WIKI_DIR in .env}:/wiki
+    - ${WIKI_RAW_DIR:?set WIKI_RAW_DIR in .env}:/wiki-raw
   # Lets the container reach a HOST-side OMLX server via
   # host.docker.internal on Linux (Docker Desktop provides it already).
   extra_hosts:
@@ -56,7 +56,7 @@ x-app: &app
   restart: unless-stopped
 
 services:
-  # --- Postgres 16 + pgvector: paca's main DB (agno + business tables) ---
+  # --- Postgres 16 + pgvector: next-signal's main DB (agno + business tables) ---
   postgres:
     image: pgvector/pgvector:pg16
     environment: *postgres-env
@@ -66,13 +66,13 @@ services:
     # ports:
     #   - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-paca} -d ${POSTGRES_DB:-next_signal}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-next_signal} -d ${POSTGRES_DB:-next_signal}"]
       interval: 5s
       timeout: 3s
       retries: 10
     restart: unless-stopped
 
-  # --- One-shot schema bootstrap: paca main DB + gbrain DB/init (idempotent) ---
+  # --- One-shot schema bootstrap: next-signal main DB + gbrain DB/init (idempotent) ---
   bootstrap:
     <<: *app
     command: ["sh", "scripts/container_bootstrap.sh"]
@@ -82,11 +82,11 @@ services:
         condition: service_healthy
 
   # --- Dashboard (Next.js, production build) on :3000 ---
-  # Spawns `paca` CLI children + gbrain/folocli as subprocesses, so it runs
+  # Spawns `next-signal` CLI children + gbrain/folocli as subprocesses, so it runs
   # from the same image. `next start` binds 0.0.0.0, reachable once published.
   dashboard:
     <<: *app
-    command: ["paca", "dashboard", "--start", "--port", "3000"]
+    command: ["next-signal", "dashboard", "--start", "--port", "3000"]
     ports:
       - "3000:3000"
     depends_on:
@@ -97,4 +97,4 @@ services:
 
 volumes:
   pgdata:      # Postgres data
-  pstate:      # PACA_STATE_DIR (host default ~/.next-signal) + gbrain PGLite
+  pstate:      # NEXT_SIGNAL_STATE_DIR (host default ~/.next-signal) + gbrain PGLite

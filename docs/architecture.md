@@ -2,7 +2,7 @@
 
 > **English** · [中文](./zh/architecture.md)
 
-next-signal (Python package `paca`) is a local-first info-radar + knowledge
+next-signal (Python package `next_signal`) is a local-first info-radar + knowledge
 framework built on [agno](https://github.com/agno-agi/agno) 2.6+.
 
 ## Mental model: a runnable chassis plus capability blocks
@@ -13,29 +13,29 @@ units**:
 - **runnable** — agents / workflows / teams, all declared and loaded from
   `configs/{agents,workflows,teams}/`.
 - **tools** — agent-facing business actions. Domain tools go in
-  `src/paca/tools/<domain>/`; cross-cutting tools sit directly in
-  `src/paca/tools/`.
+  `src/next_signal/tools/<domain>/`; cross-cutting tools sit directly in
+  `src/next_signal/tools/`.
 - **integrations** — provider / CLI / HTTP adapters. Domain adapters go in
-  `src/paca/integrations/<domain>/`; cross-cutting ones sit directly in
-  `src/paca/integrations/`.
+  `src/next_signal/integrations/<domain>/`; cross-cutting ones sit directly in
+  `src/next_signal/integrations/`.
 - **workflows** — the orchestration layer over agents / tools / stages,
-  centralized in `src/paca/workflows/`.
+  centralized in `src/next_signal/workflows/`.
 
-One AgentOS process carries every runnable and tool capability (`paca serve`,
+One AgentOS process carries every runnable and tool capability (`next-signal serve`,
 `:7777` — no built-in chat surface is mounted on it today). The CLI reaches the
 same workflows and agents through the centralized runnable loader. The Dashboard
-is a separate Next.js process that reads Postgres or spawns one-shot `paca` CLI
-children; it does **not** require `paca serve` to be running.
+is a separate Next.js process that reads Postgres or spawns one-shot `next-signal` CLI
+children; it does **not** require `next-signal serve` to be running.
 
 ## Runtime topology
 
 ```text
-paca AgentOS FastAPI (:7777)
+next-signal AgentOS FastAPI (:7777)
   - specialist agents / workflows
   - tool registry
 
 CLI -------------------------> runnable loader / workflow run_now
-Dashboard (:3000 Next.js) ---> Postgres reads + one-shot `paca` CLI children
+Dashboard (:3000 Next.js) ---> Postgres reads + one-shot `next-signal` CLI children
 
 shared lower layers:
   model factory (OMLX first, cloud fallback)
@@ -45,7 +45,7 @@ shared lower layers:
 ## Code layers
 
 ```
-src/paca/
+src/next_signal/
   core/              shared infra: config / db / models / paths / logging / context
   agents/loader.py   generic agent assembly (YAML → agno.Agent)
   orchestrator/      runnable loader / workflow tools / runtime assembly
@@ -88,7 +88,7 @@ Hard rules:
 - `tools` may orchestrate `integrations` (downward is fine); `integrations` never
   import `tools` or agents.
 - Workflows may compose agents / tools / private stages; workflow-private helpers
-  go in `src/paca/workflows/stages/<workflow>/`.
+  go in `src/next_signal/workflows/stages/<workflow>/`.
 - `registry.py` / `os_app.py` are assembly modules and sit above the whole stack.
 - If you find yourself needing `core` to import `tools`, or an integration to
   import a tool or agent, stop and redesign.
@@ -115,22 +115,22 @@ tracing / memory, and treating GBrain as an agent operating system.
 ## Plugging a new capability into the chassis
 
 1. **New agent:** `configs/agents/<name>.yaml` + `prompts/agents/<name>.md`.
-2. **New tool:** implement in `src/paca/tools/<domain>/` and expose a stable name
+2. **New tool:** implement in `src/next_signal/tools/<domain>/` and expose a stable name
    from that package's `register()`.
-3. **New integration:** `src/paca/integrations/<domain>/`, or `src/paca/integrations/`
+3. **New integration:** `src/next_signal/integrations/<domain>/`, or `src/next_signal/integrations/`
    if it is cross-cutting.
 4. **New workflow:** declare in `configs/workflows/<name>.yaml`; implement a
-   factory in `src/paca/workflows/<name>.py` when it is non-trivial.
+   factory in `src/next_signal/workflows/<name>.py` when it is non-trivial.
 5. **New team:** declare in `configs/teams/<name>.yaml`; add
-   `src/paca/teams/<name>.py` only when routing is complex.
+   `src/next_signal/teams/<name>.py` only when routing is complex.
 6. **New collector** (periodic CLI data mover, no LLM): implement in
-   `src/paca/collectors/<name>/`. Manual runs hook in through a thin shell at
-   `src/paca/workflows/<name>.py` (YAML sets `expose.agent_os: false` and points
+   `src/next_signal/collectors/<name>/`. Manual runs hook in through a thin shell at
+   `src/next_signal/workflows/<name>.py` (YAML sets `expose.agent_os: false` and points
    `extra.run_now` at the collector entrypoint, invoked by
-   `paca run-workflow <name>`).
+   `next-signal run-workflow <name>`).
 7. **Analysis workflow on top of a collector** (LLM-driven, consumes the
    collector's business table): implement as a package at
-   `src/paca/workflows/<name>_analysis/` with stages split into `stages/`. Agents
+   `src/next_signal/workflows/<name>_analysis/` with stages split into `stages/`. Agents
    and prompts use the standard YAML/markdown paths, and manual runs hook in
    through the same thin-shell `extra.run_now`. The `seen_at` column belongs to
    the analysis layer — collectors never touch it. Currently shipped:
@@ -142,4 +142,4 @@ Full step-by-step instructions live in the
 / info flow / operator console) are in [`docs/modules/`](./modules/core.md).
 
 A full inventory of agents and tools is deliberately **not** maintained in the
-docs — `uv run paca list` and `src/paca/registry.py` are the source of truth.
+docs — `uv run next-signal list` and `src/next_signal/registry.py` are the source of truth.
