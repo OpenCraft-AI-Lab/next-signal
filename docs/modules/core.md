@@ -12,8 +12,11 @@ and embeddings of both product modules ([knowledge](./knowledge.md) and
 
 ## Where the code lives
 
-- `src/next_signal/core/models.py` — model factory (profile → agno Model) + embedder +
-  OMLX endpoint
+- `src/next_signal/core/models.py` — static/live-stage model construction + embedder
+- `src/next_signal/core/engine_preferences.py` — strict per-job engine state
+- `src/next_signal/core/embedding_preferences.py` — strict per-item embedding state
+- `src/next_signal/core/omlx.py` — the only OMLX environment resolver
+- `src/next_signal/agents/stage.py` — provider-neutral production stages and job affinity
 - `src/next_signal/core/config.py` — every YAML loader (strict pydantic; unknown keys
   fail loud)
 - `src/next_signal/core/db.py` — `database_url()` plus the `get_db()` singleton for
@@ -25,9 +28,11 @@ and embeddings of both product modules ([knowledge](./knowledge.md) and
 
 ## The model system
 
-`configs/models.yaml` is the single source of truth. Agent YAML references models
-by profile name; Python never constructs `Claude(...)` or `OpenAILike(...)`
-directly.
+`configs/models.yaml` is the static profile/baseline source of truth. AgentOS
+agents reference it by profile name. Production workflows call `run_stage`: one
+job reads `engine.json`, uses YAML as the API-model baseline, and applies live
+OMLX/DeepSeek or explicit Codex/Claude settings from `coding-agents.json`.
+Business stages never construct provider models directly.
 
 | Profile | Provider / model | Used for |
 |---|---|---|
@@ -49,8 +54,9 @@ directly.
   propagate instead of falling back. The result is lru-cached, so **once OMLX is
   back you must call `next_signal.core.models.reset_cache()` before local is retried** —
   this matters most for long-running processes like `next-signal serve`.
-- The OMLX endpoint is read only through `next_signal.core.models.omlx_endpoint()`
-  (`OMLX_BASE_URL` / `OMLX_API_KEY`). Never duplicate that lookup elsewhere.
+- `next_signal.core.omlx.resolve_omlx_endpoint()` is the only reader of
+  `OMLX_BASE_URL` / `OMLX_API_KEY`; ordinary callers use the strict public
+  `next_signal.core.models.omlx_endpoint()` wrapper. Never duplicate env access.
 - Qwen3 specifics are pinned in `_build_omlx`: thinking disabled, sampling
   parameters, and structured output through the standard OpenAI
   `response_format` json_schema (xgrammar constrained decoding on the OMLX side).
@@ -69,19 +75,48 @@ directly.
   `reasoning_effort: low`; `deepseek_structured` disables thinking outright —
   with its 4096 max_tokens cap, default high-effort reasoning could exhaust the
   budget before ever emitting the JSON answer.
-- **The embedder** (`models.yaml::embedders.local`): Qwen3-Embedding-0.6B-8bit,
-  **1024 dimensions**, matching the `vector(1024)` column on
-  `radar_pushed_topics.embedding`. Switching to a model with different
-  dimensions requires a column migration.
+- **The embedder** is provider-neutral and does not go through the profile
+  factory at all. `get_embedder()` takes no arguments: it reads
+  `~/.next-signal/embedding.json` plus the process environment once per item and
+  returns an immutable `ResolvedEmbedder` (provider, model, vector-space
+  identity, `embed()`). Three providers are supported — `omlx`, `openai`, and one
+  operator-supplied `openai_compatible` API root.
+
+  `models.yaml::embedders` is only the per-provider baseline: `local` supplies
+  the OMLX model and the fresh-install selection, `openai` supplies the OpenAI
+  model. The generic endpoint has no honest default and must be configured
+  before it can be selected.
+
+  **Every embedder must return exactly 1024 finite numbers.** `embed()` checks
+  the full vector and raises `RuntimeError` on a wrong length, a non-numeric
+  element, `NaN`, or infinity; it never truncates, pads, or normalizes. The
+  hosted providers request `dimensions: 1024` (OMLX's route has no such
+  parameter). That is what keeps `radar_pushed_topics.embedding` at
+  `vector(1024)` across a provider switch — and it excludes fixed-width models
+  that cannot produce it, such as `text-embedding-ada-002`.
+
+  **State and secrets are split.** The state file holds the selection, models,
+  API root, and vector-space id; it never holds a key. `openai` reads
+  `OPENAI_API_KEY` and the generic provider reads the variable *named* in
+  `api_key_env`, both from `os.environ` when the snapshot is built. So a state
+  edit steers the next item with no restart, while a `.env` edit does not reach
+  an already-running process — restart the host process or recreate the Compose
+  service. There is no embedder fallback: unlike two LLMs, two embedders are not
+  substitutable, so a failure raises and the dedup gate treats the item as novel.
 
 ## Concurrency
 
-`models.yaml::concurrency` gives each provider a ceiling (`omlx: 2` — one local
-GPU; the cloud values of 64/32 only guard against runaway loops). Every model the
+`models.yaml::concurrency` gives each API and CLI provider a ceiling (`omlx: 2` —
+one local GPU; cloud/CLI values guard against runaway work). Every model the
 factory produces has its `response` / `aresponse` and both streaming entrypoints
-wrapped in that provider's semaphore. Embedder calls draw on the same quota,
-because the local LLM and embedding contend for one GPU. Everything built through
-the factory inherits this automatically — no module manages it locally.
+wrapped in that provider's semaphore. An embedder call draws on the quota of
+*its own* resolved provider: an OMLX embedding queues behind OMLX inference
+because both contend for one GPU, while a hosted embedding uses its own key and
+never consumes that slot. Everything built through the factory inherits this
+automatically. Production CLI stages hold the same
+semaphore for the entire child process and run in an empty ephemeral directory
+under the no-tools `stage` profile. Direct operator `review`/`edit` commands keep
+their repository capabilities.
 
 ## Two database paths
 
@@ -134,7 +169,7 @@ in its own YAML (`extra.output_language`), resolved by `next_signal.core.languag
 - `global` — resolves from the live preference file (`~/.next-signal/language.json`,
   `content_language`), falling back to a hardcoded `"en"` if that file doesn't
   exist. Never reads `.env` — the retired `SIGNAL_OUTPUT_LANG` mechanism. The
-  dashboard's **settings panel** writes this file (the nav's language picker does
+  dashboard's **settings page** writes this file (the nav's language picker does
   not — that one is UI chrome only); a container-start hook seeds it if missing.
   This is the policy for everything written *for the reader*: the three
   info-radar agents whose prose is displayed (`radar_tier1_filter`,

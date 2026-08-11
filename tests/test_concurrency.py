@@ -20,8 +20,10 @@ from next_signal.core.concurrency import UNLIMITED, ProviderConcurrency
 @pytest.fixture(autouse=True)
 def _reset_state():
     ProviderConcurrency.reset()
+    models_mod._concurrency_configured = False
     yield
     ProviderConcurrency.reset()
+    models_mod._concurrency_configured = False
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +40,14 @@ def test_configure_sets_limits() -> None:
     assert ProviderConcurrency.limit_for("omlx") == 2
     assert ProviderConcurrency.limit_for("claude") == 16
     assert ProviderConcurrency.limit_for("openai") == UNLIMITED  # not set
+
+
+def test_set_limit_updates_only_selected_provider() -> None:
+    ProviderConcurrency.configure({"omlx": 2, "deepseek": 32})
+
+    ProviderConcurrency.set_limit("omlx", 4)
+
+    assert ProviderConcurrency.limits() == {"omlx": 4, "deepseek": 32}
 
 
 def test_sync_semaphore_serializes_concurrent_calls() -> None:
@@ -186,3 +196,70 @@ def test_wrapper_doesnt_double_call_underlying() -> None:
     wrapped = models_mod._wrap_with_concurrency(m, "omlx")
     wrapped.response()
     assert m.response_calls == 1
+
+
+@pytest.mark.parametrize(
+    ("reasoning", "expected_effort", "expected_body"),
+    [
+        ("off", None, {"thinking": {"type": "disabled"}}),
+        ("low", "low", None),
+        ("high", "high", None),
+    ],
+)
+def test_runtime_deepseek_model_applies_live_reasoning(
+    monkeypatch: pytest.MonkeyPatch,
+    reasoning: str,
+    expected_effort: str | None,
+    expected_body: dict | None,
+) -> None:
+    from next_signal.core.engine_preferences import (
+        DeepSeekSettings,
+        configured_engine_defaults,
+    )
+
+    preferences = configured_engine_defaults().model_copy(
+        update={
+            "deepseek": DeepSeekSettings(model="deepseek-live", reasoning=reasoning)
+        }
+    )
+    captured = {}
+
+    def fake_build(profile):
+        captured["profile"] = profile
+        return _FakeModel()
+
+    monkeypatch.setattr(models_mod, "_build_deepseek", fake_build)
+    models_mod.get_stage_model("deepseek", preferences, structured=True)
+
+    profile = captured["profile"]
+    assert profile.model_id == "deepseek-live"
+    assert profile.extra.get("reasoning_effort") == expected_effort
+    assert profile.extra.get("extra_body") == expected_body
+
+
+def test_runtime_omlx_model_applies_live_endpoint_model_and_parallelism(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from next_signal.core.engine_preferences import OmlxSettings, configured_engine_defaults
+
+    preferences = configured_engine_defaults().model_copy(
+        update={
+            "omlx": OmlxSettings(
+                base_url="http://live-omlx/v1",
+                model="live-model",
+                parallel=4,
+            )
+        }
+    )
+    captured = {}
+
+    def fake_build(profile, *, base_url=None):
+        captured.update(profile=profile, base_url=base_url)
+        return _FakeModel()
+
+    monkeypatch.setattr(models_mod, "_build_omlx", fake_build)
+    models_mod.get_stage_model("omlx", preferences, structured=False)
+
+    assert captured["profile"].model_id == "live-model"
+    assert captured["base_url"] == "http://live-omlx/v1"
+    assert ProviderConcurrency.limit_for("omlx") == 4

@@ -80,17 +80,28 @@ flowchart TB
 
 **两类连接** —— 这正是边界的意义所在：
 
-- **(A) 本地 LLM —— 留在宿主机。** 云端跑的是*对话*模型 (B)，但 **embedder 只走
-  OMLX**（info-radar `analyze` 的 dedup 需要它）。`app` 容器通过
+- **(A) 本地 LLM —— 留在宿主机。** 云端跑的是*对话*模型 (B)；embedder 可选，默认走
+  OMLX（info-radar `analyze` 的 dedup 需要它）。`app` 容器通过
   `host.docker.internal:<port>` 访问宿主机的 MLX server；这部分流量从不离开你的 Mac。
-  不配它，那条 pipeline 就降级（见 §7）。
+  不配它，就要么选一个云端 embedder，要么接受 dedup gate 降级（见 §7）。
 - **(B) 远端 —— 唯一离开机器的东西。** 云 LLM API、Folo 后端、GitHub REST API
   （knowledge 的 repo 查询）、以及公开网页抓取 —— 都是 `app` 容器的出站 HTTPS/WSS。
 
-除 Postgres 外一个服务就够了：单个 `app` 镜像打包所有可运行部分。dashboard 和
+除 Postgres 外一个镜像就够了：单个 `app` 镜像打包所有可运行部分。dashboard 和
 `next-signal` **必须共用一个镜像**，因为 dashboard 的 server action 会 spawn `next-signal` CLI
 子进程（并 shell out 到 `gbrain` / `folocli`）—— 见
 `dashboard/lib/actions/spawn-cli.ts`。
+
+这个镜像撑起两个常驻服务，外加一次性的 `bootstrap`：`dashboard`（:3000）和 `scheduler`。
+**scheduler** 跑 `next-signal schedule`——一个在配置的墙钟时间触发雷达链路的轮询循环，见
+[运维](./operations.md#无人值守运行)。把它放进容器正是定时能跨平台的原因：宿主机方案意味着
+要分别维护 cron、launchd 和 Windows Task Scheduler，而容器在三个平台上看到的是同一个 Linux。
+
+它**刻意不放在 Compose profile 后面**。`~/.next-signal/schedule.json` 不存在就读作关闭，所以
+没配置过计划的栈拿到的是一个闲置容器，而不是崩溃重启循环。
+
+对应的限制：**宿主机没在跑 Docker 时什么都不会触发。** 没有容器能启动 Docker，所以睡眠或关机
+的机器就是错过那个窗口；计划里的 `catch_up` 选项可以在调度器重新看得见时补跑一次来缓解，仅此而已。
 
 ---
 
@@ -108,7 +119,11 @@ flowchart TB
 | gbrain 二进制 | `app` | 构建时从钉住的上游 clone 用 Bun 编译（Bun 只存在于 builder 阶段） |
 | opencli（Node） | `app` | `weixin download` 走纯 HTTP；不打包也不需要浏览器 |
 | folocli | `app` | 运行时经 `npx --yes` 拉取；与云端 Folo 后端通信 |
+| Codex CLI + Claude Code CLI | `app` | 构建镜像时安装精确 npm 版本；直接仓库任务和选中的 production LLM stage 都通过 next-signal 的受限 bridge 执行 |
 | gbrain 存储 | `postgres` | 同一个 Postgres 服务器上的独立 `gbrain` 库（`GBRAIN_DATABASE_URL`）。bun 编译出的二进制跑不了 PGLite（扩展 bundle 没有内嵌），而 pgvector 已经带了 `vector` + `pg_trgm` —— 所以 gbrain 用它的 Postgres 引擎 |
+
+production CLI stage 比直接仓库任务更严格：provider 工具/自定义项全部关闭，只能看到一个
+全新的空临时目录，看不到源码仓库或只读挂载的 `.env`。
 
 ### 3.2 父操作系统（宿主机）上
 
@@ -117,9 +132,9 @@ flowchart TB
 | Docker Desktop / colima | 容器运行时本身 |
 | `.env` | 只读挂载进 `app`；不放进镜像因为里面是真实密钥 |
 | `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | 知识内容；bind-mount 让宿主机和容器保持一致。路径必须和容器*内部*的 `WIKI_DIR` / `WIKI_RAW_DIR` 对应 |
-| `~/.next-signal/` state | knowledge_ingest_manifest.json、agent-tmp/ —— 用具名卷（或 bind mount）以便重建镜像后仍然保留 |
+| `~/.next-signal/` state | knowledge_ingest_manifest.json、agent-tmp/，以及 dashboard 写的那几个设置——`language.json`、`engine.json`、`coding-agents.json`、`schedule.json`、`embedding.json`。用具名卷（或 bind mount）以便重建镜像后仍然保留。这五个文件正是 state root 不能烤进镜像的原因：dashboard 在运行时写它们，所有读者都在 call time 读、不用重启就生效，面板不可达时还能手改 |
 | 发布的端口 | `localhost:3000` 是你访问容器的方式 |
-| **OMLX / MLX 模型服务**（可选） | **无法容器化**（需要 Metal GPU）。只有 info-radar `analyze` 的 **embedding** 需要它。云端对话模型不需要。用的话，容器通过 `host.docker.internal:<port>` 访问 |
+| **OMLX / MLX 模型服务**（可选） | **无法容器化**（需要 Metal GPU）。除非在设置页选了云端 embedder，否则 info-radar `analyze` 的 **embedding** 需要它。云端对话模型不需要。用的话，容器通过 `host.docker.internal:<port>` 访问 |
 
 ### 3.3 外部 / 互联网（既不在容器也不在宿主机）
 
@@ -134,7 +149,8 @@ flowchart TB
 - **容器 → 宿主机：** 发布的端口（3000）；bind mount（`.env`、wiki 目录）；可选的
   `host.docker.internal` 调用到宿主机 OMLX server。
 - **容器 → 外部：** 所有 LLM + Folo + GitHub + 网页流量，只出不进。
-- **持久化状态：** `pgdata` 和 gbrain 存储用具名卷；用户 state 用卷或宿主机 bind mount。
+- **持久化状态：** `pgdata` 和 gbrain 存储用具名卷；用户 state 在 `pstate`；provider
+  认证分别放在 `codex_auth` 和 `claude_auth` 具名卷中。
 
 ---
 
@@ -175,6 +191,21 @@ Chrome 上。但 next-signal 只调用 `opencli weixin download`
 markdown。公开的微信公众号文章是服务端渲染的、不需要登录，所以 `app` 镜像保持
 无浏览器 —— 不装 Chrome，也不需要 Xvfb。
 
+### 5.1 固定版本的 coding-agent CLI
+
+镜像在独立 Node stage 中安装精确的 `CODEX_CLI_VERSION` 和 `CLAUDE_CODE_VERSION`
+构建参数（当前为 `0.145.0` 和 `2.1.220`）。构建时会运行两个版本命令，只把 launcher
+和 package 目录复制到 runtime stage，并设置 `DISABLE_AUTOUPDATER=1`。升级属于镜像变更，
+不是运行中容器里的自更新：
+
+```bash
+CODEX_CLI_VERSION=0.145.0 CLAUDE_CODE_VERSION=2.1.220 docker compose build dashboard scheduler
+docker compose up -d --force-recreate dashboard scheduler
+```
+
+部署自动化不要使用 `latest`。重建镜像或重建服务不会移除登录，因为认证在具名卷里，
+不在镜像里。
+
 ---
 
 ## 6. 构建 → 运行的生命周期
@@ -185,7 +216,8 @@ markdown。公开的微信公众号文章是服务端渲染的、不需要登录
    阶段）Bun。
 2. 先拷依赖清单（`pyproject.toml`、`uv.lock`、dashboard 的 `package.json` + lockfile），
    在拷源码*之前*执行 `uv sync` 和 `pnpm install` —— 为了层缓存。
-3. 在 builder 阶段做钉住版本的 clone 并构建 gbrain（Bun）和 opencli（npm）。
+3. 在 builder 阶段做钉住版本的 clone 并构建 gbrain（Bun）和 opencli（npm），同时安装
+   精确版本的 Codex CLI 和 Claude Code CLI。
 4. 拷应用源码（next-signal 的 `src/`、`configs/`、`prompts/`、`scripts/`、dashboard 应用），
    然后 `pnpm build` 构建 dashboard。
 5. 运行时阶段只拷产物。**绝不烘焙** `.env`、密钥、`state/`、`.venv`、宿主机的
@@ -244,19 +276,51 @@ markdown。公开的微信公众号文章是服务端渲染的、不需要登录
    ```
 4. 等 `bootstrap` 跑完（一次性任务，依赖 Postgres 健康）—— `dashboard` 会自动等它。
 5. 打开 <http://localhost:3000> 访问 dashboard。
-6. `docker compose down` 停止（保留 `pgdata`/`pstate` 卷）；只有想清空它们时才加 `-v`。
+6. 对要使用的 provider，各执行一次 **设置 → Codex CLI / Claude Code CLI → 连接**；
+   在官方页面完成登录，Claude 要求时把授权码粘贴回 Dashboard。显式保存该 CLI 的模型和
+   强度（Codex 还要保存速度），再选择 production 引擎。
+7. `docker compose down` 停止（保留所有具名卷）；只有明确要清空数据库、应用 state
+   和两个 CLI 登录时才加 `-v`。
 
 - **服务：** `postgres`（pgvector）、`bootstrap`（一次性 schema）、`dashboard`
-  （`next-signal dashboard --start`）。
+  （`next-signal dashboard --start`）和 `scheduler`（`next-signal schedule`）。
 - **配置：** `.env` 经 `env_file` 注入（绝不烘焙进镜像）；`DATABASE_URL` 和容器内的
-  wiki/state 路径在 compose 的 `environment:` 块里覆盖。peer 工具的 ref 是构建参数
-  （`GBRAIN_REF` / `OPENCLI_REF`）。
-- **持久化：** 具名卷 `pgdata`（Postgres —— 包括 `gbrain` 数据库）和 `pstate`
-  （`~/.next-signal` state + gbrain 的 `config.json`）。`docker compose down` 会保留
-  它们；加 `-v` 才清空。
+  wiki/state 路径在 compose 的 `environment:` 块里覆盖。peer 工具的 ref 和 coding-agent
+  版本都是构建参数（`GBRAIN_REF`、`OPENCLI_REF`、`CODEX_CLI_VERSION`、
+  `CLAUDE_CODE_VERSION`）。
+- **持久化：** 具名卷 `pgdata`（Postgres —— 包括 `gbrain` 数据库）、`pstate`
+  （`~/.next-signal` state + gbrain 的 `config.json`）、`codex_auth`（`/root/.codex`）
+  和 `claude_auth`（`/root/.claude`）。`docker compose down` 会保留它们；`down -v`
+  会把四个都清空。
 
-**本地 LLM（可选）。** 默认走云（OMLX 未设 → DeepSeek/Claude 回落）。要启用 OMLX
-embedder —— info-radar `analyze` 需要它 —— 在**宿主机**上跑一个 OMLX server，然后
+### coding-agent CLI 登录
+
+Dashboard 登录端点刻意不是 shell。浏览器只能选择 `codex` 或 `claude`；服务端映射成
+`codex login --device-auth` 或 `claude auth login --claudeai`，在有边界的 PTY 中运行，
+最多接收一行授权码，并且只允许跳转到 provider 域名白名单内的 HTTPS URL。短期 transcript
+只存在进程内存中，不写入 `/state` 或应用日志。
+
+Compose 默认把端口绑在 `127.0.0.1`，因为登录和退出会改变凭据状态。确实要远程访问时，
+先放到带认证的 HTTPS 反向代理后面，再显式设置 `DASHBOARD_BIND_ADDRESS`；不要直接把端口
+无认证地暴露出去。
+
+UI 无法完成流程时，可以在 Dashboard 容器 terminal 中使用同一认证卷：
+
+```bash
+docker compose exec dashboard codex login --device-auth
+docker compose exec dashboard claude auth login --claudeai
+docker compose exec dashboard next-signal coding-agent auth-status codex
+docker compose exec dashboard next-signal coding-agent auth-status claude
+```
+
+重建镜像和 `docker compose down` 都保留登录。移除单个登录时优先在设置中点**断开连接**，
+也可以执行 provider 的 logout 命令。即使 CLI 损坏也要删除凭据文件时，先停止服务，再只删
+对应的具名卷；除非数据库和 next-signal state 也准备丢掉，否则不要用
+`docker compose down -v`。
+
+**本地 LLM（可选）。** 纯云部署应在设置中选择 DeepSeek 或已登录的 CLI（也可以把它设为
+首次响应前的回落）。要启用 OMLX 引擎和 embedder——info-radar `analyze` 的语义去重需要
+后者——在**宿主机**上跑一个 OMLX server，然后
 在 `.env` 里加：`OMLX_BASE_URL=http://host.docker.internal:<port>/v1`。
 `host.docker.internal` 已经通过 `extra_hosts: host-gateway` 为 Linux 接好。
 
@@ -270,10 +334,25 @@ embedder —— info-radar `analyze` 需要它 —— 在**宿主机**上跑一�
 
 ## 8. 纯云容器特有的注意事项
 
-1. **embedder 没有云端回落。** `next_signal.core.models.get_embedder` 只支持 OMLX。所以在
-   纯容器环境里 info-radar `analyze` 的 dedup 会**失败**（它需要 `Qwen3-Embedding`
-   算相似度）。对话、agent 和 dashboard 页面都正常。要启用那条 pipeline，通过
-   `OMLX_BASE_URL=http://host.docker.internal:<port>/v1` 暴露一个宿主机/远程 OMLX 端点。
+1. **embedder 可选，但它自己永远不回落。** 默认走 OMLX，所以在纯容器环境里
+   info-radar `analyze` 的 dedup 在你动手之前会**失败**——那时每个条目都会被当成新的。
+   对话、agent 和 dashboard 页面都正常。两条出路：
+
+   - 通过 `OMLX_BASE_URL=http://host.docker.internal:<port>/v1` 暴露一个宿主机/远程
+     OMLX 端点；或者
+   - 打开 **设置 → 向量嵌入**，选 OpenAI（需要 `OPENAI_API_KEY`）或者你自己的
+     OpenAI 兼容端点。
+
+   选云端 embedder 有两个后果，值得刻意决定一下。每条留下来的条目，它的分析摘要都会
+   **发给那个服务商**——而 OMLX 同时承担两半时这些文本根本不出本机——并且每个条目都
+   **可能计费**，包括没人盯着的无人值守定时运行。embedder 之间刻意**没有**自动回落：
+   悄悄换一个就等于换了向量空间，会把当前 provider 的 dedup 记忆搁置掉，所以失败保持
+   loud，条目按 novel 处理。
+
+   凭据来自进程环境，不在状态文件里。改 `.env` **不会**影响已经在跑的容器：先重建服务
+   （`docker compose up -d --force-recreate dashboard scheduler`）再指望新值存在。
+   `docker compose exec dashboard next-signal doctor` 会报告解析出来的 embedder 身份以及
+   它的变量在不在，全程不发模型请求。
 2. **`next-signal doctor` 只要有任何一项失败就退出非零** —— 纯云环境下把 OMLX / Anthropic
    的 ✗ 当作预期，别让它阻断启动。
 3. **密钥不进镜像。** `.env` 目前存的是真实 key；运行时挂载，绝不 `COPY` 进某一层，
@@ -323,5 +402,5 @@ embedder —— info-radar `analyze` 需要它 —— 在**宿主机**上跑一�
 两个容器：`postgres`（`pgvector/pgvector:pg16`）+ 一个 `app` 镜像，打包了
 Python(uv)+next-signal、Node(pnpm)+dashboard，外加 gbrain（Bun 构建）和 opencli（纯 HTTP），
 两者都在构建时从上游做钉住版本的 clone。宿主机只保留 Docker 运行时、挂载的文件
-（`.env`、wiki、state），以及 —— *仅当你选择启用 embedding 时* —— 一个宿主机
-OMLX server。其余一切要么在容器里，要么作为外部云 API 被访问。
+（`.env`、wiki、state），以及 —— *仅当你想用本地 embedding 而不是云端的时候* —— 一个
+宿主机 OMLX server。其余一切要么在容器里，要么作为外部云 API 被访问。

@@ -1,0 +1,53 @@
+# External repository-task workers. Provider binaries and authentication are
+# resolved only by `next-signal coding-agent ...`; unrelated startup is unaffected.
+allowed_roots:
+  - .
+default_profile: review
+
+providers:
+  codex:
+    enabled: true
+    timeout_seconds: 1800
+    max_event_bytes: 262144
+    max_stderr_chars: 8000
+    terminate_grace_seconds: 3
+    inherit_env: []
+    inherit_user_config: true
+  claude:
+    enabled: true
+    timeout_seconds: 1800
+    max_event_bytes: 262144
+    max_stderr_chars: 8000
+    terminate_grace_seconds: 3
+    inherit_env: []
+    # Set true only for API-key automation. Claude bare mode does not use
+    # subscription OAuth or load host hooks/plugins/CLAUDE.md.
+    bare: false
+
+profiles:
+  # Production LLM stages run in a fresh empty directory and cannot inspect
+  # repository/host files or invoke provider tools.
+  stage:
+    codex_sandbox: read-only
+    claude_permission_mode: dontAsk
+    claude_allowed_tools: []
+    tool_access: none
+  review:
+    codex_sandbox: read-only
+    claude_permission_mode: dontAsk
+    claude_allowed_tools:
+      - Read
+      - Glob
+      - Grep
+  edit:
+    codex_sandbox: workspace-write
+    claude_permission_mode: dontAsk
+    claude_allowed_tools:
+      - Read
+      - Glob
+      - Grep
+      - Edit
+      - "Bash(git diff *)"
+      - "Bash(git status *)"
+      - "Bash(uv run pytest *)"
+      - "Bash(uv run ruff *)"

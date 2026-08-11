@@ -3,7 +3,6 @@
 ## Purpose
 
 The read side of the knowledge base. Ingest files a doc and nothing ever brings it back; this layer resurfaces captured wiki docs along a fixed Ebbinghaus schedule so material decays out of memory less than it otherwise would. One `knowledge_reviews` row per doc, keyed by the wiki-relative `doc_path` (the same identity the ingest manifest uses), anchored to the doc's `captured_at`, with stages at 1, 3, 7, 15, 30, 60, and 120 days. The curve is deliberately fixed — no recall rating, no ease factor; "seen" is a single acknowledgement. Seeding and advancing both fast-forward past stages that have already elapsed, so enrolling an existing corpus (or reviewing late) never produces a backlog of overdue cards, and past the final stage a doc retires. Reconciliation against the filesystem is an explicit CLI step that refuses to act on a missing or empty wiki rather than reading "no files" as "everything deleted". The card body reuses the doc's own frontmatter `summary`, so the layer makes no LLM call and stores no generated text. It owns `knowledge_reviews` and reads wiki frontmatter; it never writes a wiki file.
-
 ## Requirements
 ### Requirement: Review state lives in Postgres, never in the wiki files
 
@@ -58,7 +57,7 @@ Advancing beyond the 120-day stage SHALL set `next_due_at` to `NULL`. A row with
 
 ### Requirement: Reconciliation is explicit and refuses to act on an empty wiki
 
-`paca knowledge review` SHALL walk the wiki, insert seeded rows for docs with no existing row, and delete rows whose `doc_path` no longer exists on disk. Reconciliation SHALL be idempotent. If the wiki root does not exist, is unreadable, or contains no markdown documents, it SHALL abort with a `RuntimeError` **without deleting any rows** — an empty tree is treated as a misconfiguration, not as evidence that every doc was deleted. Review state MUST NOT be written during dashboard page rendering.
+`next-signal knowledge review` SHALL walk the wiki, insert seeded rows for docs with no existing row, and delete rows whose `doc_path` no longer exists on disk. Reconciliation SHALL be idempotent. If the wiki root does not exist, is unreadable, or contains no markdown documents, it SHALL abort with a `RuntimeError` **without deleting any rows** — an empty tree is treated as a misconfiguration, not as evidence that every doc was deleted. Review state MUST NOT be written during dashboard page rendering.
 
 #### Scenario: sync enrolls only new docs
 
@@ -72,7 +71,7 @@ Advancing beyond the 120-day stage SHALL set `next_due_at` to `NULL`. A row with
 
 #### Scenario: missing wiki root does not wipe state
 
-- **WHEN** sync runs while `PACA_WIKI_DIR` points at a missing or empty directory
+- **WHEN** sync runs while `WIKI_DIR` points at a missing or empty directory
 - **THEN** it raises `RuntimeError` and no `knowledge_reviews` row is deleted
 
 #### Scenario: deleted doc is unenrolled
@@ -94,15 +93,6 @@ The review card SHALL present the doc's existing frontmatter `summary` rather th
 - **WHEN** a due doc has no frontmatter `summary`
 - **THEN** the card renders the first prose paragraph of the body, or title and schedule alone if the body is empty
 
-### Requirement: `paca knowledge review` reconciles the wiki
-
-`paca knowledge review` SHALL reconcile the wiki against `knowledge_reviews` — enrolling docs with no row (seeded per the fast-forward rule) and unenrolling rows whose file is gone — and print the number of docs enrolled, unenrolled, and currently due. It takes no flags and makes no LLM call.
-
-#### Scenario: review reconciles and reports counts
-
-- **WHEN** the operator runs `paca knowledge review` against a wiki with new and removed docs
-- **THEN** new docs are enrolled, removed docs are unenrolled, and the command prints the enrolled, unenrolled, and due counts
-
 ### Requirement: Due selection is local-day based and ordered by urgency
 
 A doc SHALL be due when `next_due_at IS NOT NULL AND next_due_at <= <today>`, where today is the current date in the configured radar timezone, so review and radar agree on what "today" means. Due docs SHALL be ordered by `next_due_at` ascending, ties broken by `captured_at` ascending, so the longest-overdue material surfaces first.
@@ -116,3 +106,13 @@ A doc SHALL be due when `next_due_at IS NOT NULL AND next_due_at <= <today>`, wh
 
 - **WHEN** a doc's `next_due_at` is tomorrow
 - **THEN** it is not selected as due today
+
+### Requirement: `next-signal knowledge review` reconciles the wiki
+
+`next-signal knowledge review` SHALL reconcile the wiki against `knowledge_reviews` — enrolling docs with no row (seeded per the fast-forward rule) and unenrolling rows whose file is gone — and print the number of docs enrolled, unenrolled, and currently due. It takes no flags and makes no LLM call.
+
+#### Scenario: review reconciles and reports counts
+
+- **WHEN** the operator runs `next-signal knowledge review` against a wiki with new and removed docs
+- **THEN** new docs are enrolled, removed docs are unenrolled, and the command prints the enrolled, unenrolled, and due counts
+

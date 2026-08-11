@@ -8,7 +8,7 @@ agno owns sessions, memory, knowledge, and traces. We own the info-radar busines
 ## Requirements
 ### Requirement: agno tables go through the singleton `PostgresDb`
 
-Code that touches agno-managed tables (sessions, memory, knowledge, traces) SHALL acquire the database via `paca.core.db.get_db()`. Direct construction of `agno.db.PostgresDb` is prohibited.
+Code that touches agno-managed tables (sessions, memory, knowledge, traces) SHALL acquire the database via `next_signal.core.db.get_db()`. Direct construction of `agno.db.PostgresDb` is prohibited.
 
 #### Scenario: agno tables are auto-provisioned
 
@@ -17,7 +17,7 @@ Code that touches agno-managed tables (sessions, memory, knowledge, traces) SHAL
 
 ### Requirement: Business tables use raw psycopg connections
 
-Code that touches our business tables (`radar_items`, `radar_analyses`, `radar_pushed_topics`, `radar_recaps`, `knowledge_reviews`) SHALL use short-lived `psycopg.connect(database_url())` connections. SQLAlchemy or async engines are not used for these tables.
+Code that touches our business tables (`radar_items`, `radar_analyses`, `radar_pushed_topics`, `radar_recaps`, `knowledge_reviews`, `schedule_state`) SHALL use short-lived `psycopg.connect(database_url())` connections. SQLAlchemy or async engines are not used for these tables.
 
 #### Scenario: info-radar collector upserts radar_items
 
@@ -34,9 +34,14 @@ Code that touches our business tables (`radar_items`, `radar_analyses`, `radar_p
 - **WHEN** review reconciliation enrolls docs that have no review row
 - **THEN** it opens a synchronous psycopg connection, inserts the seeded rows, and closes the connection
 
+#### Scenario: scheduler advances a slot
+
+- **WHEN** the scheduler seeds or advances a job's `last_slot_at`
+- **THEN** it opens a synchronous psycopg connection, runs `INSERT ... ON CONFLICT (job) DO UPDATE`, and closes the connection
+
 ### Requirement: SQLAlchemy URL adapter rewrites scheme
 
-`paca.core.db.database_url(for_sqlalchemy=True)` SHALL rewrite the URL scheme to use the psycopg v3 driver (`postgresql+psycopg://`).
+`next_signal.core.db.database_url(for_sqlalchemy=True)` SHALL rewrite the URL scheme to use the psycopg v3 driver (`postgresql+psycopg://`).
 
 #### Scenario: agno consumes the SQLAlchemy URL
 
@@ -54,12 +59,60 @@ Code that touches our business tables (`radar_items`, `radar_analyses`, `radar_p
 
 ### Requirement: `radar_pushed_topics` table is provisioned by bootstrap
 
-`scripts/bootstrap_db.py` SHALL create `radar_pushed_topics` with columns `id BIGSERIAL PRIMARY KEY`, `topic_summary TEXT NOT NULL`, `embedding vector(1024) NOT NULL`, `item_ids JSONB NOT NULL`, `first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()`, `last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()`. It SHALL also create an `ivfflat (embedding vector_cosine_ops)` index (`lists = 100`) for the dedup gate's approximate-nearest-neighbor lookup. The embedding dimension is fixed at 1024 to match the default `Qwen3-Embedding-0.6B-8bit` embedder profile; swapping embedders requires a column migration.
+`scripts/bootstrap_db.py` SHALL create `radar_pushed_topics` with columns
+`id BIGSERIAL PRIMARY KEY`, `topic_summary TEXT NOT NULL`,
+`embedding vector(1024) NOT NULL`, `embedder TEXT NOT NULL`,
+`item_ids JSONB NOT NULL`, `first_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
+and `last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()`.
 
-#### Scenario: fresh bootstrap creates the topics table
+`embedder` holds the stable vector-space identity captured in the
+`core-embedding` resolved snapshot. Cosine search SHALL first restrict rows to
+one identity. The fixed vector width is a contract enforced by `core-embedding`,
+so provider switches do not alter the vector column.
 
-- **WHEN** the operator runs `uv run python scripts/bootstrap_db.py` against an empty database
-- **THEN** `radar_pushed_topics` exists with the documented columns and the ivfflat cosine index
+The table's former mixed-space IVFFlat index SHALL NOT be provisioned. Bootstrap
+SHALL run `DROP INDEX IF EXISTS radar_pushed_topics_embedding_idx` for upgraded
+databases and SHALL create `radar_pushed_topics_embedder_idx` on `embedder`.
+At the table's current scale, the dedup gate performs exact cosine ordering over
+the selected identity's rows; an approximate index spanning multiple vector
+spaces would let unrelated rows affect candidate generation and recall.
+
+Because the table predates provenance and the historical model was
+operator-configurable, bootstrap SHALL add the column idempotently with a
+temporary `legacy:unknown` default, then drop that default. Existing rows remain
+stored but no active provider searches them automatically. Bootstrap SHALL NOT
+guess that they came from the shipped default model. A future insert omitting
+`embedder` SHALL fail loudly.
+
+`next_signal.core.db.BUSINESS_TABLE_COLUMNS["radar_pushed_topics"]` SHALL include
+`embedder`, so doctor reports a database that has not run the migration.
+
+#### Scenario: fresh bootstrap creates provider-scoped search support
+
+- **WHEN** bootstrap runs against an empty database
+- **THEN** the table includes `embedder`, the B-tree embedder index exists, and
+  no mixed-space IVFFlat index exists
+
+#### Scenario: existing history is preserved without guessed provenance
+
+- **WHEN** bootstrap runs against a table that predates `embedder`
+- **THEN** every historical row reads `legacy:unknown`, no row is deleted or
+  rewritten, and the column carries no default afterwards
+
+#### Scenario: an insert omitting provenance fails
+
+- **WHEN** code inserts a topic without `embedder`
+- **THEN** the NOT NULL constraint fails rather than mislabelling its vector
+
+#### Scenario: bootstrap removes the old mixed-space index
+
+- **WHEN** an upgraded database still has `radar_pushed_topics_embedding_idx`
+- **THEN** bootstrap drops it idempotently and retains the vector data
+
+#### Scenario: an un-migrated database is reported
+
+- **WHEN** current code sees a live table without `embedder`
+- **THEN** doctor reports the missing column before the pipeline runs
 
 ### Requirement: `radar_analyses` table is provisioned by bootstrap
 
@@ -112,7 +165,6 @@ The table SHALL hold no foreign keys — the wiki is a filesystem tree, not a ta
 - **WHEN** `scripts/bootstrap_db.py` runs against a database that already has `knowledge_reviews`
 - **THEN** the statement is a no-op and existing review rows and stages are preserved
 
-
 ### Requirement: `radar_eval_*` tables are development-only and not bootstrap-provisioned
 
 `scripts/radar_eval.py` SHALL create its own three tables — `radar_eval_cases`, `radar_eval_runs`, `radar_eval_results` — via its `init` subcommand. `scripts/bootstrap_db.py` MUST NOT create them. They exist to measure prompt changes offline and carry no runtime behaviour, so a production deployment has no reason to hold them.
@@ -139,3 +191,31 @@ Like the business tables, they SHALL be reached through short-lived `psycopg.con
 
 - **WHEN** the 30-day sweep deletes a `radar_items` row referenced by a `radar_eval_cases` row
 - **THEN** the eval case row is deleted along with it via `ON DELETE CASCADE`
+
+### Requirement: `schedule_state` table is provisioned by bootstrap
+
+`scripts/bootstrap_db.py` SHALL create `schedule_state` with columns `job TEXT PRIMARY KEY`, `last_slot_at TIMESTAMPTZ NOT NULL`, `last_run_at TIMESTAMPTZ`, `last_status TEXT` (`'ok'` | `'failed'` | `'running'` | `NULL`), and `last_error TEXT`. One row exists per scheduled job; the wall-clock scheduler ships a single job, `radar`.
+
+`last_status` SHALL remain unconstrained text rather than an enum or a CHECK: `'running'` is written before a chain that can last an hour and overwritten when it ends, so the set of values is a scheduler concern that has already grown once. Readers are specified in `core-schedule` and `dashboard-shell`, not in the DDL.
+
+The table carries no foreign keys and no indexes beyond the primary key: it holds at most a handful of rows and is only ever read by primary key or in full.
+
+`last_slot_at` records the most recent scheduled instant already handled, not when execution occurred — the two differ whenever a run is caught up or the process was down. The distinction is normative; storing an execution timestamp here would break the missed-run model specified in `core-schedule`.
+
+`schedule_state` SHALL be registered in `next_signal.core.db`'s business-table column contract, so `next-signal doctor` reports a drifted or missing table.
+
+#### Scenario: bootstrap creates the table
+
+- **WHEN** `scripts/bootstrap_db.py` runs against a fresh database
+- **THEN** `schedule_state` exists with the documented columns and its primary key on `job`
+
+#### Scenario: bootstrap is idempotent
+
+- **WHEN** `scripts/bootstrap_db.py` runs against a database that already has `schedule_state`
+- **THEN** it completes without error and leaves existing rows untouched
+
+#### Scenario: doctor reports a missing table
+
+- **WHEN** `next-signal doctor` runs against a database where `schedule_state` is absent
+- **THEN** it reports the table among the unsatisfied business-table columns rather than passing silently
+

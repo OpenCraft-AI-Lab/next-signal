@@ -5,7 +5,7 @@
 ## 解决什么
 
 收集外部信息流并过滤到 signal。当前实例是 **info-radar**：周期性拉
-Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
+Folo / source CLI，写 `radar_items`；随后两层 selected-engine analysis 按
 `configs/info_radar/goals.yaml` 做 relevance、impact scoring 和 dedup，
 写 `radar_analyses` / `radar_pushed_topics`，dashboard `/radar` 负责阅读和手动触发。
 
@@ -19,12 +19,17 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 
 ## Agents
 
-| agent | 模型 profile | 用途 |
+| agent | YAML baseline profile | 用途 |
 |---|---|---|
 | `radar_tier1_filter` | local_structured | batched Tier-1 relevance filter，按 goals 决定 keep/drop |
 | `radar_tier2_impact` | local_structured | per-item full-content impact summary / score / tags |
 | `radar_dedup_judge` | local_structured | pgvector candidate 后的 LLM duplicate/novel 判定 |
 | `radar_recap` | local_structured | 把一个日期区间的 kept item 聚成 3-5 条带引用的主线叙述 |
+
+这些 profile 仍是 OMLX/DeepSeek baseline。production 调用统一走
+`next_signal.agents.stage.run_stage`；`engine.json` 在每个 analysis/recap job 开始时选择
+OMLX、DeepSeek、Codex CLI 或 Claude Code CLI。Tier 1、Tier 2、dedup judge 和 recap 在
+第一次成功响应后不会混用引擎。
 
 ## 工具
 
@@ -49,7 +54,8 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
 
 - info-radar raw items：Postgres `radar_items`
 - info-radar analyses：Postgres `radar_analyses`
-- info-radar dedup memory：Postgres `radar_pushed_topics`（pgvector 1024-dim）
+- info-radar dedup memory：Postgres `radar_pushed_topics`（pgvector 1024-dim，
+  每行带一个 `embedder` 身份）
 - info-radar recaps：Postgres `radar_recaps`，一行对应一个
   `(since, until, min_score, novel_only)`
 - info-radar goals：`configs/info_radar/goals.yaml`（dashboard `/goals` 可编辑）
@@ -84,6 +90,17 @@ Folo / source CLI，写 `radar_items`；随后两层本地 LLM analysis 按
   时如实标注实测掉 5.3 分，因为按证据分档的 rubric 会把"没有细节"读成"没有证据"。
   **两者必须一起上。**
 - Dedup embedding 失败时 conservatively 走 novel，不静默丢 item。
+- **一条向量只跟同一个 embedder 产出的向量比较。** 每个 item 解析出一个 embedder
+  快照，它的向量空间身份写进 `radar_pushed_topics.embedder`，检索在算任何距离之前先按
+  这个身份收窄。持久化时带的身份是嵌入请求发出*之前*就捕获的那个，所以设置在处理途中
+  被改也不会把这一行标错。
+- 检索是**精确**的，不是近似的。原来那个全表 IVFFlat 索引已经删掉：近似索引是在候选
+  生成之后才过滤的，两个向量空间共用质心会互相拉低召回。在这张表几百到几千行的规模上，
+  精确扫一个身份的子集很便宜且召回完美；`embedder` 上的 B-tree 索引负责收窄。
+- 换 embedder 是把上一个身份的记忆**搁置**，而不是翻译过去——在新身份下重新积累之前，
+  gate 会把见过的主题报成 novel；切回去那些行原样恢复，不需要重新嵌入。这个列出现之前
+  写下的行标记为 `legacy:unknown` 并永久搁置，除非操作者明确重新打标：
+  `embedders.local.model_id` 一直是可改的，数据库里没有任何东西能证明它们出自哪个模型。
 - recap 的身份是 `(since, until, min_score, novel_only)`。重复请求走缓存；
   regenerate 是原地 upsert，不追加新行。
 - recap 区间按 radar 时区的 `analyzed_at` 取，两端闭区间——和 day group 同一套
@@ -132,14 +149,17 @@ tier-2 调用、同一个 policy。解析出的语言来自 dashboard 的实时�
 dedup gate 嵌入的就是 tier-2 的 `summary`,所以被嵌入的文本现在也跟着
 `global` 语言 policy 走。`radar_pushed_topics` 从不被清理——没有任何地方 DELETE 它——
 所以它会永久保留 32 条输出语言改动之前冻结的英文 topic,和 210 条中文 topic 混在一起。
-于是英文文章的中文 summary,要去和同一件事的英文向量做 ANN 比对。
+于是英文文章的中文 summary,要去和同一件事的英文向量做比对。
 
 拿 5 对这样的组合实测(存量英文 topic vs 同一条目现在产出的中文 summary):余弦距离
 0.11–0.26,均值 0.195,阈值 0.40。全部通过且有余量,跨语言重复仍然抓得住。
 
 两点推论:余量真实但有限——谁要把 `DEFAULT_THRESHOLD` 收到 ~0.30 以下,得知道空间里有
 落在 0.26 的跨语言对。以及 `radar_dedup_judge` 现在会看到中文 `new_summary` 配可能是英文的
-候选;它豁免语言规则(`reason` 既不入库也不渲染),而且只处理已经过了 ANN 闸门的候选。
+候选;它豁免语言规则(`reason` 既不入库也不渲染),而且只处理已经过了距离闸门的候选。
+
+以上测量都是**在同一个向量空间之内**的。它们对跨 embedder 的距离什么都没说——这正是
+检索要按身份收窄、而不是指望阈值把它们分开的原因。
 
 ## 调优与评测
 
@@ -150,12 +170,14 @@ dedup gate 嵌入的就是 tier-2 的 `summary`,所以被嵌入的文本现在�
 它写的是共享的生产状态,且不影响 verdict 与 score。
 
 正文在 `load` 时快照冻结并在每次 run 中重放,所以变体之间的差异可归因于提示词,
-而不是 folocli 当天答不答得上来。每次 run 记录 `prompt_digest`——两个提示词加
-`goals.yaml` 的哈希——任何一组数字都能追溯到产生它的那份文本。
+而不是 folocli 当天答不答得上来。每次 run 记录 `prompt_digest`——两个提示词、
+`goals.yaml` 和 frozen engine provenance 的哈希——并在 notes 记录实际 engine/model/effort，
+避免静默比较不同模型配置。
 
 `scripts/lang_probe.py` 是它的姊妹台,测的是输出**语言**而不是分数。它回放同样的 stage
-外加 `knowledge_frontmatter`,只往 `NEXT_SIGNAL_AGENT_TMP_DIR/lang-probe/` 写 JSON,报告有多少次
-生成落在了错误的语言上。那里重复次数是必须的:frontmatter 的缺陷是**不确定性**的——同一篇
+外加 `knowledge_frontmatter`,只往 `NEXT_SIGNAL_AGENT_TMP_DIR/lang-probe/` 写 JSON,记录实际
+engine/model 并报告有多少次生成落在了错误的语言上。所有 probe agent 都走同一个 production
+stage adapter 和 job-level affinity。那里重复次数是必须的:frontmatter 的缺陷是**不确定性**的——同一篇
 文章在不同次运行之间会换语言——跑一遍很可能正好没撞上。
 
 有两道保险,因为这两种失败都真实发生过:探针会断言构建出来的 agent 的 composed instructions
@@ -197,8 +219,11 @@ holdout 集由三个 agent 标注,它们只读 `goals.yaml`,被明确禁止读 `
 [`openspec/specs/dashboard-radar-reader/`](../../../openspec/specs/dashboard-radar-reader/)。
 
 当前状态：info-radar pull / analysis / recap / dashboard reader / goals editor / Folo
-subscriptions table 已就位。没有后台调度——pull 和 analysis **都靠手动触发**：`next-signal info-radar pull|analyze`、
-`next-signal run-workflow <name>` 或 dashboard `/radar` 的 Pull + Analyze。
+subscriptions table 已就位。pull 和 analysis 可以手动触发——`next-signal info-radar pull|analyze`、
+`next-signal run-workflow <name>` 或 dashboard `/radar` 的 Pull + Analyze——也可以交给墙钟调度器，
+在每个配置的本地时间点按顺序跑这两步（见[运维](../operations.md#无人值守运行)）。cadence 不属于
+契约的一部分：`seen_at` 才是任意频率重跑都幂等的原因，所以加一个无人值守的触发器并不需要改
+pipeline 本身。
 
 dashboard `/radar` 的 `Pull + Analyze` 现在显示**实时 analyze 进度**：action 在 pull 后把
 未分析条目数（denominator）连同 `analyzeRunning` 标记写进

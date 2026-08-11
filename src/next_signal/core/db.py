@@ -33,7 +33,8 @@ BUSINESS_TABLE_COLUMNS: dict[str, frozenset[str]] = {
          "dedup_match_id", "pushed_at", "analyzed_at"}
     ),
     "radar_pushed_topics": frozenset(
-        {"id", "topic_summary", "embedding", "item_ids", "first_seen_at", "last_seen_at"}
+        {"id", "topic_summary", "embedding", "embedder", "item_ids", "first_seen_at",
+         "last_seen_at"}
     ),
     "radar_recaps": frozenset(
         {"id", "since", "until", "min_score", "novel_only", "status", "headline",
@@ -43,6 +44,9 @@ BUSINESS_TABLE_COLUMNS: dict[str, frozenset[str]] = {
     "knowledge_reviews": frozenset(
         {"id", "doc_path", "captured_at", "stage", "next_due_at", "last_reviewed_at",
          "created_at"}
+    ),
+    "schedule_state": frozenset(
+        {"job", "last_slot_at", "last_run_at", "last_status", "last_error"}
     ),
 }
 

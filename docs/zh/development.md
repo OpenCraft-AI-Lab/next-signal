@@ -182,6 +182,15 @@ factory: next_signal.teams.<team_name>:build
 - YAML `name:` 与 file stem 对齐。
 - 不在 YAML 放 secret；不在多个模块重复解析 `.env`。
 
+**运行期间操作者会改的设置**是例外：它们以 JSON 形式放在 `~/.next-signal/`，不进
+`configs/`，因为容器里的 repo 树是烤进镜像的。完整清单见
+[architecture.md](./architecture.md#运行时状态文件)。新增一个时守住三条既有规则：
+
+- **call time 读**，绝不 import time 读——文件缺失不能搞挂 startup，改完也不该需要重启。
+- Python 侧遇到坏文件直接抛；dashboard 侧回落并记日志，因为它要渲染出用来修这个文件的面板。
+- **布尔值要校验，不要强转。** `bool("false")` 是 `True`，而这些文件是给人手改的。
+  字段缺失可以有默认值，字段存在但类型不对就是错误。
+
 ## 测试
 
 ```bash
@@ -194,6 +203,17 @@ uv run pytest -q
 - 新增工具 / 集成至少配一个 smoke test。
 - 改注册表跑 `tests/test_registry.py`；改 `tools/_json_extract.py` 跑
   `tests/test_json_extract.py`。
+- `tests/test_scheduler.py` 跑在**真 Postgres** 上，没有 `DATABASE_URL` 就静默跳过。
+  compose 不对外发布数据库端口，所以要指向一个一次性实例并先建好 schema——否则一片
+  绿其实什么都没验：
+
+  ```bash
+  docker run -d --rm --name ns-test-pg -e POSTGRES_USER=next_signal \
+    -e POSTGRES_PASSWORD=next_signal -e POSTGRES_DB=next_signal \
+    -p 55432:5432 pgvector/pgvector:pg16
+  export DATABASE_URL=postgresql://next_signal:next_signal@127.0.0.1:55432/next_signal
+  uv run python scripts/bootstrap_db.py && uv run pytest tests/test_scheduler.py -q
+  ```
 
 任何**运行时 / 端到端**验证（跑 CLI、dashboard、完整流程、连 Postgres / gbrain /
 folocli）都走 Docker，不在宿主机裸跑，让验证环境和真正 ship 的一致：

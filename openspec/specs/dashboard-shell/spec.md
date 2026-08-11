@@ -61,16 +61,18 @@ The dashboard SHALL wrap the app in `<ThemeProvider attribute="data-theme" defau
 
 ### Requirement: Global app shell
 
-The dashboard SHALL render a global app shell — top navigation bar (`Radar`, `Knowledge`, `Goals`, `Subscriptions`, `Design System` entries; `Goals` and `Subscriptions` MAY be placeholder links until their pages land), a brand block (`SignalMark` on the signal gradient tile + `next-signal` wordmark + a `localhost:host` env chip), a theme toggle, and a `sonner` `<Toaster />` root — that is shared by every page under `app/`.
+The dashboard SHALL render a global app shell — top navigation bar (`Radar`, `Knowledge`, `Goals`, `Subscriptions`, `Design System` entries; `Goals` and `Subscriptions` MAY be placeholder links until their pages land), a brand block (`SignalMark` on the signal gradient tile + `next-signal` wordmark), a theme toggle, a settings entry, and a `sonner` `<Toaster />` root — that is shared by every page under `app/`.
 
 The `Radar` and `Knowledge` nav entries SHALL use their brand marks at `variant="nav"`. The remaining entries have no brand mark and SHALL use lucide icons; a brand glyph in the nav signifies a product with its own identity, and SHALL NOT be introduced for sections that lack one.
 
-This requirement governs the visible brand layer only. The `paca` name SHALL remain unchanged as the Python package, the CLI binary, the `PACA_*` environment prefix, and the subprocess launcher symbols.
+The settings entry SHALL sit in the nav's tools cluster rather than among the page links, and SHALL be a link to `/settings` that marks itself as the current page while that route is active. It is chrome that follows the operator between products rather than being one of them.
+
+The shell SHALL NOT carry a host or environment chip. It was the shell's only client-resolved state, requiring a mount effect to read `window.location.host` on every page, and it reported to the operator of a loopback-bound dashboard the address they had just typed.
 
 #### Scenario: every page renders inside the shell
 
 - **WHEN** the operator visits any `app/<page>` route
-- **THEN** the top nav, the brand block, the theme toggle, and the toast root are present in the rendered HTML
+- **THEN** the top nav, the brand block, the theme toggle, the settings entry, and the toast root are present in the rendered HTML
 
 #### Scenario: the shell carries the next-signal wordmark
 
@@ -86,6 +88,11 @@ This requirement governs the visible brand layer only. The `paca` name SHALL rem
 
 - **WHEN** the operator clicks the theme toggle and reloads
 - **THEN** the previously selected theme (light / dark / system) is restored without a flash of incorrect theme
+
+#### Scenario: the settings entry navigates rather than opening a panel
+
+- **WHEN** the operator activates the nav's settings control
+- **THEN** the browser navigates to `/settings`, and the control renders as the active page while there
 
 ### Requirement: UI primitive library
 
@@ -216,25 +223,6 @@ The dashboard SHALL render `/design` as a living style guide, with four tabs (`T
 - **WHEN** the operator opens the `Tokens` tab
 - **THEN** the retention ramp is shown as swatches spanning its endpoints, together with the off-ramp neutral, in the active theme
 
-### Requirement: Shared `paca` subprocess launcher
-
-Every dashboard server action that runs `uv run paca ...` SHALL go through `dashboard/lib/actions/spawn-paca.ts::spawnPacaDetached`. The helper SHALL spawn detached with `unref()`, pipe stdio to `~/.next-signal/dashboard-actions.log` (creating the directory if missing), and return a result whose success message is `"<verb> started"` (never `"completed"`).
-
-#### Scenario: detached + logged
-
-- **WHEN** any caller invokes `spawnPacaDetached(["run-workflow", "knowledge_ingest"])`
-- **THEN** the action returns within the request lifecycle, the subprocess outlives the request, and a line tagged with the call's `logTag` (or default tag) is appended to `~/.next-signal/dashboard-actions.log`
-
-#### Scenario: "started" semantics enforced
-
-- **WHEN** any caller invokes the helper with `verb: "Re-index"`
-- **THEN** the success message reads exactly `"Re-index started"` — never `"completed"` or `"finished"`
-
-#### Scenario: synchronous spawn failure surfaces
-
-- **WHEN** the helper cannot spawn (`uv` missing, EACCES, etc.)
-- **THEN** it returns `{ ok: false, message: <error excerpt> }` and writes no further log lines for that call
-
 ### Requirement: Search snippets sanitized at the dashboard sink
 
 The dashboard SHALL render `gbrain` search snippets through a component that treats only `<em>...</em>` pairs as real DOM elements and renders every other character as escaped text. `dangerouslySetInnerHTML` SHALL NOT appear anywhere in the knowledge search / preview path.
@@ -265,7 +253,7 @@ The dashboard SHALL render `gbrain` search snippets through a component that tre
 
 ### Requirement: Knowledge page (redesigned)
 
-The dashboard SHALL render `/knowledge` (`dashboard/app/knowledge/page.tsx`) with a left sidebar wiki tree (`PACA_WIKI_DIR`-driven, categorized, collapsible), a search input wired to `gbrain search`, a result-cards column with snippet highlights, and a preview pane showing the active document's frontmatter / tags / body. The page hero SHALL render `<KnowledgeEmblem />` (from `dashboard/components/brand/knowledge-mark.tsx`) alongside the page title and subtitle, matching the `/radar` hero treatment. The `Re-index` action SHALL still invoke `uv run paca run-workflow knowledge_ingest` from the repo root.
+The dashboard SHALL render `/knowledge` (`dashboard/app/knowledge/page.tsx`) with a left sidebar wiki tree (`WIKI_DIR`-driven, categorized, collapsible), a search input wired to `gbrain search`, a result-cards column with snippet highlights, and a preview pane showing the active document's frontmatter / tags / body. The page hero SHALL render `<KnowledgeEmblem />` (from `dashboard/components/brand/knowledge-mark.tsx`) alongside the page title and subtitle, matching the `/radar` hero treatment. The `Re-index` action SHALL still invoke `uv run next-signal run-workflow knowledge_ingest` from the repo root.
 
 #### Scenario: search still hits gbrain
 
@@ -275,12 +263,12 @@ The dashboard SHALL render `/knowledge` (`dashboard/app/knowledge/page.tsx`) wit
 #### Scenario: re-index still works
 
 - **WHEN** the operator clicks `Re-index`
-- **THEN** the same `paca run-workflow knowledge_ingest` subprocess runs, with the same cwd, and a `sonner` toast confirms it
+- **THEN** the same `next-signal run-workflow knowledge_ingest` subprocess runs, with the same cwd, and a `sonner` toast confirms it
 
-#### Scenario: wiki tree reflects PACA_WIKI_DIR
+#### Scenario: wiki tree reflects WIKI_DIR
 
 - **WHEN** `/knowledge` loads
-- **THEN** the sidebar tree lists categories and documents discovered by walking `PACA_WIKI_DIR`, and clicking a doc swaps the preview pane
+- **THEN** the sidebar tree lists categories and documents discovered by walking `WIKI_DIR`, and clicking a doc swaps the preview pane
 
 #### Scenario: operator creates a wiki folder
 
@@ -303,30 +291,30 @@ The dashboard SHALL render `/knowledge` (`dashboard/app/knowledge/page.tsx`) wit
 
 ### Requirement: Dev workflow documentation
 
-`dashboard/README.md` SHALL document the `pnpm dev` (port 3000) + `uv run paca serve` (port 7777) two-process workflow and the `NEXT_PUBLIC_AGENT_OS_URL` env var (default `http://localhost:7777`). It SHALL also document the `paca dashboard` CLI wrapper (a thin `pnpm dev|build|start` exec, see core-cli spec) as an alternative entrypoint.
+`dashboard/README.md` SHALL document the `pnpm dev` (port 3000) + `uv run next-signal serve` (port 7777) two-process workflow and the `NEXT_PUBLIC_AGENT_OS_URL` env var (default `http://localhost:7777`). It SHALL also document the `next-signal dashboard` CLI wrapper (a thin `pnpm dev|build|start` exec, see core-cli spec) as an alternative entrypoint.
 
 #### Scenario: README covers the two-process flow
 
 - **WHEN** a new operator reads `dashboard/README.md`
 - **THEN** they can start the dashboard and AgentOS together without referring to other docs, and they know which env var points the browser at AgentOS
 
-#### Scenario: README documents the paca dashboard wrapper
+#### Scenario: README documents the next-signal dashboard wrapper
 
 - **WHEN** a new operator reads `dashboard/README.md`
-- **THEN** they find `paca dashboard` documented as an alternative to running `pnpm dev` directly from `dashboard/`
+- **THEN** they find `next-signal dashboard` documented as an alternative to running `pnpm dev` directly from `dashboard/`
 
 ### Requirement: UI locale via a locale cookie
 
-The dashboard SHALL support English and Chinese UI text via `dashboard/lib/i18n/` (dictionaries + a `getDictionary(locale)` lookup), an `I18nProvider` (`dashboard/components/i18n-provider.tsx`) exposing `useI18n() -> {locale, t}` to client components, and a `LanguageToggle` component (`dashboard/components/language-toggle.tsx`) that sets the locale. The active locale SHALL be persisted in a `paca_locale` cookie (`LOCALE_COOKIE`, 1-year `max-age`, `path=/`, `samesite=lax`) and applied on the server for the initial render.
+The dashboard SHALL support English and Chinese UI text via `dashboard/lib/i18n/` (dictionaries + a `getDictionary(locale)` lookup), an `I18nProvider` (`dashboard/components/i18n-provider.tsx`) exposing `useI18n() -> {locale, t}` to client components, and a `LanguageToggle` component (`dashboard/components/language-toggle.tsx`) that sets the locale. The active locale SHALL be persisted in a `ns_locale` cookie (`LOCALE_COOKIE`, 1-year `max-age`, `path=/`, `samesite=lax`) and applied on the server for the initial render.
 
 `LanguageToggle` SHALL be a picker rather than a blind toggle: its trigger SHALL show the **current** locale, and its menu SHALL list every available locale with the active one marked. Locale names in the menu SHALL be self-labelled and never translated (`English`, `中文`) — a language menu has to be readable to someone who cannot read the language the UI is currently in. It SHALL be built on the Radix Select primitive, since it picks a value rather than firing a command.
 
-`LanguageToggle` SHALL govern **UI chrome only**. It SHALL NOT read or write the pipeline's content-language preference file (`~/.next-signal/language.json`); that preference is owned by the settings panel specified below. The two settings are independent and MAY hold different values — an operator reading the interface in one language while generating content in another is a supported state, not a drift bug, and the dashboard SHALL NOT reconcile them, warn about the difference, or offer to sync them.
+`LanguageToggle` SHALL govern **UI chrome only**. It SHALL NOT read or write the pipeline's content-language preference file (`~/.next-signal/language.json`); that preference is owned by the settings page specified below. The two settings are independent and MAY hold different values — an operator reading the interface in one language while generating content in another is a supported state, not a drift bug, and the dashboard SHALL NOT reconcile them, warn about the difference, or offer to sync them.
 
 #### Scenario: operator changes language
 
 - **WHEN** the operator opens the language picker and chooses a locale different from the current one
-- **THEN** the `paca_locale` cookie is set to that locale, the router refreshes, and subsequently rendered text uses the new locale's dictionary
+- **THEN** the `ns_locale` cookie is set to that locale, the router refreshes, and subsequently rendered text uses the new locale's dictionary
 
 #### Scenario: changing the UI locale leaves the content language alone
 
@@ -351,39 +339,60 @@ The dashboard SHALL support English and Chinese UI text via `dashboard/lib/i18n/
 #### Scenario: locale persists across reloads
 
 - **WHEN** the operator reloads the dashboard after toggling language
-- **THEN** the same locale (read from the `paca_locale` cookie) is used for the initial server render, with no flash of the other language
+- **THEN** the same locale (read from the `ns_locale` cookie) is used for the initial server render, with no flash of the other language
 
-### Requirement: A nav settings panel owns the content-language preference
+### Requirement: Shared `next-signal` subprocess launcher
 
-The dashboard SHALL provide a settings control in the nav tools cluster: a gear-icon trigger that opens a panel containing the pipeline's **content language** setting. The panel SHALL be built on a `Popover` primitive at `dashboard/components/ui/popover.tsx`, backed by `@radix-ui/react-popover` per the dashboard's rule that a primitive with a Radix equivalent uses it, and SHALL be added to the `/design` catalogue in the same change that introduces it.
+Every dashboard server action that runs `uv run next-signal ...` SHALL go through `dashboard/lib/actions/spawn-cli.ts::spawnCliDetached`. The helper SHALL spawn detached with `unref()`, pipe stdio to `~/.next-signal/dashboard-actions.log` (creating the directory if missing), and return a result whose success message is `"<verb> started"` (never `"completed"`).
 
-The control SHALL be labelled by what it governs — the language of generated content (radar analyses, wiki frontmatter) — and SHALL NOT be labelled merely "language", so it is distinguishable from the adjacent UI-locale picker. Language names inside it SHALL be self-labelled and never translated, for the same reason the locale picker's are.
+#### Scenario: detached + logged
+
+- **WHEN** any caller invokes `spawnCliDetached(["run-workflow", "knowledge_ingest"])`
+- **THEN** the action returns within the request lifecycle, the subprocess outlives the request, and a line tagged with the call's `logTag` (or default tag) is appended to `~/.next-signal/dashboard-actions.log`
+
+#### Scenario: "started" semantics enforced
+
+- **WHEN** any caller invokes the helper with `verb: "Re-index"`
+- **THEN** the success message reads exactly `"Re-index started"` — never `"completed"` or `"finished"`
+
+#### Scenario: synchronous spawn failure surfaces
+
+- **WHEN** the helper cannot spawn (`uv` missing, EACCES, etc.)
+- **THEN** it returns `{ ok: false, message: <error excerpt> }` and writes no further log lines for that call
+
+### Requirement: The settings page owns the content-language preference
+
+The dashboard SHALL own its settings on a page at `/settings`, reached from the nav's settings entry, carrying the pipeline's **content language** setting among the others specified below. A page rather than a panel anchored to the nav: the settings outgrew what an anchored panel can hold, and a page is the only surface on which they can be laid out and scrolled. The page SHALL introduce no new UI primitive, and the `Popover` primitive and `/design` catalogue entry that the anchored panel required SHALL be retired with it, since nothing else uses them.
+
+The page SHALL be organised into labelled sections, one per setting it owns, separated so that no control is mistaken for a qualifier of another. Sections SHALL be independent: changing one SHALL NOT read, write, or invalidate another's state.
+
+The control SHALL be labelled by what it governs — the language of generated content (radar analyses, wiki frontmatter) — and SHALL NOT be labelled merely "language", so it is distinguishable from the UI-locale picker in the nav. Language names inside it SHALL be self-labelled and never translated, for the same reason the locale picker's are.
 
 Selecting a value SHALL write it as `content_language` into `~/.next-signal/language.json` via the `setContentLanguage` server action, the file `core-output-language`'s `global` policy reads. The write SHALL be atomic (temp file + rename) so a concurrent pipeline read never observes a torn file.
 
-The panel's current value SHALL be resolved on the server and passed into the nav for the initial render, so the panel shows its active state on first paint with no loading state. The reader SHALL tolerate a missing or unreadable preference file by falling back to `DEFAULT_LOCALE` and logging, rather than raising: the nav renders on every page, so raising would take down the whole dashboard — including the panel the operator would use to correct the value. This is a deliberate asymmetry with `paca.core.language`, which SHALL continue to raise on the pipeline side.
+Every value the page displays SHALL be resolved on the server by the page itself, so each control paints its active state on first render with no loading state. The app shell SHALL NOT read these settings: only `/settings` needs them, and a header that reads several state files and a database row to render is a cost every other page would pay. The reader SHALL tolerate a missing or unreadable preference file by falling back to `DEFAULT_LOCALE` and logging, rather than raising, because the page that would repair the file is the page that raising would take down. This is a deliberate asymmetry with `next_signal.core.language`, which SHALL continue to raise on the pipeline side.
 
 Once per dashboard container start, a startup hook SHALL create the preference file — seeded with `DEFAULT_LOCALE` — if it does not already exist, so a freshly started dashboard with no prior preference still leaves the pipeline in a defined state. It SHALL NOT overwrite an existing file, and SHALL NOT re-run per request.
 
 #### Scenario: operator changes the content language
 
-- **WHEN** the operator opens the settings panel and selects a content language different from the current one
+- **WHEN** the operator opens `/settings` and selects a content language different from the current one
 - **THEN** `~/.next-signal/language.json`'s `content_language` is written to that value, and the next agent build resolving the `global` policy observes it
 
-#### Scenario: panel shows current state on first paint
+#### Scenario: the page shows current state on first paint
 
-- **WHEN** the operator opens the settings panel
+- **WHEN** the operator opens `/settings`
 - **THEN** the currently configured content language is already marked as selected, with no spinner or flash of a default value
 
-#### Scenario: unreadable preference file does not break the nav
+#### Scenario: unreadable preference file does not break the settings page
 
-- **WHEN** `~/.next-signal/language.json` is missing, corrupt, or holds an unrecognized value, and any dashboard page is rendered
-- **THEN** the nav and settings panel render normally showing `DEFAULT_LOCALE`, the error is logged, and no page render fails
+- **WHEN** `~/.next-signal/language.json` is missing, corrupt, or holds an unrecognized value, and `/settings` is rendered
+- **THEN** the section renders normally showing `DEFAULT_LOCALE`, the error is logged, and no page render fails
 
 #### Scenario: the setting is independent of the UI locale
 
-- **WHEN** the operator changes the content language in the settings panel
-- **THEN** the `paca_locale` cookie is unchanged and the UI chrome stays in its current language
+- **WHEN** the operator changes the content language on `/settings`
+- **THEN** the `ns_locale` cookie is unchanged and the UI chrome stays in its current language
 
 #### Scenario: first launch with no preference file
 
@@ -392,6 +401,208 @@ Once per dashboard container start, a startup hook SHALL create the preference f
 
 #### Scenario: preference file untouched by ordinary page loads
 
-- **WHEN** the operator navigates between pages without opening the settings panel
-- **THEN** no write to `~/.next-signal/language.json` occurs
+- **WHEN** the operator navigates between pages other than `/settings`
+- **THEN** no read or write of `~/.next-signal/language.json` occurs
+
+#### Scenario: settings sections do not interfere
+
+- **WHEN** the operator changes a value in one section of the page
+- **THEN** the other sections' stored state is unread and unwritten, and their displayed values are unchanged
+
+### Requirement: Settings persist on commit, and every commit is acknowledged
+
+Each control on the settings page SHALL persist when the user *commits* it, and what counts as a commit SHALL be determined by the control:
+
+- A **discrete choice** (a segmented control such as the content language, the schedule's enable, or its catch-up policy) SHALL commit on click. One interaction already expresses one complete, valid intent, so it SHALL NOT require a separate confirm step.
+- A **typed value** (the schedule time) SHALL commit on blur or Enter, and SHALL NOT persist per keystroke. A native time input emits a complete value for every segment edited, so persisting each change would publish values the operator never chose — and the scheduler reads the file within one poll, so such a value can become the live schedule.
+- An **interdependent group** whose partial states are invalid (the Codex and Claude settings) SHALL commit through an explicit Save control.
+
+Regardless of path, a successful write SHALL be acknowledged to the operator, and a failed one SHALL roll the control back to the last value known to be stored and report the failure. These controls update optimistically, so they move whether or not the write landed; without an acknowledgement the operator cannot distinguish a saved setting from an unsaved one, and a section with no Save control reads as not wired up at all.
+
+A commit that would not change the stored value SHALL be a no-op: no write, no acknowledgement.
+
+Every state file the page owns SHALL be published through one shared atomic writer rather than a copy per setting, and its temp path SHALL be unique per write. Two commits in flight at once — which optimistic controls produce whenever one commits while another is still writing — otherwise collide on a single temp path: the first rename consumes it and the second fails for want of it. The file left behind is intact; what breaks is the second caller, which reports a failed save and rolls its control back to a value that is no longer what is on disk.
+
+#### Scenario: a discrete choice saves on click
+
+- **WHEN** the operator clicks a segmented option different from the current one
+- **THEN** the new value is written and the save is acknowledged, with no further confirmation step
+
+#### Scenario: typing a time does not publish intermediate values
+
+- **WHEN** the operator edits the schedule time from 13:55 to 09:30, which the control reports as 09:55 and then 09:30
+- **THEN** nothing is written while the field is being edited, and exactly one write of 09:30 occurs when it commits
+
+#### Scenario: a failed write rolls the control back
+
+- **WHEN** a write fails
+- **THEN** the control returns to the last value known to be stored and the failure is reported
+
+#### Scenario: re-selecting the current value writes nothing
+
+- **WHEN** the operator commits a value identical to the stored one
+- **THEN** no write occurs and no acknowledgement is shown
+
+#### Scenario: concurrent commits do not report a failure neither had
+
+- **WHEN** two commits to the same state file are in flight at once
+- **THEN** both report success and one of the two payloads is left in place in full, rather than one being told its save failed because the other got there first
+
+### Requirement: The settings page owns the unattended run schedule
+
+The settings page SHALL carry a section, visually separated from the sections around it, that owns the wall-clock schedule specified by `core-schedule`. It SHALL expose three controls — whether the schedule is enabled, the daily times, and whether a missed run is caught up — SHALL state the zone those times fire in without offering to change it, and SHALL read back the state of the most recent run.
+
+The times SHALL be editable as a list, added and removed one row at a time, since the schedule is a set of daily times rather than a single one. A newly added row SHALL be a draft: it SHALL NOT be written until it holds a time and commits. The last remaining time SHALL NOT be removable — an enabled schedule with nothing to fire is not a reachable state, and the enable control is how the schedule is stopped. Adding a row SHALL choose the first hour not already taken, and SHALL do nothing once every hour is; a search for a free value SHALL be bounded by the values it can return.
+
+Writes SHALL go to `~/.next-signal/schedule.json` through a server action, atomically, mirroring how the content-language setting writes its own file. The section SHALL NOT write on render.
+
+The time control SHALL express a wall-clock time of day and nothing else, so that every value the file can hold is a value the page can display.
+
+The timezone SHALL be displayed, not chosen: the section SHALL name the zone `core-schedule` resolves from `INFO_RADAR_TIMEZONE` and say where it is set, and SHALL NOT offer a control that records a zone of its own. The same value fixes radar day grouping and review due dates, so a schedule carrying its own zone would fire at 08:00 in one zone while its results were filed under a day boundary drawn in another. A stored zone that steers nothing is worse than none: its only observable effect is the warning that it has no effect.
+
+The section SHALL display the next time a slot comes round, and SHALL compute it in the zone the scheduler resolves rather than the browser's. A next-run stated in a zone that decides nothing is confidently wrong, and it is the one value on this page an operator would act on without checking.
+
+The times and catch-up controls SHALL be hidden while the schedule is disabled, since neither has meaning then.
+
+The section SHALL state, in its hint text, that catch-up applies only to runs that were genuinely missed — including one missed while the machine was asleep — and that changing the schedule never triggers a run for a time that has just passed. This distinction is not discoverable from the controls themselves.
+
+The run read-back SHALL come from the `schedule_state` row via the dashboard's existing Postgres pool, rendered with the existing relative-time helper, and SHALL distinguish four states: never run, in progress, succeeded, and failed. When the last run failed, the recorded error SHALL be reachable from the section rather than only from container logs.
+
+While a run is in progress the section SHALL say so and SHALL show how long it has been running. A run of this chain can last far longer than an operator expects it to, and a section that shows only the previous run's outcome for that whole window reads as though nothing is happening — or, worse, as though the run that later appears was triggered late. Any status that is neither in progress nor success SHALL read as a failure, so a run nobody finished is never displayed as one that did.
+
+The section SHALL reuse existing UI primitives rather than introducing new ones, so it inherits the page's visual language and incurs no `/design` catalogue addition.
+
+Reads SHALL be forgiving in the same way, and for the same reason, as the content-language reader: a missing, corrupt, or invalid `schedule.json` SHALL render the section as disabled and log, never raise, so the page that would fix the file still renders. The pipeline-side reader SHALL continue to raise.
+
+#### Scenario: operator schedules a daily run
+
+- **WHEN** the operator enables the schedule and sets the time to 08:00
+- **THEN** `~/.next-signal/schedule.json` is written atomically with `enabled: true` and `at: ["08:00"]`, and the running scheduler observes it on its next poll
+
+#### Scenario: disabled schedule hides its details
+
+- **WHEN** the schedule is disabled
+- **THEN** the times, timezone line, and catch-up control are not rendered, and only the enable control and the section's hint remain
+
+#### Scenario: the zone is stated rather than offered
+
+- **WHEN** the operator opens an enabled schedule
+- **THEN** the section shows the zone `core-schedule` resolves as read-only text, names the environment variable that sets it, offers no way to record a different one, and states the next run in that same zone
+
+#### Scenario: adding a time terminates when every hour is taken
+
+- **WHEN** the operator adds times until all twenty-four hours are occupied and adds once more
+- **THEN** nothing is added and the page remains responsive
+
+#### Scenario: last run is reported
+
+- **WHEN** the most recent scheduled run failed
+- **THEN** the section reports the failure and its time, and the recorded error text is reachable from the section
+
+#### Scenario: a run in progress is reported as running
+
+- **WHEN** the operator opens `/settings` while the chain has been executing for twenty minutes
+- **THEN** the section reports that a run is in progress and how long it has been running, rather than reporting the previous run's outcome
+
+#### Scenario: an interrupted run does not read as a success
+
+- **WHEN** the most recent run was interrupted by the container being killed
+- **THEN** the section reports it as a failure rather than as a completed run, with the recorded error explaining that the process exited mid-run
+
+#### Scenario: never-run schedule reads as such
+
+- **WHEN** a schedule is enabled but has not yet reached its first slot
+- **THEN** the section reports that no run has happened yet, rather than showing an empty or zeroed timestamp
+
+#### Scenario: unreadable schedule file does not break the settings page
+
+- **WHEN** `~/.next-signal/schedule.json` is corrupt or holds an invalid time, and `/settings` is rendered
+- **THEN** the section renders as disabled, the error is logged, and no page render fails
+
+#### Scenario: rendering the page does not write the schedule
+
+- **WHEN** the operator opens `/settings` without changing anything
+- **THEN** no write to `~/.next-signal/schedule.json` occurs
+
+### Requirement: The settings page owns the embedding provider selection
+
+The settings page SHALL carry an **Embedding** section that writes only
+`~/.next-signal/embedding.json`. Changing it SHALL NOT read, write, or invalidate
+language, schedule, engine, or coding-agent state.
+
+OMLX and OpenAI have complete baselines, so selecting either provider is a
+discrete choice that SHALL commit on click against its last saved parameters.
+OpenAI-compatible has no fabricated baseline: clicking its card before complete
+settings exist SHALL only open its pane and SHALL NOT write an invalid selection.
+Saving a complete compatible pane SHALL atomically store its `base_url`, `model`,
+`api_key_env`, and `space_id` and select it. Later switches to that saved provider
+SHALL commit on click. Failed writes SHALL roll controls back; successful writes
+SHALL show a toast.
+
+The section SHALL report credential presence using server-computed booleans. It
+SHALL accept only the compatible provider's environment-variable *name*, never a
+key value, and no credential SHALL reach the browser. Compatible URL controls
+SHALL reject userinfo, query, and fragment components rather than permitting a
+secret to be persisted inside the URL.
+
+The section SHALL display the exact active vector-space identity. For compatible
+state it SHALL explain that `space_id` identifies vector-producing behavior and
+must change when weights, tokenizer, pooling, quantization, or similar behavior
+changes; moving the same service to a new base URL does not require a new id.
+
+The section SHALL state all material consequences before selection:
+
+- switching parks dedup memory under the previous identity and switching back
+  restores post-migration rows;
+- pre-change `legacy:unknown` rows remain parked unless explicitly relabelled;
+- hosted embedding sends tier-2 summaries off-machine and may incur per-item
+  cost, including unattended scheduler runs;
+- after editing `.env`, a host process must restart or a Compose service must be
+  recreated before the new credential appears in its environment.
+
+Values SHALL resolve server-side so controls paint their real state on first
+render. A missing or unreadable state file SHALL render the real OMLX/OpenAI
+baseline and log the problem rather than failing the repair page. The pipeline
+continues to reject unusable present state loudly.
+
+The section SHALL reuse existing UI primitives and add no `/design` entry.
+
+#### Scenario: operator switches to OpenAI
+
+- **WHEN** the operator clicks the configured OpenAI card
+- **THEN** only `embedding.json` changes and the next item resolves OpenAI
+
+#### Scenario: first generic selection requires complete settings
+
+- **WHEN** no compatible section exists and the operator clicks its card
+- **THEN** its pane opens without changing the active provider; Save becomes the
+  commit only after all four fields validate
+
+#### Scenario: compatible vector space is explicit
+
+- **WHEN** compatible settings are saved
+- **THEN** state contains `space_id` and the active identity displays as
+  `openai_compatible:<space_id>`
+
+#### Scenario: missing credential is visible without exposing it
+
+- **WHEN** the selected provider's environment variable is absent
+- **THEN** the section shows missing status and renders no credential value
+
+#### Scenario: hosted data egress is visible
+
+- **WHEN** the operator views a hosted provider
+- **THEN** the pane states that summaries leave the machine and calls may cost money
+
+#### Scenario: sections remain independent
+
+- **WHEN** embedding settings are saved
+- **THEN** `engine.json`, `coding-agents.json`, `schedule.json`, and
+  `language.json` remain unchanged
+
+#### Scenario: corrupt state does not break repair UI
+
+- **WHEN** `embedding.json` is corrupt and `/settings` renders
+- **THEN** the section falls back to configured OMLX/OpenAI baselines, logs the
+  error, and renders without a client-side default flash
 

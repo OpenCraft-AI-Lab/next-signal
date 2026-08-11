@@ -18,13 +18,16 @@ def run(**inputs: Any) -> dict[str, Any]:
     from next_signal.collectors.info_radar.runner import all_failed, run_all
 
     results = run_all()
+    # Names, not messages. The scheduler logs this summary verbatim on every
+    # unattended run, and a source's error message is that source's own stderr —
+    # arbitrary text from an external CLI, which is exactly what must not be
+    # copied into our logs. `run_all` already logged each failure in full at the
+    # point it happened, so the detail has a home and this only needs the shape.
     summary = {
         "sources_run": len(results),
         "items_written": sum(r.written for r in results),
         "items_skipped": sum(r.skipped for r in results),
-        "errors": [
-            {"source": r.name, "error": r.error} for r in results if r.error is not None
-        ],
+        "failed_sources": [r.name for r in results if r.error is not None],
         "all_failed": all_failed(results),
     }
     return summary

@@ -96,17 +96,25 @@ def mark_seen(radar_item_id: int) -> None:
         conn.commit()
 
 
-def insert_topic(*, summary: str, embedding: list[float], item_id: int) -> int:
-    """Insert a new radar_pushed_topics row. Returns the new id."""
+def insert_topic(
+    *, summary: str, embedding: list[float], embedder: str, item_id: int
+) -> int:
+    """Insert a new radar_pushed_topics row. Returns the new id.
+
+    ``embedder`` is the identity of the snapshot that produced ``embedding`` —
+    the caller's captured value, never a fresh read of live settings.
+    """
     sql = """
         INSERT INTO radar_pushed_topics
-            (topic_summary, embedding, item_ids)
-        VALUES (%s, %s, %s::jsonb)
+            (topic_summary, embedding, embedder, item_ids)
+        VALUES (%s, %s, %s, %s::jsonb)
         RETURNING id
     """
     with psycopg.connect(database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (summary, _vec_literal(embedding), Jsonb([item_id])))
+            cur.execute(
+                sql, (summary, _vec_literal(embedding), embedder, Jsonb([item_id]))
+            )
             row = cur.fetchone()
             assert row is not None
             new_id = row[0]
@@ -128,13 +136,19 @@ def append_item_to_topic(*, topic_id: int, item_id: int) -> None:
         conn.commit()
 
 
-def ann_search_topics(
+def search_topics(
     embedding: list[float],
     *,
+    embedder: str,
     k: int = 5,
     threshold: float = 0.40,
 ) -> list[dict[str, Any]]:
-    """Return up to ``k`` topics within ``threshold`` cosine distance.
+    """Return up to ``k`` topics from ``embedder``'s own vector space.
+
+    Exact cosine ordering, restricted to one identity before any distance is
+    computed. Rows written by a different embedder — including the
+    ``legacy:unknown`` rows that predate the column — are not comparable, so
+    they never reach candidate generation.
 
     Result list is sorted by distance ascending (closest first). Each row is
     ``{id, topic_summary, distance}``.
@@ -142,14 +156,15 @@ def ann_search_topics(
     sql = """
         SELECT id, topic_summary, embedding <=> %s::vector AS distance
           FROM radar_pushed_topics
-         WHERE embedding <=> %s::vector < %s
+         WHERE embedder = %s
+           AND embedding <=> %s::vector < %s
          ORDER BY distance ASC
          LIMIT %s
     """
     vec = _vec_literal(embedding)
     with psycopg.connect(database_url()) as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (vec, vec, threshold, k))
+            cur.execute(sql, (vec, embedder, vec, threshold, k))
             cols = [d[0] for d in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
 
@@ -168,5 +183,5 @@ __all__ = [
     "mark_seen",
     "insert_topic",
     "append_item_to_topic",
-    "ann_search_topics",
+    "search_topics",
 ]

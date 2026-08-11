@@ -225,7 +225,6 @@ a { color: inherit; text-decoration: none; }
   display: grid; place-items: center;
   box-shadow: var(--ring);
 }
-.brand .env { font-family: var(--font-mono); font-size: 10px; color: var(--text-4); letter-spacing: 0; font-weight: 500; padding-left: 2px;}
 .nav-links { display: flex; align-items: center; gap: 2px; margin-left: 4px; }
 .nav-link {
   font-size: 14.5px; font-weight: 500; color: var(--text-3);
@@ -611,6 +610,113 @@ textarea.input { padding: 8px 10px; height: auto; line-height: 1.55; resize: ver
 .frontmatter-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .knowledge-markdown { padding-top: 2px; }
 .knowledge-markdown > :first-child { margin-top: 0; }
+
+/* ---- settings (/settings) ----
+   Prefixed `set-` throughout: these are page-level compositions of the shared
+   vocabulary above, not new primitives, and the names (row, rail, times, form)
+   are generic enough to collide at global scope without one. */
+.set-grid { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 32px; max-width: 980px; margin: 22px auto 0; align-items: start; }
+
+/* Anchors, not tabs: every group stays on one scrollable page, so "what can I
+   configure here" is answerable without clicking anything. */
+.set-rail { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 1px; }
+.set-railitem { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 6px; font-size: 13.5px; font-weight: 500; color: var(--text-3); background: none; border: none; cursor: pointer; text-align: left; font-family: var(--font-sans); transition: color 0.12s, background 0.12s; }
+.set-railitem:hover { color: var(--text); background: var(--hover); }
+.set-railitem.on { color: var(--accent-text); background: var(--accent-tint); }
+.set-railitem svg { flex: none; }
+.set-railitem:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+.set-sections { display: flex; flex-direction: column; gap: 16px; }
+.set-card { padding: 16px 18px 18px; scroll-margin-top: 76px; }
+
+/* One setting = one row: description left, control hard right. */
+.set-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.set-rowtext { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.set-label { font-size: 13.5px; font-weight: 500; }
+.set-hint { font-size: 12.5px; line-height: 1.5; color: var(--text-3); max-width: 46ch; text-wrap: pretty; }
+.set-rowctl { flex: none; padding-top: 1px; }
+.set-sub { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--line); }
+
+/* A setting the environment decides, shown where its control would sit. Muted
+   and unboxed so the row reads as stated rather than merely disabled — there is
+   nothing here to re-enable. */
+.set-static { display: inline-flex; align-items: center; height: 30px; font-size: 12.5px; color: var(--text-3); }
+
+/* A time is a token, so it gets a token. Stacking one full-width input per
+   time made three daily runs read as a form; a wrapping row reads as a set,
+   and an auto-width chip survives a zh-CN browser drawing `上午08:00`. */
+.set-times { display: flex; flex-wrap: wrap; gap: 7px; }
+.set-timechip { display: inline-flex; align-items: center; gap: 2px; height: 30px; padding: 0 4px 0 9px; border-radius: 7px; background: var(--bg-inset); box-shadow: var(--ring-light); }
+.set-timechip input { font-family: var(--font-mono); font-size: 12.5px; font-weight: 500; color: var(--text); background: transparent; border: none; box-shadow: none; padding: 0; width: auto; height: auto; }
+.set-timechip input:focus { outline: none; box-shadow: none; }
+.set-timechip:focus-within { box-shadow: var(--ring-light), var(--focus-ring); }
+.set-timex { display: inline-grid; place-items: center; width: 20px; height: 20px; border: none; background: none; border-radius: 5px; cursor: pointer; color: var(--text-4); }
+.set-timex:hover { color: var(--red-text); background: var(--red-tint); }
+.set-timex[disabled] { opacity: 0.35; pointer-events: none; }
+.set-timeadd { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 10px; border-radius: 7px; border: 1px dashed var(--border-strong); background: none; cursor: pointer; font-family: var(--font-mono); font-size: 11.5px; font-weight: 500; color: var(--text-3); }
+.set-timeadd:hover { color: var(--text); background: var(--hover); }
+
+/* Engine picker: four peers, then only the chosen one's settings. */
+.set-engines { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.set-engine { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; border-radius: 8px; background: var(--card); box-shadow: var(--shadow-card); cursor: pointer; text-align: left; font-family: var(--font-sans); border: none; transition: box-shadow 0.14s; }
+.set-engine:hover { box-shadow: var(--shadow-pop); }
+.set-engine.on { box-shadow: var(--shadow-card), 0 0 0 1.5px var(--accent); }
+.set-engine:focus-visible { outline: none; box-shadow: var(--shadow-card), var(--focus-ring); }
+.set-enginetop { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.set-engineid { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.set-engineglyph { width: 26px; height: 26px; flex: none; border-radius: 7px; display: grid; place-items: center; background: var(--bg-inset); color: var(--text-3); box-shadow: var(--ring-light); }
+.set-engine.on .set-engineglyph { background: var(--accent-tint); color: var(--accent-text); box-shadow: none; }
+.set-enginename { font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; }
+.set-enginekind { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-4); }
+.set-enginemeta { font-family: var(--font-mono); font-size: 11px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.set-check { width: 16px; height: 16px; flex: none; border-radius: 99px; display: grid; place-items: center; background: var(--accent); color: var(--accent-fg); opacity: 0; transform: scale(0.6); transition: opacity 0.14s, transform 0.14s; }
+.set-engine.on .set-check { opacity: 1; transform: scale(1); }
+
+/* State has to read before any value does, so it gets a colour, not a word. */
+.set-status { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 10.5px; white-space: nowrap; }
+.set-status .dot { width: 6px; height: 6px; border-radius: 99px; flex: none; }
+.set-status.ok { color: var(--green-text); }     .set-status.ok .dot { background: var(--green); }
+.set-status.warn { color: var(--amber-text); }   .set-status.warn .dot { background: var(--amber); }
+.set-status.down { color: var(--red-text); }     .set-status.down .dot { background: var(--red); }
+.set-status.idle { color: var(--text-4); }       .set-status.idle .dot { background: var(--text-4); }
+
+/* `--bg-inset`, not `--bg-subtle`: against the dark card (#0c0c0c) the subtle
+   tone is one step away and the panel stops reading as a separate surface. */
+.set-detail { margin-top: 12px; border-radius: 8px; background: var(--bg-inset); box-shadow: var(--ring-light); padding: 14px 16px 16px; }
+.set-detailhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.set-auth { margin: 0 0 14px; padding: 12px; border-radius: 8px; background: var(--card); box-shadow: var(--ring-light); }
+.set-authhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.set-authactions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.set-authactions .btn, .set-authurl .btn { display: inline-flex; align-items: center; gap: 6px; }
+.set-authurl { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 8px 10px; border-radius: 7px; background: var(--accent-tint); }
+.set-authurl a { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-family: var(--font-mono); font-size: 11.5px; color: var(--accent-text); text-decoration: none; }
+.set-authurl a:hover { text-decoration: underline; }
+.set-authcode { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-top: 10px; }
+.set-authlog { max-height: 132px; overflow: auto; margin: 10px 0 0; padding: 9px 10px; border-radius: 7px; background: var(--bg); box-shadow: var(--ring-light); white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5; color: var(--text-3); }
+.set-autherror { margin: 9px 0 0; font-family: var(--font-mono); font-size: 11px; color: var(--red-text); }
+.set-form { display: grid; grid-template-columns: 138px minmax(0, 1fr); gap: 10px 16px; align-items: center; }
+/* A segmented group gets a span, not a <label>: a label with no `for` targets
+   its first labelable descendant, so labelling a button group would make a
+   click on the label activate the first button. */
+.set-form > label, .set-form > .set-formlabel { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-3); }
+.set-formwide { grid-column: 1 / -1; }
+.set-note { font-size: 12.5px; line-height: 1.5; color: var(--text-3); margin: 12px 0 0; text-wrap: pretty; }
+.set-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+.set-dirty { font-family: var(--font-mono); font-size: 11px; color: var(--amber-text); }
+.set-foot { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-family: var(--font-mono); font-size: 11px; color: var(--text-4); }
+
+@media (max-width: 900px) {
+  .set-grid { grid-template-columns: 1fr; gap: 16px; }
+  .set-rail { position: static; flex-direction: row; overflow-x: auto; gap: 4px; }
+}
+@media (max-width: 620px) {
+  .set-engines { grid-template-columns: 1fr; }
+  .set-row { flex-direction: column; align-items: stretch; gap: 10px; }
+  .set-form { grid-template-columns: 1fr; gap: 6px 0; }
+  .set-form > label, .set-form > .set-formlabel { margin-top: 6px; }
+  .set-authurl { align-items: flex-start; flex-direction: column; }
+  .set-authcode { grid-template-columns: 1fr; }
+}
 
 /* design system grids */
 .dsgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }

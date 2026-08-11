@@ -61,6 +61,18 @@ class ProviderConcurrency:
         cls._async_sems = {}
 
     @classmethod
+    def set_limit(cls, provider: str, limit: int) -> None:
+        """Update one live provider limit without disturbing other providers."""
+        selected = max(1, limit)
+        with cls._sync_lock, cls._async_lock:
+            if cls._limits.get(provider) == selected:
+                return
+            cls._limits[provider] = selected
+            cls._sync_sems[provider] = threading.Semaphore(selected)
+            # Async semaphores are loop-bound and therefore recreated lazily.
+            cls._async_sems.pop(provider, None)
+
+    @classmethod
     def limits(cls) -> dict[str, int]:
         return dict(cls._limits)
 

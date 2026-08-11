@@ -11,7 +11,11 @@ per-provider 并发。改任何业务模块之前先懂这一层——两个产�
 
 ## 代码位置
 
-- `src/next_signal/core/models.py` —— 模型工厂（profile → agno Model）+ embedder + OMLX 端点
+- `src/next_signal/core/models.py` —— 静态/live-stage 模型构建 + embedder
+- `src/next_signal/core/engine_preferences.py` —— strict per-job 引擎状态
+- `src/next_signal/core/embedding_preferences.py` —— strict per-item 嵌入状态
+- `src/next_signal/core/omlx.py` —— 唯一 OMLX 环境解析器
+- `src/next_signal/agents/stage.py` —— provider-neutral production stage + job affinity
 - `src/next_signal/core/config.py` —— 全部 YAML loader（strict pydantic，未知 key loud fail）
 - `src/next_signal/core/db.py` —— `database_url()` + agno 自管表的 `get_db()` 单例
 - `src/next_signal/core/context.py` —— shared context 拼接
@@ -20,8 +24,10 @@ per-provider 并发。改任何业务模块之前先懂这一层——两个产�
 
 ## 模型体系
 
-`configs/models.yaml` 是唯一事实源。agent YAML 用 profile 名引用模型；Python 里绝不直接
-`Claude(...)` / `OpenAILike(...)`。
+`configs/models.yaml` 是静态 profile / baseline 的事实源，AgentOS agent 按 profile 名引用。
+production workflow 调 `run_stage`：每个 job 读取一次 `engine.json`，API model 以 YAML
+为 baseline，再套用 live OMLX/DeepSeek 或 `coding-agents.json` 中显式的 Codex/Claude
+设置。业务 stage 不直接构造 provider model。
 
 | profile | provider / model | 用途 |
 |---|---|---|
@@ -39,8 +45,9 @@ per-provider 并发。改任何业务模块之前先懂这一层——两个产�
   `fallback_profile`；`KeyError` / `ValueError`（程序员错误）不回落、直接抛。
   结果是 lru-cached 的——**OMLX 恢复后必须 `next_signal.core.models.reset_cache()` 才会重试本地**，
   长驻进程（`next-signal serve`）尤其注意。
-- OMLX 端点只从 `next_signal.core.models.omlx_endpoint()` 读（`OMLX_BASE_URL` / `OMLX_API_KEY`），
-  其他地方不要复制这段读取逻辑。
+- `next_signal.core.omlx.resolve_omlx_endpoint()` 是唯一读取 `OMLX_BASE_URL` /
+  `OMLX_API_KEY` 的位置；普通调用走 strict public wrapper
+  `next_signal.core.models.omlx_endpoint()`。其他地方不要直接读 env 或复制逻辑。
 - Qwen3 细节固化在 `_build_omlx`：关 thinking、sampling 参数、结构化输出走 OpenAI 标准
   `response_format` json_schema（OMLX 侧 xgrammar 约束解码），agno 的 native structured
   outputs 保持关闭。
@@ -53,17 +60,38 @@ per-provider 并发。改任何业务模块之前先懂这一层——两个产�
   `extra.extra_body.thinking.type: disabled` 整个关掉。`deepseek_smart` 设了
   `reasoning_effort: low`；`deepseek_structured` 直接关掉 thinking——它的 4096
   max_tokens cap 下，默认 high-effort 推理可能在真正吐 JSON 答案之前就把预算耗尽。
-- **embedder**（`models.yaml::embedders.local`）：Qwen3-Embedding-0.6B-8bit，**1024 维**，
-  与 `radar_pushed_topics.embedding` 的 `vector(1024)` 列对齐；
-  换不同维度的模型需要列迁移。
+- **embedder** 是 provider-neutral 的，根本不走 profile 工厂那条路。`get_embedder()`
+  不接参数：它按 item 读一次 `~/.next-signal/embedding.json` 和进程环境，返回一个不可变
+  的 `ResolvedEmbedder`（provider、模型、向量空间身份、`embed()`）。支持三个 provider——
+  `omlx`、`openai`，以及一个由操作者自己提供的 `openai_compatible` API 根地址。
+
+  `models.yaml::embedders` 只是各 provider 的 baseline：`local` 提供 OMLX 的模型和全新
+  安装时的默认选择，`openai` 提供 OpenAI 的模型。通用端点没有诚实的默认值，必须先配好
+  才能选。
+
+  **每个 embedder 都必须返回正好 1024 个有限数值。** `embed()` 会校验整条向量，长度不
+  对、元素非数值、`NaN` 或无穷都抛 `RuntimeError`；绝不截断、补齐或归一化。云端 provider
+  会带上 `dimensions: 1024`（OMLX 的路由没有这个参数）。正是这一条让
+  `radar_pushed_topics.embedding` 在换 provider 时仍然是 `vector(1024)`——同时也排除了做
+  不到这个宽度的定宽模型，比如 `text-embedding-ada-002`。
+
+  **状态和密钥是分开的。** 状态文件存的是选择、模型、API 根地址和向量空间 id，从不存
+  密钥。`openai` 读 `OPENAI_API_KEY`，通用 provider 读 `api_key_env` 里*写着名字*的那个
+  变量，都在构建快照时从 `os.environ` 读。所以改状态文件下一个 item 就生效、不用重启，
+  而改 `.env` 传不到已经在跑的进程里——要重启宿主进程或重建 Compose 服务。embedder 没有
+  回落：两个 LLM 可以互相替代，两个 embedder 不行，所以失败直接抛，由 dedup gate 把该
+  条目按 novel 处理。
 
 ## 并发
 
-`models.yaml::concurrency` 给每个 provider 一个并发上限（`omlx: 2` —— 本地单 GPU；
-云端 64/32 只防 runaway loop）。模型工厂产出的每个 model 的
+`models.yaml::concurrency` 给每个 API/CLI provider 一个并发上限（`omlx: 2` —— 本地单 GPU；
+云端/CLI 数值用于防 runaway work）。模型工厂产出的每个 model 的
 `response` / `aresponse` / 两个 stream 入口都裹了对应 provider 的 semaphore；
-embedder 调用也占同一配额（本地 LLM 和 embedding 共抢一块 GPU）。
-所有经由工厂的 agent / workflow / tool 自动继承，不需要各处自管。
+embedder 调用占的是*它自己那个* provider 的配额：OMLX 嵌入排在 OMLX 推理后面（两者
+共抢一块 GPU），云端嵌入用自己的 key、永远不占这个槽位。
+所有经由工厂的 agent / workflow / tool 自动继承，不需要各处自管。production CLI stage
+在整个子进程期间占用同一 semaphore，并在空的 ephemeral 目录中使用 no-tools `stage`
+profile；operator 直接执行的 `review` / `edit` 命令仍保留仓库能力。
 
 ## 数据库双路径
 
@@ -105,7 +133,7 @@ agent 自己的 instructions 在最前，shared 块作为限定条件跟在后�
   省开销。
 - `global`——从实时偏好文件（`~/.next-signal/language.json` 的 `content_language`）解析；
   该文件不存在时回落到硬编码的 `"en"`。**不**读 `.env`——已退役的 `SIGNAL_OUTPUT_LANG`
-  机制。写这个文件的是 dashboard 的**设置面板**（nav 上的语言按钮不写——那个只管界面
+  机制。写这个文件的是 dashboard 的**设置页**（nav 上的语言按钮不写——那个只管界面
   文案）；容器启动时的一个钩子在文件缺失时播种它。所有**写给读者看的**输出都用这条
   policy：info-radar 里三个输出会被展示的 agent（`radar_tier1_filter`、
   `radar_tier2_impact`、`radar_recap`——`radar_dedup_judge` 是 `off`），加上两个
@@ -147,7 +175,7 @@ agent 自己的 instructions 在最前，shared 块作为限定条件跟在后�
 - 两个读者，两种失败模式，这是有意的：`next_signal.core.language` 在偏好文件损坏或值不认识时
   抛错，因为 pipeline 不能用一个没人选过的语言生成内容。dashboard 自己的读取器
   （`lib/actions/language.ts::getContentLanguage`）则改成 log + 回落到默认值——nav 在每个
-  页面都渲染，在那里抛错会让整个 dashboard 挂掉，包括用来修这个值的那块设置面板。
+  页面都渲染，在那里抛错会让整个 dashboard 挂掉，包括用来修这个值的那个设置页。
   `next-signal doctor` 仍然是唯一那个 loud 的检查。
 
 ## 不变量

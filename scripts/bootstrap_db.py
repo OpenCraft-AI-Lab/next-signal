@@ -42,22 +42,40 @@ CREATE INDEX IF NOT EXISTS radar_items_unseen_idx ON radar_items (fetched_at) WH
 """
 
 # next_signal.workflows.info_radar_analysis: long-term memory of pushed topics so the
-# dedup gate can detect a paraphrase of something already presented. Embedding
-# dim is fixed at 1024 to match the default `Qwen3-Embedding-0.6B-8bit` embedder
-# profile (see design.md §D5); swapping embedders requires a column migration.
+# dedup gate can detect a paraphrase of something already presented.
+#
+# `embedder` is the vector space a row belongs to — vectors from two embedders
+# are not comparable even at equal width, so every search filters on it first.
+# The column width stays 1024 across provider switches because
+# next_signal.core.models.get_embedder rejects any other length outright.
 CREATE_RADAR_PUSHED_TOPICS = """
 CREATE TABLE IF NOT EXISTS radar_pushed_topics (
     id              BIGSERIAL PRIMARY KEY,
     topic_summary   TEXT NOT NULL,
     embedding       vector(1024) NOT NULL,
+    embedder        TEXT NOT NULL,
     item_ids        JSONB NOT NULL,
     first_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS radar_pushed_topics_embedding_idx
-    ON radar_pushed_topics
-    USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
+-- `embedder` shipped after this table did. Rows written before it exist cannot
+-- be attributed: `embedders.local.model_id` has always been operator-editable,
+-- so assuming the shipped default would mislabel a customized install and
+-- recreate the cross-space comparison this column exists to prevent. They get a
+-- sentinel no live provider matches, which retains the vectors while excluding
+-- them from search. An operator who independently knows their provenance can
+-- relabel them with one UPDATE — see docs/operations.md. The default is dropped
+-- immediately afterwards so no future insert can omit provenance.
+ALTER TABLE radar_pushed_topics
+    ADD COLUMN IF NOT EXISTS embedder TEXT NOT NULL DEFAULT 'legacy:unknown';
+ALTER TABLE radar_pushed_topics ALTER COLUMN embedder DROP DEFAULT;
+-- The former IVFFlat index spanned every vector space at once. An approximate
+-- index filters *after* candidate generation, so shared centroids let one
+-- space degrade another's recall. At this table's hundreds-to-low-thousands
+-- scale an exact scan of one identity's rows is cheap and has perfect recall.
+DROP INDEX IF EXISTS radar_pushed_topics_embedding_idx;
+CREATE INDEX IF NOT EXISTS radar_pushed_topics_embedder_idx
+    ON radar_pushed_topics (embedder);
 """
 
 # next_signal.workflows.info_radar_analysis: one row per radar_items row that's been
@@ -142,6 +160,22 @@ CREATE INDEX IF NOT EXISTS knowledge_reviews_due_idx
     WHERE next_due_at IS NOT NULL;
 """
 
+# next_signal.orchestrator.schedule state, one row per scheduled job.
+# `last_slot_at` is the most recent scheduled *instant already handled*, not
+# when execution happened — the two differ whenever a run was caught up or the
+# scheduler was down, and comparing it against the current slot is the whole
+# missed-run model. No indexes beyond the primary key: a handful of rows, only
+# ever read by key or in full.
+CREATE_SCHEDULE_STATE = """
+CREATE TABLE IF NOT EXISTS schedule_state (
+    job             TEXT PRIMARY KEY,
+    last_slot_at    TIMESTAMPTZ NOT NULL,
+    last_run_at     TIMESTAMPTZ,
+    last_status     TEXT,                  -- 'running' | 'ok' | 'failed' | NULL (never run)
+    last_error      TEXT
+);
+"""
+
 
 def main() -> int:
     url = os.environ.get("DATABASE_URL")
@@ -164,6 +198,7 @@ def main() -> int:
             cur.execute(CREATE_RADAR_ANALYSES)
             cur.execute(CREATE_RADAR_RECAPS)
             cur.execute(CREATE_KNOWLEDGE_REVIEWS)
+            cur.execute(CREATE_SCHEDULE_STATE)
 
         # The DDL above only creates what's missing, so a column added to an
         # existing table needs its own ALTER. Fail here rather than let the

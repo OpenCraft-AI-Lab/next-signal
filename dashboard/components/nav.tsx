@@ -1,9 +1,9 @@
 "use client";
 
-import { Palette, Rss, Target } from "lucide-react";
+import { Palette, Rss, Settings, Target } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ComponentType } from "react";
+import { type ComponentType } from "react";
 
 import { KnowledgeMark } from "@/components/brand/knowledge-mark";
 import { RadarMark } from "@/components/brand/radar-mark";
@@ -11,9 +11,8 @@ import { SignalMark } from "@/components/brand/signal-mark";
 import { useI18n } from "@/components/i18n-provider";
 import { LanguageToggle } from "@/components/language-toggle";
 import { NavTriggerSlot } from "@/components/nav-trigger-slot";
-import { SettingsPanel } from "@/components/settings-panel";
+import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import type { Locale } from "@/lib/i18n/dictionaries";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -47,16 +46,10 @@ const NAV_ITEMS: NavItem[] = [
   ...(IS_DEV ? [{ href: "/design", icon: Palette }] : []),
 ];
 
-/** `contentLanguage` is resolved server-side in the root layout so the
- * settings panel renders its current value without a fetch on open. */
-export function Nav({ contentLanguage }: { contentLanguage: Locale }) {
+export function Nav() {
   const pathname = usePathname();
   const { t } = useI18n();
-  const [host, setHost] = useState<string | null>(null);
-
-  useEffect(() => {
-    setHost(window.location.host);
-  }, []);
+  const settingsActive = pathname.startsWith("/settings");
 
   return (
     <nav className="nav">
@@ -66,7 +59,6 @@ export function Nav({ contentLanguage }: { contentLanguage: Locale }) {
             <SignalMark size={17} />
           </span>
           <span>next-signal</span>
-          {host && <span className="env">{host}</span>}
         </div>
         <div className="nav-links">
           {NAV_ITEMS.map((item) => {
@@ -99,7 +91,21 @@ export function Nav({ contentLanguage }: { contentLanguage: Locale }) {
         <div className="nav-tools">
           <NavTriggerSlot />
           <LanguageToggle />
-          <SettingsPanel contentLanguage={contentLanguage} />
+          {/* Settings outgrew a popover, so the gear is a link now. It stays in
+              the tools cluster rather than joining `.nav-links`: it is chrome
+              that follows you between products, not one of them. */}
+          <Button
+            asChild
+            variant="icon"
+            className={cn(settingsActive && "bg-hover")}
+            aria-label={t.settings.trigger}
+            title={t.settings.trigger}
+            aria-current={settingsActive ? "page" : undefined}
+          >
+            <Link href="/settings">
+              <Settings size={15} />
+            </Link>
+          </Button>
           <ThemeToggle />
         </div>
       </div>

@@ -14,6 +14,7 @@ agent's YAML — the two flags are independent.
 from __future__ import annotations
 
 from agno.agent import Agent
+from agno.models.base import Model
 
 from next_signal.core.config import AgentConfig, load_agent
 from next_signal.core.context import shared_context
@@ -29,7 +30,12 @@ from next_signal.core.models import get_model
 from next_signal.registry import resolve_tools
 
 
-def build_from_config(cfg: AgentConfig, *, language: str | None = None) -> Agent:
+def build_from_config(
+    cfg: AgentConfig,
+    *,
+    language: str | None = None,
+    model: Model | None = None,
+) -> Agent:
     """Assemble an agno.Agent from a parsed AgentConfig.
 
     Tools are looked up by name in ``next_signal.registry``. Unknown tool names
@@ -41,7 +47,7 @@ def build_from_config(cfg: AgentConfig, *, language: str | None = None) -> Agent
     """
     kwargs = {
         "name": cfg.name,
-        "model": get_model(cfg.model_profile),
+        "model": model or get_model(cfg.model_profile),
         "tools": resolve_tools(cfg.tools),
         "instructions": _compose_instructions(cfg, override=language),
         "markdown": cfg.markdown,

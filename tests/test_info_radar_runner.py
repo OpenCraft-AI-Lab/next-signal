@@ -171,15 +171,17 @@ def test_pull_shell_summarizes_results(monkeypatch):
 
     results = [
         runner.SourceResult(name="a", written=2, skipped=1, error=None),
-        runner.SourceResult(name="b", written=0, skipped=0, error="boom"),
+        runner.SourceResult(name="b", written=0, skipped=0, error="token abc123"),
     ]
     monkeypatch.setattr(runner, "run_all", lambda: results)
 
+    # Names only: the scheduler logs this summary verbatim, so a source's raw
+    # error text must not ride along into the log.
     assert info_radar_pull.run() == {
         "sources_run": 2,
         "items_written": 2,
         "items_skipped": 1,
-        "errors": [{"source": "b", "error": "boom"}],
+        "failed_sources": ["b"],
         "all_failed": False,
     }
 

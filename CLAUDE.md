@@ -107,8 +107,14 @@ proposal / design / tasks），再实现；完成后 `/opsx:archive` 把 delta �
 
 CLI 子命令：
 - `next-signal list` — 列 agents / workflows
-- `next-signal doctor` — 自检 .env / Postgres / OMLX / 注册的 tools / GBrain health / folocli auth / info-radar goals.yaml
+- `next-signal doctor` — 自检 .env / Postgres / OMLX / 当前 embedder（打印向量空间身份 + 凭据在不在，不发请求）/ 注册的 tools / GBrain health / folocli auth / info-radar goals.yaml
 - `next-signal run-agent <name> "<prompt>"` — 一次性调某个 agent
+- `next-signal schedule` — 前台跑墙钟调度器（compose 里 `scheduler` 服务的命令）。每 30s 重读
+  `~/.next-signal/schedule.json`，到点跑 `info_radar_pull` → `info_radar_analysis`。
+  **这是唯一一条没人敲命令也会烧 token 的路径**，改 analysis 链上的东西时要意识到它在后台常驻
+- `next-signal coding-agent doctor` — 只检查可选 `codex` / `claude` CLI 可执行文件与版本，不发模型请求
+- `next-signal coding-agent run <codex|claude> "<prompt>" --cwd <path> [--profile review|edit] [--progress]` —
+  通过官方非交互 CLI 跑一次受限仓库任务；默认 review，不注册为 agno model / tool
 - `next-signal knowledge ingest <url|file>` — 路由输入、保存 raw / clean markdown、可选导入 GBrain
   （`--category <taxonomy-path>` 指定落点跳过自动分类；`--progress` 每步输出一行 JSON 事件，dashboard 入库进度面板用）
 - `next-signal knowledge gbrain-search|gbrain-ingest` — 通过本地 GBrain CLI 搜索 / 导入 markdown
@@ -199,7 +205,9 @@ instructions、model profile 写死。需要一个 LLM 子任务（例如 frontm
 
 - 新增正式 `configs/agents/<name>.yaml`
 - 新增正式 `prompts/agents/<name>.md`
-- 通过 `next_signal.agents.loader.build_from_name("<name>")` 调用
+- production LLM stage 通过 `next_signal.agents.stage.run_stage("<name>", ...)`
+  调用，并由顶层 workflow 的 `stage_job()`（或拥有同等边界的 Workflow subclass）覆盖完整 job；
+  只有 AgentOS interactive agent 装配继续走 `build_from_name("<name>")`
 - 如果这个 agent 是纯转换 / verifier，不需要会话库，YAML 写 `extra: {db: false}`
 - 如果不应继承 shared context，YAML 写 `extra: {shared_context: false}`
 
@@ -219,7 +227,7 @@ profile / 默认行为放这。
 标识符，走各 agent 自己 prompt 里的专门指令，不受这套语言 policy 影响。
 
 分界线是**输出物是什么**，不是模块：写给读者看的用 `global`（info-radar 四个 agent +
-两个 frontmatter agent 的 `title`/`summary`——偏好文件由 dashboard nav 上的**设置面板**
+两个 frontmatter agent 的 `title`/`summary`——偏好文件由 dashboard 的**设置页**（`/settings`）
 写入，语言按钮只管界面文案）；正文清洗那两个 agent 用 `same_as_source`（wiki 里源文本的
 唯一副本，翻译掉就毁了；源语言由 `next_signal.core.language_detect.detect_language()` 确定性
 探测，不用 LLM）。所以一个 wiki 文件可以是英文 frontmatter 配中文正文。
@@ -234,15 +242,24 @@ profile / 默认行为放这。
 
 ## 模型与 OMLX
 
-- 模型从 `configs/models.yaml` 的 profile 引用，绝不在 agent 代码里 `Codex(...)`
+- 静态 AgentOS 模型从 `configs/models.yaml` 的 profile 引用；production stage 的 baseline
+  也从这里取，但 provider/model/effort 由 `engine.json` / `coding-agents.json` 在 job 开始时覆盖。
+  绝不在 agent 代码里 `Codex(...)`
 - OMLX 端点读自 `.env` 的 `OMLX_BASE_URL` + `OMLX_API_KEY`，**只通过**
-  `next_signal.core.models.omlx_endpoint()` 读，不要在别处复制读取逻辑
+  `next_signal.core.omlx.resolve_omlx_endpoint()` 解析；普通调用使用公开的
+  `next_signal.core.models.omlx_endpoint()`，不要在别处直接读 env 或复制逻辑
 - OMLX 不可达时 `next_signal.core.models.get_model` 自动捕获 `RuntimeError` 并切到 `fallback_profile`
   （YAML 里配）；恢复后需要 `reset_cache()` 才会重试 OMLX
 - Qwen3 sampling（temp 0.4 / top_p 0.85 / min_p 0.05 / 关 thinking）与 agno `OpenAILike`
   的结构化输出开关（`supports_json_schema_outputs=True` + `supports_native_structured_outputs=False`，
   走 OMLX 标准 `response_format` json_schema / xgrammar 约束解码）都固化在
   `next_signal.core.models._build_omlx`，**不要轻易改**
+- **embedder 不走 profile 工厂**：`get_embedder()` 不接参数，按 item 读一次
+  `embedding.json` + 进程环境，返回不可变 `ResolvedEmbedder`（provider / model /
+  identity / `embed`）。`models.yaml::embedders` 只是 `omlx` / `openai` 两个 baseline；
+  `openai_compatible` 没有默认值，必须由 operator 配全。**1024 维是硬契约**——
+  `embed()` 校验整条向量，长度/非数值/NaN/inf 一律 `RuntimeError`，绝不截断补齐。
+  embedder **没有 fallback**（换 provider = 换向量空间），并发按快照里的 provider 取
 
 ---
 
@@ -254,9 +271,14 @@ profile / 默认行为放这。
   绝不要自己 `PostgresDb(...)`。URL 走 `database_url(for_sqlalchemy=True)`，自动改 scheme 到 psycopg v3。
   agno 会自动 provision 这些表，**不要**重复定义
 - **我们自己的业务表**（`radar_items` / `radar_analyses` / `radar_pushed_topics` /
-  `radar_recaps` / `knowledge_reviews`）→ 裸
+  `radar_recaps` / `knowledge_reviews` / `schedule_state`）→ 裸
   `psycopg.connect(database_url())`（同步 short-lived 连接）；
   DDL 在 `scripts/bootstrap_db.py`，运行时读写在对应 collector / workflow 模块里
+- `radar_pushed_topics.embedder`（`NOT NULL`）是每条向量的向量空间身份，dedup 检索
+  **先按它收窄再算距离**（精确扫描，没有 IVFFlat——近似索引跨空间会污染候选生成）。
+  写入用的必须是 embedding 之前捕获的那个 identity（`DedupOutcome.embedder`），
+  **不要在持久化时重读 `embedding.json`**。列出现之前的行是 `legacy:unknown`，
+  刻意不猜来源，也不提供一键 relabel
 - **例外：评测表**（`radar_eval_cases` / `radar_eval_runs` / `radar_eval_results`）
   同样走裸 psycopg，但 DDL 在 `scripts/radar_eval.py` 自己的 `init` 子命令里，
   **刻意不放进 `bootstrap_db.py`**——它们只服务离线评测、不承载运行时行为，生产部署

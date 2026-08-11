@@ -23,8 +23,7 @@ const LOCALES: { value: Locale; name: string; short: string }[] = [
  * the trigger announce the current language instead of an ambiguous target.
  *
  * Governs interface text only. Generated content (radar analyses, wiki
- * frontmatter) follows the separate content-language setting in
- * `SettingsPanel`.
+ * frontmatter) follows the separate content-language setting on `/settings`.
  */
 export function LanguageToggle() {
   const router = useRouter();

@@ -12,7 +12,6 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { useI18n } from "@/components/i18n-provider";
 import { Input, SearchWrap, Textarea } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { RETENTION_HELD, retentionColor } from "@/lib/retention";
 import { scoreHue, scoreLOff } from "@/lib/score";
@@ -559,7 +558,7 @@ function Components() {
         <div className="sec-head">
           <h2 className="sec-title">Menu surface</h2>
           <span className="sec-sub">
-            popover panel · `bg-elevated` + `shadow-menu` + `data-[highlighted]:bg-hover`
+            menu panel · `bg-elevated` + `shadow-menu` + `data-[highlighted]:bg-hover`
           </span>
         </div>
         {/* Static replica of the language picker's panel. It is a composition of
@@ -581,27 +580,90 @@ function Components() {
 
       <Card pad>
         <div className="sec-head">
-          <h2 className="sec-title">Popover</h2>
+          <h2 className="sec-title">Selectable card</h2>
           <span className="sec-sub">
-            anchored non-modal panel · same elevated surface as the menu above
+            `.set-engine` · one choice out of a small set, each with its own state
           </span>
         </div>
-        <div className="row gap-16" style={{ alignItems: "flex-start" }}>
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button>Open popover</Button>
-            </PopoverTrigger>
-            <PopoverContent className="col w-[16rem] gap-2" align="start">
-              <p className="sec-title">Panel heading</p>
-              <p className="muted text-[12px] leading-snug">
-                For settings and small forms anchored to their trigger. Use Dialog
-                instead when the choice deserves to block the page.
-              </p>
-            </PopoverContent>
-          </Popover>
-          <Spec>used by SettingsPanel (Radix Popover)</Spec>
+        <p className="muted" style={{ fontSize: 12.5, margin: "0 0 12px", maxWidth: "62ch" }}>
+          Reach for this over a radio list when each option carries its own
+          metadata and status. Selection is the accent ring from{" "}
+          <span className="mono">Card states</span>; the check is the confirmation,
+          and the status dot answers &ldquo;which of these actually works right
+          now&rdquo; before any label is read.
+        </p>
+        <div className="set-engines" style={{ maxWidth: 520 }}>
+          <SelectableCard name="Local model" kind="on-device" meta="Qwen3.5-122B-A10B" tone="ok" status="Configured" on />
+          <SelectableCard name="DeepSeek" kind="cloud API" meta="deepseek-v4-flash" tone="warn" status="No API key" />
         </div>
       </Card>
+
+      <Card pad>
+        <div className="sec-head">
+          <h2 className="sec-title">Status dot</h2>
+          <span className="sec-sub">
+            `.set-status` · state as colour, for rows scanned rather than read
+          </span>
+        </div>
+        <div className="row gap-16 wrap">
+          {(
+            [
+              ["ok", "healthy · configured · succeeded"],
+              ["warn", "needs attention · unset"],
+              ["down", "failed · unreachable"],
+              ["idle", "not applicable · never run"],
+            ] as const
+          ).map(([tone, meaning]) => (
+            <span key={tone} className={`set-status ${tone}`}>
+              <span className="dot" />
+              {meaning}
+            </span>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/** Static replica of the `/settings` engine picker, for the gallery above. */
+function SelectableCard({
+  name,
+  kind,
+  meta,
+  tone,
+  status,
+  on,
+}: {
+  name: string;
+  kind: string;
+  meta: string;
+  tone: "ok" | "warn";
+  status: string;
+  on?: boolean;
+}) {
+  return (
+    <div className={`set-engine${on ? " on" : ""}`}>
+      <div className="set-enginetop">
+        <div className="set-engineid">
+          <span className="set-engineglyph">
+            <Sparkles size={15} />
+          </span>
+          <span className="col">
+            <span className="set-enginename">{name}</span>
+            <span className="set-enginekind">{kind}</span>
+          </span>
+        </div>
+        <span className="set-check">
+          <Check size={10} strokeWidth={3.5} />
+        </span>
+      </div>
+      <div className="row gap-8" style={{ justifyContent: "space-between" }}>
+        <span className="set-enginemeta">{meta}</span>
+        <span className={`set-status ${tone}`}>
+          <span className="dot" />
+          {status}
+        </span>
+      </div>
     </div>
   );
 }

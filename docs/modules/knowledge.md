@@ -19,13 +19,20 @@ and GBrain provides indexing and hybrid search.
 
 ## Agents
 
-| Agent | Model profile | Used for |
+| Agent | YAML baseline profile | Used for |
 |---|---|---|
 | `knowledge_artifact_editor` | local | Ingest's clean step: body cleanup / whisper correction (DB-free transformation agent) |
 | `knowledge_github_cleaner` | local | GitHub-repo-specific clean step: aggressively trims only the `## README` section (badges, install commands, sponsor blocks); structured signal sections are preserved verbatim |
 | `knowledge_frontmatter` | local | Ingest's enrich step: produces summary/tags/freshness (`FrontmatterDraft` schema, DB-free) |
 | `knowledge_github_summary` | local | GitHub-repo-specific enrich step: organizes the summary around does/value/maturity/ecosystem, reusing the `FrontmatterDraft` schema |
 | `knowledge_classifier` | local | Picks the wiki category directory from the taxonomy at ingest time (DB-free transformation agent) |
+
+The ingest workflow invokes these through `run_stage`. Its workflow object owns
+one stage-job boundary for CLI, Dashboard, direct AgentOS, async, and streaming
+runs, so clean, enrich, and classify share one selected engine. A production CLI
+stage runs with no provider tools in an empty temporary workspace; it cannot
+inspect the source repository. Fetch, persistence, and GBrain retain their
+existing implementations.
 
 ## Tools
 
@@ -172,7 +179,7 @@ of text:
 The body is the archive — the wiki holds the only copy of that source text, so
 translating it would destroy it. `title` and `summary` are the artifact's index
 entry, the text the knowledge list and review cards display, so they follow
-whatever the reader set in the dashboard's settings panel.
+whatever the reader set on the dashboard's settings page.
 
 A wiki file is therefore allowed to be bilingual: an English `title`/`summary`
 over a Chinese body, if that is how the setting is configured. This is intended,

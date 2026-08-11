@@ -7,19 +7,13 @@ from next_signal.workflows.stages.knowledge_ingest import KnowledgeArtifact
 from next_signal.workflows.stages.knowledge_ingest.classify import classify_category
 
 
-class _FakeResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
-
-
 def _stub_classifier(monkeypatch, payload) -> None:
     text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
 
-    class FakeAgent:
-        def run(self, agent_input, **kwargs):
-            return _FakeResponse(text)
+    def fake_run_stage(agent_name, agent_input, output_schema, **kwargs):  # noqa: ARG001
+        return output_schema.model_validate_json(text)
 
-    monkeypatch.setattr(classify_mod, "build_from_name", lambda name: FakeAgent())
+    monkeypatch.setattr(classify_mod, "run_stage", fake_run_stage)
 
 
 def _artifact() -> KnowledgeArtifact:
@@ -54,9 +48,8 @@ def test_classify_falls_back_to_temp_inbox_on_unparseable_output(monkeypatch) ->
 
 
 def test_classify_falls_back_to_temp_inbox_on_agent_error(monkeypatch) -> None:
-    class BoomAgent:
-        def run(self, agent_input, **kwargs):
-            raise RuntimeError("classifier offline")
+    def boom(*args, **kwargs):
+        raise RuntimeError("classifier offline")
 
-    monkeypatch.setattr(classify_mod, "build_from_name", lambda name: BoomAgent())
+    monkeypatch.setattr(classify_mod, "run_stage", boom)
     assert classify_category(_artifact()).category == "temp-inbox"

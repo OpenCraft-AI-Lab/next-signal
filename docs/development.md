@@ -202,6 +202,20 @@ When starting a new product direction, prefer adding a domain directory over a
 - YAML `name:` stays aligned with the file stem.
 - No secrets in YAML; no duplicated `.env` parsing across modules.
 
+**Settings the operator changes while the stack runs** are the exception: they
+live in `~/.next-signal/` as JSON, not in `configs/`, because the repo tree
+inside the container is image-baked. See
+[architecture.md](./architecture.md#runtime-state-files) for the full list. When
+adding one, follow the three established rules:
+
+- Read it at **call time**, never at import — a missing file must not break
+  startup, and an edit must take effect without a restart.
+- Raise on a malformed file on the Python side; fall back and log on the
+  dashboard side, which renders the panel used to repair it.
+- **Check booleans, do not coerce them.** `bool("false")` is `True`, and these
+  files are hand-edited. An absent flag may default; a present one of the wrong
+  type is an error.
+
 ## Testing
 
 ```bash
@@ -217,6 +231,18 @@ uv run pytest -q
 - Every new tool or integration gets at least one smoke test.
 - Touching the registry means running `tests/test_registry.py`; touching
   `tools/_json_extract.py` means running `tests/test_json_extract.py`.
+- `tests/test_scheduler.py` runs against a **real Postgres** and skips silently
+  without `DATABASE_URL`. Compose does not publish the database, so point it at a
+  throwaway instance and bootstrap the schema first — otherwise a green run has
+  told you nothing about the scheduler:
+
+  ```bash
+  docker run -d --rm --name ns-test-pg -e POSTGRES_USER=next_signal \
+    -e POSTGRES_PASSWORD=next_signal -e POSTGRES_DB=next_signal \
+    -p 55432:5432 pgvector/pgvector:pg16
+  export DATABASE_URL=postgresql://next_signal:next_signal@127.0.0.1:55432/next_signal
+  uv run python scripts/bootstrap_db.py && uv run pytest tests/test_scheduler.py -q
+  ```
 
 Run any **runtime or end-to-end** verification (the CLI, the dashboard, a full
 pipeline, anything touching Postgres / gbrain / folocli) through Docker rather

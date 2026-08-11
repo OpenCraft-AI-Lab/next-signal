@@ -6,38 +6,9 @@ Unified knowledge artifact pipeline: a URL or local file becomes (1) a clean mar
 
 Every saved item produces durable, human-readable markdown — independent of whether the downstream RAG / vector store is healthy. A failure in GBrain ingest must never lose the artifact.
 ## Requirements
-### Requirement: `paca knowledge ingest` accepts URLs and files
-
-The CLI command `paca knowledge ingest <url|file>` SHALL detect the source type (microblog article, YouTube, Bilibili, PDF, Office, HTML, image, plain markdown) and route to the matching adapter. The command SHALL accept an optional `--category <path>` flag that pins the destination wiki folder, and an optional `--progress` flag that emits one JSON event per pipeline step to stdout. With both flags absent the command behaves as before (automatic classification, single result-JSON line on stdout).
-
-#### Scenario: WeChat article saved
-
-- **WHEN** `paca knowledge ingest https://mp.weixin.qq.com/s/<id>` is run
-- **THEN** the OpenCLI adapter downloads the article + images to the raw store, rewrites image references to local relative paths, and emits clean markdown
-
-#### Scenario: YouTube video saved
-
-- **WHEN** the input URL is a YouTube link
-- **THEN** the MarkItDown adapter writes the converted markdown and a raw conversion JSON
-
-#### Scenario: category pinned via flag
-
-- **WHEN** `paca knowledge ingest <url> --category knowledge/ai-ml` is run with a path present in the taxonomy
-- **THEN** the artifact is written under that folder and the LLM classification step is skipped
-
-#### Scenario: unknown category rejected
-
-- **WHEN** `paca knowledge ingest <url> --category not/a/real/path` is run
-- **THEN** the command fails loud with a non-zero exit before performing the ingest work
-
-#### Scenario: progress events streamed
-
-- **WHEN** `paca knowledge ingest <url> --progress` is run
-- **THEN** stdout contains one JSON event line per pipeline step as each step starts and completes, followed by the final result JSON as the last line, with all lines forming valid JSONL
-
 ### Requirement: Two-tree artifact layout
 
-Clean markdown artifacts SHALL be written under `<PACA_WIKI_DIR>/<category>/`, and originals under `<PACA_WIKI_RAW_DIR>/`. Both roots SHALL be resolved lazily from the required `PACA_WIKI_DIR` / `PACA_WIKI_RAW_DIR` environment variables (`src/paca/core/paths.py`); there is no hardcoded default, and reading either path with the variable unset SHALL raise a loud `RuntimeError`.
+Clean markdown artifacts SHALL be written under `<WIKI_DIR>/<category>/`, and originals under `<WIKI_RAW_DIR>/`. Both roots SHALL be resolved lazily from the required `WIKI_DIR` / `WIKI_RAW_DIR` environment variables (`src/next_signal/core/paths.py`); there is no hardcoded default, and reading either path with the variable unset SHALL raise a loud `RuntimeError`.
 
 #### Scenario: paths separated by purpose
 
@@ -46,7 +17,7 @@ Clean markdown artifacts SHALL be written under `<PACA_WIKI_DIR>/<category>/`, a
 
 #### Scenario: wiki path env var unset
 
-- **WHEN** `PACA_WIKI_DIR` (or `PACA_WIKI_RAW_DIR`) is not set and code attempts to resolve the wiki root
+- **WHEN** `WIKI_DIR` (or `WIKI_RAW_DIR`) is not set and code attempts to resolve the wiki root
 - **THEN** a `RuntimeError` is raised instead of falling back to a default path
 
 ### Requirement: GBrain ingest failure does not lose artifacts
@@ -75,7 +46,7 @@ The single-item knowledge ingest path SHALL be coordinated by an Agno workflow t
 
 ### Requirement: Artifact editing is split into a clean pass and a frontmatter pass
 
-The pipeline SHALL transform a fetched source packet into cleaned markdown and frontmatter draft fields (`title`, `summary`, `tags`, `freshness`) via two separate agent passes rather than one combined call: `clean_body` (the `clean` step) runs the `knowledge_artifact_editor` agent (or `knowledge_github_cleaner` for github sources) and returns plain cleaned markdown text with no schema; `write_frontmatter` (the `enrich` step) separately runs `knowledge_frontmatter` (or `knowledge_github_summary` for github sources) under the `FrontmatterDraft` pydantic schema via `run_structured`. This split exists because a single combined pass would intermittently have a local model drop a field (e.g. an empty `summary`) — splitting keeps each call's output small and focused.
+The pipeline SHALL transform a fetched source packet into cleaned markdown and frontmatter draft fields (`title`, `summary`, `tags`, `freshness`) via two separate production stage-adapter calls rather than one combined call: `clean_body` (the `clean` step) runs the `knowledge_artifact_editor` configuration (or `knowledge_github_cleaner` for GitHub sources) and returns plain cleaned markdown text with no schema; `write_frontmatter` (the `enrich` step) separately runs `knowledge_frontmatter` (or `knowledge_github_summary` for GitHub sources) under the `FrontmatterDraft` Pydantic schema. Both calls SHALL use the same engine pinned for the ingest job. This split keeps each output small and focused while remaining independent of provider.
 
 #### Scenario: orchestrator avoids full-body editing
 
@@ -84,12 +55,12 @@ The pipeline SHALL transform a fetched source packet into cleaned markdown and f
 
 #### Scenario: clean pass returns plain markdown, not structured output
 
-- **WHEN** `clean_body` runs
-- **THEN** it returns plain cleaned markdown text (no schema); only `write_frontmatter`'s output is parsed as structured data (`FrontmatterDraft`)
+- **WHEN** `clean_body` runs through any selected engine
+- **THEN** it returns plain cleaned markdown text with no forced JSON wrapper, while `write_frontmatter` is validated as `FrontmatterDraft`
 
 ### Requirement: LLM artifact edit and frontmatter enrichment fail loud
 
-`clean_body` and `write_frontmatter` SHALL together populate cleaned markdown plus `summary`, `tags`, `freshness` (`permanent` / `stable` / `evolving` / `ephemeral`), and source metadata across their two passes. If either LLM call or `write_frontmatter`'s structured output validation fails, the workflow SHALL fail loud rather than writing deterministic fallback content.
+`clean_body` and `write_frontmatter` SHALL together populate cleaned markdown plus `summary`, `tags`, `freshness` (`permanent` / `stable` / `evolving` / `ephemeral`), and source metadata across their two adapter calls. If either provider invocation or `write_frontmatter` structured-output validation fails, the workflow SHALL fail loud rather than writing deterministic fallback content.
 
 #### Scenario: transcript summary is rejected
 
@@ -98,27 +69,27 @@ The pipeline SHALL transform a fetched source packet into cleaned markdown and f
 
 #### Scenario: invalid frontmatter is rejected
 
-- **WHEN** the artifact editor returns empty summary text, invalid freshness, or tags that do not match the required lowercase English tag format
+- **WHEN** the selected engine returns empty summary text, invalid freshness, or tags that do not match the required lowercase English tag format
 - **THEN** validation fails and the artifact is not written
 
 #### Scenario: editor call unavailable
 
-- **WHEN** the artifact editor agent cannot complete the required edit
+- **WHEN** the selected engine cannot complete the required edit
 - **THEN** the save operation raises a loud failure and no clean wiki artifact is written
 
 #### Scenario: clean-step retry is a blind step re-run
 
-- **WHEN** the `clean` step (`max_retries=1`) fails validation (e.g. the retention guard trips)
-- **THEN** the workflow step re-runs `clean_body` from the same input rather than sending validation feedback back to the agent; a second failure raises loud
+- **WHEN** the `clean` step (`max_retries=1`) fails validation such as the retention guard
+- **THEN** the workflow step re-runs `clean_body` from the same input on the job's pinned engine rather than sending validation feedback; a second failure raises loud
 
 #### Scenario: frontmatter-step retry uses schema-validation feedback
 
-- **WHEN** `write_frontmatter`'s `run_structured` call produces output that fails `FrontmatterDraft` validation
-- **THEN** the agent is re-prompted with the exact validation error and retried (up to `run_structured`'s `max_repairs`); a still-invalid result raises `RuntimeError` instead of creating fallback frontmatter
+- **WHEN** `write_frontmatter` produces output that fails `FrontmatterDraft` validation
+- **THEN** the stage adapter re-prompts the same selected engine with the exact validation error once, and a still-invalid result raises `RuntimeError`
 
 #### Scenario: related links empty when no matches
 
-- **WHEN** the post-ingest hybrid `gbrain_query` against the article's title + summary returns no other-page results
+- **WHEN** the post-ingest hybrid `gbrain_query` against the article's title and summary returns no other-page results
 - **THEN** the article is written without a `## Related` marker block; refresh cycles re-add one if the brain later finds neighbors
 
 ### Requirement: Direct ingest and re-index share GBrain identity
@@ -151,11 +122,11 @@ After a successful GBrain ingest the pipeline SHALL append a marker-fenced `## R
 
 ### Requirement: GitHub repo URLs are a first-class source type
 
-`paca knowledge ingest` SHALL detect `https://github.com/<owner>/<repo>` as `source_type == "github"` and route it to a GitHub-specific adapter that collects signal beyond the rendered README. Non-root GitHub URLs (paths beyond `/<owner>/<repo>`, including `/blob`, `/tree`, `/issues`, `/pull`, gist, and user-only pages) SHALL raise a loud error rather than falling back to the generic web adapter.
+`next-signal knowledge ingest` SHALL detect `https://github.com/<owner>/<repo>` as `source_type == "github"` and route it to a GitHub-specific adapter that collects signal beyond the rendered README. Non-root GitHub URLs (paths beyond `/<owner>/<repo>`, including `/blob`, `/tree`, `/issues`, `/pull`, gist, and user-only pages) SHALL raise a loud error rather than falling back to the generic web adapter.
 
 #### Scenario: root repo URL is recognized
 
-- **WHEN** `paca knowledge ingest https://github.com/<owner>/<repo>` is run (with or without a trailing slash)
+- **WHEN** `next-signal knowledge ingest https://github.com/<owner>/<repo>` is run (with or without a trailing slash)
 - **THEN** detection returns `source_type == "github"` and the github fetcher runs
 
 #### Scenario: subpath URL is rejected loud
@@ -282,17 +253,17 @@ The single-item knowledge ingest workflow SHALL be declared by `configs/workflow
 
 #### Scenario: workflow config exposes AgentOS workflow
 
-- **WHEN** `paca.orchestrator.runnable_loader.load_workflows()` runs
-- **THEN** it builds `paca.workflows.knowledge_ingest:build` for `knowledge_ingest` when the workflow is enabled and `expose.agent_os` is true
+- **WHEN** `next_signal.orchestrator.runnable_loader.load_workflows()` runs
+- **THEN** it builds `next_signal.workflows.knowledge_ingest:build` for `knowledge_ingest` when the workflow is enabled and `expose.agent_os` is true
 
 #### Scenario: workflow config exposes agent tool
 
-- **WHEN** `paca.registry.available()` is called
+- **WHEN** `next_signal.registry.available()` is called
 - **THEN** `knowledge_ingest_workflow` is registered from the workflow config and resolves to a `WorkflowTools` toolkit
 
 ### Requirement: Pipeline state is carried by `KnowledgeArtifact`
 
-The knowledge ingest workflow SHALL pass state between stages as a single `KnowledgeArtifact` dataclass instance under `src/paca/workflows/stages/knowledge_ingest/`.
+The knowledge ingest workflow SHALL pass state between stages as a single `KnowledgeArtifact` dataclass instance under `src/next_signal/workflows/stages/knowledge_ingest/`.
 
 The `KnowledgeArtifact` SHALL include source value, source type, digest, optional raw path, title, markdown, metadata, optional artifact edit, optional clean path, optional frontmatter, and optional ingest result.
 
@@ -320,32 +291,32 @@ All steps use `on_error=OnError.fail`. Each step SHALL be a thin adapter that un
 
 ### Requirement: Provider adapters stay under integrations
 
-OpenCLI (WeChat) and Bilibili provider details SHALL live under `src/paca/integrations/knowledge/`. Workflow stages and tools SHALL call those adapters rather than embedding provider HTTP / CLI behavior.
+OpenCLI (WeChat) and Bilibili provider details SHALL live under `src/next_signal/integrations/knowledge/`. Workflow stages and tools SHALL call those adapters rather than embedding provider HTTP / CLI behavior.
 
 #### Scenario: fetch wechat uses OpenCLI adapter
 
 - **WHEN** `fetch_wechat` runs
-- **THEN** it calls `paca.integrations.knowledge.opencli.opencli_weixin_download`
+- **THEN** it calls `next_signal.integrations.knowledge.opencli.opencli_weixin_download`
 
 ### Requirement: Workflow tool exposure is centralized
 
-The workflow SHALL be exposed to agents through `paca.orchestrator.workflow_tools`, using the `expose.tool` section in workflow config. Domain packages SHALL NOT create separate workflow-tool wrapper modules for the same workflow.
+The workflow SHALL be exposed to agents through `next_signal.orchestrator.workflow_tools`, using the `expose.tool` section in workflow config. Domain packages SHALL NOT create separate workflow-tool wrapper modules for the same workflow.
 
 #### Scenario: an agent lists the workflow tool
 
 - **WHEN** an agent YAML declares `tools: [knowledge_ingest_workflow]`
 - **THEN** the registry resolves it to the workflow's `WorkflowTools` toolkit and no separate `knowledge_pipeline_workflow` wrapper exists
 
-Note: no agent in this repo currently ships with `knowledge_ingest_workflow` in its `tools:` list (there is no `knowledge_manager` agent) — the mechanism above is exercised by `paca run-workflow knowledge_ingest` and the dashboard's re-index action, not by an agent-initiated tool call, as of this repo.
+Note: no agent in this repo currently ships with `knowledge_ingest_workflow` in its `tools:` list (there is no `knowledge_manager` agent) — the mechanism above is exercised by `next-signal run-workflow knowledge_ingest` and the dashboard's re-index action, not by an agent-initiated tool call, as of this repo.
 
 ### Requirement: Manual run uses configured run function
 
-The `paca run-workflow` CLI command SHALL use `WorkflowConfig.extra.run_now` for manual workflow execution.
+The `next-signal run-workflow` CLI command SHALL use `WorkflowConfig.extra.run_now` for manual workflow execution.
 
 #### Scenario: knowledge ingest runs manually
 
-- **WHEN** `uv run paca run-workflow knowledge_ingest` is invoked
-- **THEN** the CLI resolves `knowledge_ingest` to `paca.workflows.knowledge_ingest:run` and calls it
+- **WHEN** `uv run next-signal run-workflow knowledge_ingest` is invoked
+- **THEN** the CLI resolves `knowledge_ingest` to `next_signal.workflows.knowledge_ingest:run` and calls it
 
 ### Requirement: Frontmatter prose fields follow the configured output language
 
@@ -410,4 +381,42 @@ They are the only consumers of the detected language. Detection itself is unchan
 
 - **WHEN** one item is ingested
 - **THEN** its language is detected once and passed as `language=` to the body-cleaning agent only; the frontmatter agent is built with no override
+
+### Requirement: `next-signal knowledge ingest` accepts URLs and files
+
+The CLI command `next-signal knowledge ingest <url|file>` SHALL detect the source type (microblog article, YouTube, Bilibili, PDF, Office, HTML, image, plain markdown) and route to the matching adapter. The command SHALL accept an optional `--category <path>` flag that pins the destination wiki folder, and an optional `--progress` flag that emits one JSON event per pipeline step to stdout. With both flags absent the command behaves as before (automatic classification, single result-JSON line on stdout).
+
+#### Scenario: WeChat article saved
+
+- **WHEN** `next-signal knowledge ingest https://mp.weixin.qq.com/s/<id>` is run
+- **THEN** the OpenCLI adapter downloads the article + images to the raw store, rewrites image references to local relative paths, and emits clean markdown
+
+#### Scenario: YouTube video saved
+
+- **WHEN** the input URL is a YouTube link
+- **THEN** the MarkItDown adapter writes the converted markdown and a raw conversion JSON
+
+#### Scenario: category pinned via flag
+
+- **WHEN** `next-signal knowledge ingest <url> --category knowledge/ai-ml` is run with a path present in the taxonomy
+- **THEN** the artifact is written under that folder and the LLM classification step is skipped
+
+#### Scenario: unknown category rejected
+
+- **WHEN** `next-signal knowledge ingest <url> --category not/a/real/path` is run
+- **THEN** the command fails loud with a non-zero exit before performing the ingest work
+
+#### Scenario: progress events streamed
+
+- **WHEN** `next-signal knowledge ingest <url> --progress` is run
+- **THEN** stdout contains one JSON event line per pipeline step as each step starts and completes, followed by the final result JSON as the last line, with all lines forming valid JSONL
+
+### Requirement: Classification uses the ingest job's selected engine
+
+When no category override is supplied, `knowledge_classifier` SHALL run through the same stage-job context and pinned engine as the clean and frontmatter passes. Its existing `temp-inbox` fallback on classification failure SHALL remain unchanged.
+
+#### Scenario: one CLI performs every knowledge LLM pass
+
+- **WHEN** a knowledge ingest starts with Codex selected and no category override
+- **THEN** cleaner, frontmatter, and classifier LLM calls all use Codex while deterministic fetch, validation, persistence, and GBrain calls retain their existing implementations
 

@@ -9,7 +9,9 @@ re-querying GBrain for that article's neighbors.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Awaitable, Iterator
 import hashlib
+import inspect
 import json
 import re
 from pathlib import Path
@@ -19,6 +21,7 @@ import yaml
 from agno.workflow import Step, Workflow
 from agno.workflow.types import OnError, StepInput, StepOutput
 
+from next_signal.agents.stage import StageJobState, stage_job
 from next_signal.core import paths
 from next_signal.integrations.gbrain import gbrain_ingest, gbrain_slug_for_path
 from next_signal.workflows.stages.knowledge_ingest import KnowledgeArtifact
@@ -337,7 +340,11 @@ def ingest_one(
         _validate_category_override(category)
     run_output = build().run(
         input=value,
-        additional_data={"ingest": ingest, "category": category, "on_progress": on_progress},
+        additional_data={
+            "ingest": ingest,
+            "category": category,
+            "on_progress": on_progress,
+        },
     )
     return _build_result(_final_artifact(run_output), ingest_requested=ingest)
 
@@ -368,9 +375,51 @@ def _build_result(artifact: KnowledgeArtifact, *, ingest_requested: bool) -> dic
     return result
 
 
+class StageAffinityWorkflow(Workflow):
+    """Keep one stage-engine choice across sync, async, and streaming runs."""
+
+    def run(self, *args: Any, **kwargs: Any) -> Any:
+        with stage_job() as state:
+            result = super().run(*args, **kwargs)
+        if isinstance(result, Iterator):
+            return self._iter_with_state(result, state)
+        return result
+
+    def arun(self, *args: Any, **kwargs: Any) -> Any:
+        with stage_job() as state:
+            result = super().arun(*args, **kwargs)
+        if inspect.isawaitable(result):
+            return self._await_with_state(result, state)
+        if isinstance(result, AsyncIterator):
+            return self._aiter_with_state(result, state)
+        return result
+
+    @staticmethod
+    def _iter_with_state(
+        iterator: Iterator[Any], state: StageJobState
+    ) -> Iterator[Any]:
+        with stage_job(state=state):
+            yield from iterator
+
+    @staticmethod
+    async def _await_with_state(
+        awaitable: Awaitable[Any], state: StageJobState
+    ) -> Any:
+        with stage_job(state=state):
+            return await awaitable
+
+    @staticmethod
+    async def _aiter_with_state(
+        iterator: AsyncIterator[Any], state: StageJobState
+    ) -> AsyncIterator[Any]:
+        with stage_job(state=state):
+            async for event in iterator:
+                yield event
+
+
 def build() -> Workflow:
     """Construct the single-source knowledge ingest workflow."""
-    return Workflow(
+    return StageAffinityWorkflow(
         id=WORKFLOW_ID,
         name="Knowledge Ingest",
         description=(

@@ -10,29 +10,14 @@ for content the themes are meant to abstract away.
 
 from __future__ import annotations
 
-import os
 from datetime import date, datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import psycopg
 from psycopg.types.json import Jsonb
 
+from next_signal.core.clock import radar_timezone, today_local
 from next_signal.core.db import database_url
-
-# Matches dashboard/lib/radar/queries.ts so a recap range covers exactly the
-# day rows the reader sees beneath it.
-_DEFAULT_TZ = "America/Los_Angeles"
-
-
-def radar_timezone() -> str:
-    """Local timezone for day bucketing. Read at call time, not at import."""
-    return os.environ.get("INFO_RADAR_TIMEZONE", "").strip() or _DEFAULT_TZ
-
-
-def today_local() -> date:
-    """Today in the radar timezone — the same 'today' the dashboard uses."""
-    return datetime.now(ZoneInfo(radar_timezone())).date()
 
 
 def select_candidates(

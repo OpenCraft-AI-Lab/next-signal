@@ -26,6 +26,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from next_signal.agents.stage import run_stage, stage_job
 from next_signal.workflows.info_radar_recap import store
 
 log = logging.getLogger(__name__)
@@ -105,6 +106,24 @@ def run(
     Returns a dict whose ``status`` is one of ``cached`` / ``empty`` /
     ``running`` / ``done`` / ``error``.
     """
+    with stage_job():
+        return _run(
+            since=since,
+            until=until,
+            min_score=min_score,
+            novel_only=novel_only,
+            regenerate=regenerate,
+        )
+
+
+def _run(
+    *,
+    since: date | str | None,
+    until: date | str | None,
+    min_score: int,
+    novel_only: bool,
+    regenerate: bool,
+) -> dict[str, Any]:
     until_day = _coerce_day(until, "until") if until is not None else store.today_local()
     since_day = (
         _coerce_day(since, "since") if since is not None else until_day - timedelta(days=6)
@@ -165,17 +184,13 @@ def run(
 
 def _generate(since_day: date, until_day: date, items: list[dict[str, Any]]) -> RecapOutput:
     """Ask radar_recap to cluster the selected items into themes."""
-    from next_signal.agents.loader import build_from_name
-    from next_signal.agents.structured import run_structured
-
     payload = {
         "since": since_day.isoformat(),
         "until": until_day.isoformat(),
         "items": items,
     }
-    agent = build_from_name("radar_recap")
-    return run_structured(
-        agent, json.dumps(payload, ensure_ascii=False), RecapOutput
+    return run_stage(
+        "radar_recap", json.dumps(payload, ensure_ascii=False), RecapOutput
     )
 
 

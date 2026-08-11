@@ -12,6 +12,8 @@
 # opencli uses a real release tag. Both refs may be a SHA, tag, or branch.
 ARG GBRAIN_REF=a25209bbb2bacf1b88e06fd5282b27f1bf4a3e7a
 ARG OPENCLI_REF=v1.8.1
+ARG CODEX_CLI_VERSION=0.145.0
+ARG CLAUDE_CODE_VERSION=2.1.220
 
 # ---------------------------------------------------------------------------
 # Stage 1 — build the gbrain single-file binary (needs Bun).
@@ -46,7 +48,21 @@ RUN npm install --no-audit --no-fund \
 # Result: /src/dist/src/main.js + /src/node_modules (runtime only)
 
 # ---------------------------------------------------------------------------
-# Stage 3 — Python deps + editable next-signal install (uv).
+# Stage 3 — install exact coding-agent CLI releases. They are optional for a
+# host install, but the official image is self-contained and never downloads
+# an unbounded `latest` package at startup.
+# ---------------------------------------------------------------------------
+FROM node:22-bookworm-slim AS coding-agent-cli-build
+ARG CODEX_CLI_VERSION
+ARG CLAUDE_CODE_VERSION
+RUN npm install -g --no-audit --no-fund \
+        "@openai/codex@${CODEX_CLI_VERSION}" \
+        "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
+    && codex --version \
+    && claude --version
+
+# ---------------------------------------------------------------------------
+# Stage 4 — Python deps + editable next-signal install (uv).
 # The project is installed EDITABLE at /app so next_signal.core.paths.PROJECT_ROOT
 # (parents[3] of paths.py) resolves to /app at runtime. Keep WORKDIR=/app
 # identical in the runtime stage or the editable link breaks.
@@ -72,7 +88,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Result: /app/.venv (deps + editable next-signal) and the source tree at /app.
 
 # ---------------------------------------------------------------------------
-# Stage 4 — build the Next.js dashboard (pnpm).
+# Stage 5 — build the Next.js dashboard (pnpm).
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS dash-build
 # WIKI_DIR is a dummy value so build-time path guards don't throw.
@@ -90,13 +106,14 @@ RUN pnpm build
 # Result: /app/dashboard with .next/ + node_modules/.
 
 # ---------------------------------------------------------------------------
-# Stage 5 — runtime. Python is primary; Node is layered in for the dashboard,
+# Stage 6 — runtime. Python is primary; Node is layered in for the dashboard,
 # opencli, and folocli (npx). No browser, no Bun, no build toolchains.
 # ---------------------------------------------------------------------------
 FROM python:3.11-slim-bookworm AS runtime
 # ffmpeg: whisper / yt-dlp audio. libgomp1: torch runtime. tini: PID-1 signals.
+# bash/git/ripgrep: normal repository-agent prerequisites for Codex and Claude.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates ffmpeg libgomp1 tini \
+        bash ca-certificates ffmpeg git libgomp1 ripgrep tini \
     && rm -rf /var/lib/apt/lists/*
 # Layer in the Node 22 runtime (node + npm + npx + corepack) and enable pnpm.
 COPY --from=node:22-bookworm-slim /usr/local/bin/ /usr/local/bin/
@@ -105,6 +122,16 @@ COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/nod
 # `yarn` shim, but the copied yarn symlink dangles here and aborts it. Bake in
 # the pinned pnpm so the runtime `pnpm start` needs no network on first boot.
 RUN corepack enable pnpm && corepack prepare pnpm@11.8.0 --activate
+# Pinned coding-agent packages and their relative launch symlinks.
+COPY --from=coding-agent-cli-build /usr/local/lib/node_modules/@openai /usr/local/lib/node_modules/@openai
+COPY --from=coding-agent-cli-build /usr/local/lib/node_modules/@anthropic-ai /usr/local/lib/node_modules/@anthropic-ai
+# Docker COPY dereferences the npm launcher symlinks. Recreate them so Codex
+# resolves its optional native package relative to the installed JS package,
+# and so Claude's large native executable is not duplicated in /usr/local/bin.
+RUN ln -s ../lib/node_modules/@openai/codex/bin/codex.js /usr/local/bin/codex \
+    && ln -s ../lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe /usr/local/bin/claude \
+    && codex --version \
+    && claude --version
 
 WORKDIR /app
 # Python venv + source (editable next-signal) — must land at the same /app path.
@@ -125,6 +152,7 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     GBRAIN_BIN=/usr/local/bin/gbrain \
     OPENCLI_BIN=/opt/opencli/dist/src/main.js \
     NEXT_SIGNAL_STATE_DIR=/state \
+    DISABLE_AUTOUPDATER=1 \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     UV_NO_SYNC=1
 RUN chmod +x /usr/local/bin/gbrain && mkdir -p /state

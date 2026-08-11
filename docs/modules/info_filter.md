@@ -6,7 +6,7 @@
 
 Collect external information streams and filter them down to signal. The current
 instance is **info-radar**: periodically pull the Folo / source CLIs and write
-`radar_items`; then a two-tier local-LLM analysis scores relevance and impact and
+`radar_items`; then a two-tier selected-engine analysis scores relevance and impact and
 deduplicates according to `configs/info_radar/goals.yaml`, writing
 `radar_analyses` / `radar_pushed_topics`. The dashboard `/radar` page handles
 reading and manual triggering.
@@ -22,12 +22,17 @@ reading and manual triggering.
 
 ## Agents
 
-| Agent | Model profile | Used for |
+| Agent | YAML baseline profile | Used for |
 |---|---|---|
 | `radar_tier1_filter` | local_structured | Batched tier-1 relevance filter; keep/drop against the goals |
 | `radar_tier2_impact` | local_structured | Per-item full-content impact summary / score / tags |
 | `radar_dedup_judge` | local_structured | LLM duplicate/novel verdict after pgvector candidate retrieval |
 | `radar_recap` | local_structured | Clusters a date range of kept items into 3-5 themed narratives with citations |
+
+These profiles remain the OMLX/DeepSeek baselines. Production calls go through
+`next_signal.agents.stage.run_stage`; `engine.json` selects OMLX, DeepSeek, Codex
+CLI, or Claude Code CLI once per analysis/recap job. Tier 1, Tier 2, dedup judge,
+and recap never mix engines after the first successful response.
 
 ## Tools
 
@@ -53,7 +58,8 @@ reading and manual triggering.
 
 - info-radar raw items: Postgres `radar_items`
 - info-radar analyses: Postgres `radar_analyses`
-- info-radar dedup memory: Postgres `radar_pushed_topics` (pgvector, 1024-dim)
+- info-radar dedup memory: Postgres `radar_pushed_topics` (pgvector, 1024-dim,
+  one `embedder` identity per row)
 - info-radar recaps: Postgres `radar_recaps`, one row per
   `(since, until, min_score, novel_only)`
 - info-radar goals: `configs/info_radar/goals.yaml` (editable from the dashboard
@@ -105,6 +111,24 @@ reading and manual triggering.
   ship together.**
 - When dedup embedding fails, treat the item conservatively as novel — never
   silently drop it.
+- **A vector is only ever compared to vectors from the same embedder.** Each
+  item resolves one embedder snapshot; its vector-space identity is written to
+  `radar_pushed_topics.embedder`, and the search restricts to that identity
+  before computing any distance. The identity carried through persistence is the
+  one captured *before* the embedding request, so a settings change landing
+  mid-item cannot mislabel the row it produced.
+- The search is **exact**, not approximate. The former table-wide IVFFlat index
+  is gone: an approximate index filters after candidate generation, so two vector
+  spaces sharing centroids would degrade each other's recall. At this table's
+  hundreds-to-low-thousands scale an exact scan of one identity is cheap and has
+  perfect recall; a B-tree index on `embedder` supports the restriction.
+- Switching embedder **parks** the previous identity's memory rather than
+  translating it — the gate reports already-seen topics as novel until it
+  rebuilds under the new identity, and switching back restores the earlier rows
+  with no re-embedding. Rows written before the column existed carry
+  `legacy:unknown` and stay parked permanently unless an operator explicitly
+  relabels them: `embedders.local.model_id` has always been editable, so nothing
+  in the database proves which model produced them.
 - A recap is identified by `(since, until, min_score, novel_only)`. A repeat
   request is a cache hit; regeneration upserts that row rather than appending.
 - Recap ranges are bounded by `analyzed_at` in the radar timezone, inclusive —
@@ -175,7 +199,7 @@ The dedup gate embeds the tier-2 `summary`, so what gets embedded now follows
 the `global` language policy too. `radar_pushed_topics` is never swept — nothing deletes
 from it — so it permanently holds 32 English topics frozen from before the
 output-language change, alongside 210 Chinese ones. A Chinese summary of an
-English article is therefore ANN-searched against the English embedding of the
+English article is therefore searched against the English embedding of the
 same story.
 
 Measured on 5 such pairs (the stored English topic vs the Chinese summary the
@@ -187,7 +211,11 @@ Two things follow. The margin is real but finite — anyone tightening
 pairs sitting at 0.26. And `radar_dedup_judge` now sees a Chinese `new_summary`
 against possibly-English candidates; it is exempt from the language rule (its
 `reason` is neither stored nor rendered) and only ever judges candidates that
-already cleared the ANN gate.
+already cleared the distance gate.
+
+Those measurements hold **within one vector space**. They say nothing about
+distances across embedders, which is exactly why the search restricts to one
+identity instead of relying on a threshold to separate them.
 
 ## Tuning and evaluation
 
@@ -201,15 +229,18 @@ state and does not affect verdict or score.
 
 Article content is snapshotted at `load` time and replayed, so a variant
 comparison is attributable to the prompt rather than to whether folocli answered
-that day. Each run records a `prompt_digest` — a hash of both prompts plus
-`goals.yaml` — so a set of numbers always traces to the text that produced it.
+that day. Each run records a `prompt_digest` — a hash of both prompts,
+`goals.yaml`, and the frozen engine provenance — plus the actual selected
+engine/model/effort in its notes, so comparisons cannot silently mix models.
 
 `scripts/lang_probe.py` is the companion harness for output *language* rather
 than score. It replays the same stages plus `knowledge_frontmatter`, writes only
-JSON under `NEXT_SIGNAL_AGENT_TMP_DIR/lang-probe/`, and reports the share of
+JSON under `NEXT_SIGNAL_AGENT_TMP_DIR/lang-probe/`, records the selected
+engine/model, and reports the share of
 generations that came back in the wrong language. Repeats are mandatory there:
 frontmatter's defect is nondeterministic — the same article flipped language
-between runs — so a single pass can pass while the bug is present.
+between runs — so a single pass can pass while the bug is present. All probe
+agents use the same production stage adapter and one job-level affinity.
 
 Two guards exist because both failures actually happened: the probe asserts the
 built agent's composed instructions really name the target language (a bind
@@ -260,10 +291,14 @@ Specs: [`openspec/specs/info-radar/`](../../openspec/specs/info-radar/),
 [`openspec/specs/dashboard-radar-reader/`](../../openspec/specs/dashboard-radar-reader/).
 
 Current status: info-radar pull, analysis, recap, the dashboard reader, the
-goals editor, and the Folo subscriptions table are all in place. There is no background
-scheduler — both pull and analysis are **manually triggered**, via
-`next-signal info-radar pull|analyze`, `next-signal run-workflow <name>`, or the dashboard
-`/radar` page's Pull + Analyze.
+goals editor, and the Folo subscriptions table are all in place. Pull and
+analysis can be triggered by hand — `next-signal info-radar pull|analyze`,
+`next-signal run-workflow <name>`, or the dashboard `/radar` page's Pull +
+Analyze — or left to the wall-clock scheduler, which runs the two in sequence at
+each configured local time (see
+[operations](../operations.md#unattended-runs)). No cadence is part of the
+contract: `seen_at` is what makes a rerun at any frequency idempotent, which is
+why an unattended trigger needed no change to the pipeline itself.
 
 The dashboard's `Pull + Analyze` shows **live analyze progress**: after pulling,
 the action writes the unanalyzed-item count (the denominator) plus an

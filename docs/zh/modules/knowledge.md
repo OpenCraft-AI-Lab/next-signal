@@ -18,13 +18,18 @@ reconciliation，`store.py` 放 Postgres I/O）。
 
 ## Agents
 
-| agent | 模型 profile | 用途 |
+| agent | YAML baseline profile | 用途 |
 |---|---|---|
 | `knowledge_artifact_editor` | local | ingest 的 clean 步：正文清洗 / whisper 纠错（DB-free 转换 agent） |
 | `knowledge_github_cleaner` | local | github repo 专用 clean 步：只对 `## README` 段做激进精简（去 badge / 安装命令 / sponsor 等），结构化 signal section 原样保留 |
 | `knowledge_frontmatter` | local | ingest 的 enrich 步：产出 summary/tags/freshness（`FrontmatterDraft` schema，DB-free） |
 | `knowledge_github_summary` | local | github repo 专用 enrich 步：summary 按 does/value/maturity/ecosystem 四个角度组织，复用 `FrontmatterDraft` schema |
 | `knowledge_classifier` | local | ingest 时按 taxonomy 选 wiki 分类目录（DB-free 转换 agent） |
+
+ingest workflow 通过 `run_stage` 调用这些 agent。workflow 对象自己覆盖 CLI、Dashboard、
+直接 AgentOS、async 和 streaming 入口的完整 stage-job 边界，因此 clean、enrich、classify
+共用一个 selected engine。production CLI stage 在空临时 workspace 中运行且没有 provider
+tools，不能检查源码仓库；fetch、persist、GBrain 继续走现有实现。
 
 ## 工具
 
@@ -134,7 +139,7 @@ tracker 依然显示"分数分布 · 0-100"和完整坐标轴。折叠态砍掉�
 
 正文就是归档本身——wiki 里存着那段源文本的唯一副本，翻译掉就等于毁掉它。而
 `title` 和 `summary` 是条目的索引项，是知识列表和回顾卡片上显示的文字，所以跟着读者在
-dashboard 设置面板里选的内容语言走。
+dashboard 设置页里选的内容语言走。
 
 因此一个 wiki 文件是允许双语的：英文的 `title`/`summary` 配中文正文（如果设置是那样）。
 这是有意的，也和 radar 阅读器一致——那边早就是翻译过的标题配源语言文章。

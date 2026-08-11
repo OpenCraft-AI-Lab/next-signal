@@ -9,7 +9,7 @@ knowledge base you own.**
 
 [English](./README.md) · [简体中文](./README.zh-CN.md)
 
-<sub>Apache-2.0 · local-first · runs on your own machine</sub>
+<sub>Apache-2.0 · local-first · single-user · runs on your own machine</sub>
 
 </div>
 
@@ -33,28 +33,75 @@ rigorous but narrow paper. Your policy can encode a different order.
 <div align="center">
   <img src="./visual_assets/frontpage.png" alt="The next-signal radar dashboard" width="100%" />
   <br />
-  <sub>Dashboard example from a separate live run. The 978-item measurement below comes from a different run.</sub>
+  <sub>The radar reading view after a single run.</sub>
 </div>
 
-## A real 978-item run
+## How this compares
 
-These figures came from a personal feed with no manual filtering between pull
-and analysis:
+Every reader on this list has AI now. Feedly's Leo prioritizes and mutes topics,
+Inoreader added multi-provider summarization and tagging, and Readwise's
+Ghostreader works inside a document. Putting a language model on a feed stopped
+being a differentiator somewhere in 2026. What none of them will tell you is
+**why**.
+
+| | Feedly Pro+ | Inoreader Pro | Readwise Reader | **next-signal** |
+|---|:---:|:---:|:---:|:---:|
+| Filters before you read | priority topics, mute | rules + AI tags | — | **goals + anti-goals** |
+| The standard is a file you own | — | — | — | **versioned YAML** |
+| Shows why each item was kept or cut | — | — | — | **stored, per item** |
+| Filter quality measured on a labelled set | — | — | — | **55-item blind holdout** |
+| Ranks by consequence, not relevance | — | — | — | **✔** |
+| The same story from five feeds, once | rules | rules | — | **semantic, across runs** |
+| Turns a period into themes you can check | — | — | — | **3-5, every citation validated** |
+| Runs entirely on your own machine | — | — | — | **✔** |
+| You pick the model it runs on | — | — | — | **✔ local / cloud / your CLI plan** |
+| Spaced repetition on what you keep | — | — | ✔ | **✔ Ebbinghaus, zero model calls** |
+| Library is plain markdown you own | — | — | — | **✔ Obsidian vault** |
+| Price | $99/yr | $90/yr | $120/yr | **free self-host** |
+
+<sub>Prices as of August 2026, annual billing.</sub>
+
+Two more that a column cannot hold:
+
+- **It runs without you.** A scheduler ships with the stack: set daily times and
+  the radar pulls and analyses on its own. A run missed while the machine slept
+  is skipped, or caught up once — your choice.
+- **It breaks the language barrier.** A source is read in whatever language it
+  was published in, and the analysis comes back in the one you picked — content
+  language is set separately from interface language. The exception is a cleaned
+  article body: it stays in the original, because your library holds the only
+  copy of it.
+
+The software is free under Apache-2.0. Local inference uses your hardware. Cloud
+inference is billed by the provider.
+
+**Scope, stated up front.** next-signal is a single-user tool. The dashboard has
+no accounts and no authentication, it is built for the desktop rather than for
+mobile, and it expects to run on your own machine — not on a public host.
+
+---
+
+## A real month: 978 items
+
+These figures are one month of a personal feed, with no manual filtering between
+pull and analysis:
 
 | Count | Result | What it means |
 |---:|---|---|
 | **978** | pulled | everything the enabled sources returned |
-| **977** | analyzed | one item had not completed analysis |
 | **568** | dropped at tier 1 | 58.1% did not justify full analysis |
-| **409** | kept | 276 remained below the default high-signal threshold |
+| **409** | kept | cleared the relevance gate and received a full impact analysis |
 | **133** | scored at least 75 | 13.6% reached the default high-signal view |
 
-The system did not hide the middle. Items below 75 remain available if you lower
-the threshold, while tier-1 drops retain their reasons.
+The system did not hide the middle. The 276 kept items that scored below 75 stay
+available if you lower the threshold, and tier-1 drops retain their reasons.
+
+<sub>977 of the 978 had finished analysis when these figures were taken. The
+screenshot above is a single run; the totals here are a month of them.</sub>
 
 ### What it dropped
 
-These are stored reasons from that run:
+These are stored reasons from that month:
 
 | The feed sent | Why it was dropped |
 |---|---|
@@ -81,7 +128,7 @@ would change the reader's judgment.
 > [Published solutions](https://huggingface.co/datasets/dots-studio/dots-imo2026) ·
 > [Official human results](https://www.imo-official.com/results/individual/year/2026/)
 
-The same run kept an item from a completely different goal:
+The same month kept an item from a completely different goal:
 
 > **HORIZON-Breast01: SHR-A1811 in HER2-positive advanced breast cancer** ·
 > **88** · `clinical-trial` `regulatory-approval` `oncology` `adc`
@@ -97,6 +144,47 @@ The same run kept an item from a completely different goal:
 The science policy below requires a named phase, concrete results, and a
 clinical or engineering action that has already happened. This item clears that
 gate.
+
+---
+
+## What the week added up to
+
+133 items cleared 75 that month. Reading 133 summaries is still reading.
+
+A recap takes a date range and returns 3-5 themes. A theme is a claim across
+several items — "three labs cut inference prices in the same week" — not a
+bucket for items that happen to share a tag. Restating each item in turn is
+explicitly not a recap, and the prompt says so.
+
+```bash
+next-signal info-radar recap --since 2026-07-25 --until 2026-07-31 --min-score 65 --novel-only
+```
+
+That range held 59 kept items. One of the five themes it returned:
+
+> **The compute cost war, and the split in who can turn it into revenue**
+>
+> Commercial paths have visibly diverged: the majors are building a moat out of
+> aggressive cost optimization and vertical deployment, while the bubble around
+> the pure model race deflates. OpenAI and Anthropic cut prices sharply — up to
+> 80% — and shipped fuel-efficient models tuned for agent workflows, betting
+> that a lower token cost is what activates high-frequency agent use. Microsoft
+> closed a clear monetization loop through Azure and Copilot, while Meta's cash
+> flow fell under heavy capital expenditure with no enterprise model to show for
+> it. Google, meanwhile, lost market value to a delayed flagship and fell back on
+> a low-cost Flash release. The market's attention has moved from raw capability
+> scores to output per token and willingness to pay in a real scenario; models
+> that stack parameters without a business loop now face a survival problem.
+>
+> <sub>Rests on 5 cited items. Headline for the period: *"AI agents move from
+> solving problems to acting on their own, while safety and engineering hit hard
+> reality."*</sub>
+
+Every theme has to cite the items it stands on, and the citations are checked
+against the ids actually sent to the model. An invented id is discarded; a theme
+left with no surviving citation is dropped whole rather than printed. Recaps are
+cached by range, score floor, and novel-only, so reopening one costs nothing, and
+a range with no items returns without calling a model at all.
 
 ---
 
@@ -165,12 +253,38 @@ examples while getting worse on the next batch. The holdout caught exactly that.
 Filtering decides what reaches you. The knowledge pipeline decides what stays
 useful after you close the tab.
 
-```
-   sources ──▶ radar ──▶ you read it ──▶ ingest ──▶ markdown ──▶ scheduled review
-                 │                                     │               │
-          score by decision impact              files on your disk    days 1, 3, 7,
-          deduplicate across runs                + hybrid search       15, 30, 60, 120
-          generate recaps on demand
+```text
+╭──────────────────────────────────────────────╮
+│  sources                                     │
+╰──────────────────────┬───────────────────────╯
+                       │
+┌──────────────────────▼───────────────────────┐
+│  radar                                       │
+│    score by decision impact                  │
+│    deduplicate across runs                   │
+│    recaps on demand                          │
+└──────────────────────┬───────────────────────┘
+                       │
+╭──────────────────────▼───────────────────────╮
+│  you read it                                 │
+╰──────────────────────┬───────────────────────╯
+                       │
+┌──────────────────────▼───────────────────────┐
+│  ingest                                      │
+│    fetch · clean · summarize                 │
+│    file into your taxonomy                   │
+└──────────────────────┬───────────────────────┘
+                       │
+┌──────────────────────▼───────────────────────┐
+│  markdown                                    │
+│    files on your disk                        │
+│    hybrid search                             │
+└──────────────────────┬───────────────────────┘
+                       │
+┌──────────────────────▼───────────────────────┐
+│  review                                      │
+│    days 1, 3, 7, 15, 30, 60, 120             │
+└──────────────────────────────────────────────┘
 ```
 
 One click or command saves a radar item as a long-term knowledge entry. The
@@ -190,117 +304,60 @@ sources do not change the filtering or knowledge layers.
 
 ---
 
-## What is different
-
-Summarization, tagging, and topic prioritization are widely available. The
-choices below are what define next-signal:
-
-| Question | next-signal's answer |
-|---|---|
-| Who defines what matters? | You do, in a versioned policy with goals, anti-goals, and vetoes. |
-| Can I inspect a decision? | Drops retain their reasons; keeps retain the summary, impact analysis, and score behind the decision. |
-| Can I test a prompt change? | The repository ships labelled sets, a replay harness, prompt hashes, and rejected experiments. |
-| What determines rank? | Decision impact, using anchors written in your policy, rather than relevance alone. |
-| Where does retained knowledge live? | In markdown files on your disk, with optional Obsidian and Git workflows. |
-| Where does inference run? | On your own Apple Silicon machine with OMLX, or through a cloud model you configure. |
-
-The software is free under Apache-2.0. Local inference uses your hardware. Cloud
-inference is billed by the provider.
-
----
-
 ## Quick start
 
-Docker Compose is the recommended setup. It starts Postgres with pgvector,
-initializes the schema, and launches the dashboard. Helper CLIs are already in
-the image. The project CLI is named `next-signal`.
+Docker Compose brings up Postgres with pgvector, the schema, the dashboard, and
+the scheduler. The helper CLIs are already in the image.
 
 ```bash
 git clone https://github.com/OpenCraft-AI-Lab/next-signal.git
 cd next-signal
 cp .env.example .env
-$EDITOR .env
+$EDITOR .env                 # set WIKI_DIR and WIKI_RAW_DIR
 docker compose up --build
 ```
 
-Then open <http://localhost:3000>.
+Then open <http://localhost:3000> and finish setup on the settings page.
 
-### What to configure
+Only two values are required before the stack starts: `WIKI_DIR` and
+`WIKI_RAW_DIR`, absolute host paths for the clean markdown library and the raw
+archive. Everything else has a default or belongs to a source adapter you have
+not enabled yet; the full list with comments is in
+[`.env.example`](./.env.example).
 
-Docker Compose requires these host paths before it starts:
+**Then pick where the models run.** This choice lives in the dashboard rather
+than in `.env`, and it applies to the next job without a restart:
 
-| Key | Purpose |
+| Path | What it means |
 |---|---|
-| `WIKI_DIR` | absolute host path for the clean markdown library; mounted read-write |
-| `WIKI_RAW_DIR` | absolute host path for the raw archive; mounted read-write |
+| **Local model** | Any OpenAI-compatible server you run yourself — MLX, llama.cpp, vLLM, Ollama. The dashboard needs only its URL and a model name; run the server on the host rather than inside the container so it reaches the GPU. With a local embedder as well, no prompt, goal, or article body goes to a third-party model API. |
+| **DeepSeek** | No local GPU needed. A measured 100-item run cost roughly **$0.07 / ¥0.5** — an estimate, not a price; it moves with article length, cache hits, and the provider's [current rates](https://api-docs.deepseek.com/quick_start/pricing/). |
+| **Codex CLI / Claude Code CLI** | If you are already signed in to one, analysis is billed to that subscription instead of an API key. Stages run in an empty throwaway directory with tools disabled, so a CLI engine reads nothing from your repository. |
 
-Before analysis, choose one model path:
+One engine serves a whole job; a configured fallback may replace an unreachable
+primary only before the first successful response, never mid-job. The embedder
+behind duplicate detection is chosen separately — a local model, OpenAI, or any
+other OpenAI-compatible endpoint you supply.
 
-| Path | Configuration |
-|---|---|
-| Default cloud path | set `DEEPSEEK_API_KEY` |
-| Local Apple Silicon path | run OMLX on the host and set `OMLX_BASE_URL`; the endpoint must serve the chat model and embedding model named in `configs/models.yaml` |
-
-Configure credentials required by the source adapters you enable. The complete
-list and comments live in [`.env.example`](./.env.example). `DATABASE_URL` and
-the in-container wiki and state paths are set by `docker-compose.yml`; do not
-override them in `.env`.
+### Day to day
 
 ```bash
-docker compose exec dashboard next-signal doctor        # inspect the configured stack
+docker compose exec dashboard next-signal doctor      # inspect the configured stack
 docker compose run --rm dashboard next-signal info-radar pull
 docker compose run --rm dashboard next-signal info-radar analyze
-docker compose down                              # stop and keep the volumes
 ```
 
-The current release has no background scheduler. Pull and analysis run from the
-dashboard, the CLI, or a scheduler you provide. End-to-end verification should
-run through the container so it uses the same environment as the released
-image. See
-[`docs/containerized-deployment.md`](./docs/containerized-deployment.md) for the
-volume and environment mapping.
+You will rarely run those. Once you set daily times on the settings page, the
+`scheduler` container runs pull and then analysis on its own — the one path in
+the whole system that spends model tokens without you asking for it. A run
+missed while the machine slept is skipped by default, or caught up once; the
+settings page reports where the last run stands, including while it is still
+going.
 
-### Choose where models run
-
-**Local on Apple Silicon.** OMLX/MLX runs on the host to access the Metal GPU.
-When both the analysis model and embedder are served locally, prompts, goals,
-and article text are not sent to a third-party model API. Source retrieval and
-any sync service you configure still use the network.
-
-```bash
-OMLX_BASE_URL=http://host.docker.internal:<port>/v1   # in .env
-```
-
-**DeepSeek.** This path needs no local GPU. A measured 100-item run cost roughly
-**$0.07 / ¥0.5**, but this is an estimate, not a fixed price. Cost varies with
-article length, cache hits, output length, and the provider's current
-[token pricing](https://api-docs.deepseek.com/quick_start/pricing/). Without an
-OMLX endpoint, analysis still runs, but cross-run semantic deduplication treats
-items as novel because its embedder is local-only.
-
-```bash
-DEEPSEEK_API_KEY=sk-...                               # in .env
-```
-
-[Host-native setup](./docs/operations.md#installation) runs the local model
-in-process instead.
-
-## Common commands
-
-Inside the container, omit the `uv run` prefix because `next-signal` is already on
-`PATH`.
-
-```bash
-uv run next-signal doctor                                    # check env / Postgres / models / tools
-uv run next-signal info-radar pull [--source NAME]           # pull enabled sources into radar_items
-uv run next-signal info-radar analyze [--limit N]            # run two-tier analysis
-uv run next-signal info-radar recap --since D --until D      # synthesize themes with citations
-uv run next-signal knowledge ingest <url|staged-file>        # save an item into the knowledge base
-uv run next-signal knowledge review                          # reconcile the review schedule
-uv run next-signal run-workflow knowledge_ingest             # re-index markdown for vector search
-uv run next-signal list                                      # list agents and workflows
-uv run next-signal serve [--port 7777]                       # start AgentOS
-```
+The rest — the environment reference, host-native installation, the schedule
+file and its catch-up rules, and the full CLI — lives in
+[`docs/operations.md`](./docs/operations.md) and
+[`docs/containerized-deployment.md`](./docs/containerized-deployment.md).
 
 ---
 

@@ -17,9 +17,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from next_signal.core.paths import CONFIGS_DIR, PROMPTS_DIR
+from next_signal.core.paths import CONFIGS_DIR, PROJECT_ROOT, PROMPTS_DIR
 
 # Reject unknown YAML keys across every config schema. Typo'd keys (e.g.
 # `instuctions:` instead of `instructions:`) must fail loudly rather than
@@ -56,15 +56,18 @@ class ModelProfile(BaseModel):
 class EmbedderProfile(BaseModel):
     """One row in ``configs/models.yaml`` under ``embedders``.
 
-    Only the local OMLX OpenAI-compatible ``/v1/embeddings`` endpoint is
-    supported today. ``dim`` is informational — the actual stored vector
-    length is whatever the server returns; the radar_pushed_topics column
-    is fixed at vector(1024) for the default Qwen3-Embedding-0.6B-8bit model.
+    A per-provider baseline, not the live selection: which provider actually
+    runs — and how a generic endpoint is reached — comes from
+    ``~/.next-signal/embedding.json`` (see
+    ``next_signal.core.embedding_preferences``). ``dim`` is informational;
+    ``next_signal.core.models.get_embedder`` enforces the fixed 1024-value
+    contract that keeps ``radar_pushed_topics.embedding`` stable across a
+    provider switch.
     """
 
     model_config = _STRICT
 
-    provider: Literal["omlx"]
+    provider: Literal["omlx", "openai", "openai_compatible"]
     model_id: str
     dim: int
 
@@ -85,6 +88,91 @@ class ModelsConfig(BaseModel):
 
 def load_models() -> ModelsConfig:
     return ModelsConfig.model_validate(_read_yaml(CONFIGS_DIR / "models.yaml"))
+
+
+# ---------------------------------------------------------------------------
+# External coding-agent CLIs
+# ---------------------------------------------------------------------------
+
+
+class CodingAgentProviderConfig(BaseModel):
+    model_config = _STRICT
+
+    enabled: bool = True
+    timeout_seconds: float = Field(default=1800.0, gt=0)
+    max_event_bytes: int = Field(default=262_144, ge=1024)
+    max_stderr_chars: int = Field(default=8000, ge=0)
+    terminate_grace_seconds: float = Field(default=3.0, gt=0)
+    # Names only; values are copied from os.environ at call time.
+    inherit_env: list[str] = Field(default_factory=list)
+
+
+class CodexCliConfig(CodingAgentProviderConfig):
+    inherit_user_config: bool = True
+
+
+class ClaudeCliConfig(CodingAgentProviderConfig):
+    bare: bool = False
+
+
+class CodingAgentProvidersConfig(BaseModel):
+    model_config = _STRICT
+
+    codex: CodexCliConfig = Field(default_factory=CodexCliConfig)
+    claude: ClaudeCliConfig = Field(default_factory=ClaudeCliConfig)
+
+
+class CodingAgentProfile(BaseModel):
+    model_config = _STRICT
+
+    codex_sandbox: Literal["read-only", "workspace-write"]
+    claude_permission_mode: Literal["dontAsk"] = "dontAsk"
+    claude_allowed_tools: list[str] = Field(default_factory=list)
+    # Production stages process untrusted external content. ``none`` is a
+    # hard provider-level tool boundary, not merely a prompt instruction.
+    tool_access: Literal["repository", "none"] = "repository"
+
+
+class CodingAgentsConfig(BaseModel):
+    model_config = _STRICT
+
+    allowed_roots: list[str] = Field(min_length=1)
+    default_profile: str
+    providers: CodingAgentProvidersConfig
+    profiles: dict[str, CodingAgentProfile] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _default_profile_exists(self) -> "CodingAgentsConfig":
+        if self.default_profile not in self.profiles:
+            raise ValueError(
+                f"default_profile {self.default_profile!r} is absent from profiles"
+            )
+        return self
+
+    def profile(self, name: str | None = None) -> CodingAgentProfile:
+        selected = name or self.default_profile
+        try:
+            return self.profiles[selected]
+        except KeyError as e:
+            names = ", ".join(sorted(self.profiles))
+            raise ValueError(
+                f"unknown coding-agent profile {selected!r}; configured profiles: {names}"
+            ) from e
+
+    def resolved_allowed_roots(self) -> tuple[Path, ...]:
+        roots: list[Path] = []
+        for value in self.allowed_roots:
+            path = Path(value).expanduser()
+            if not path.is_absolute():
+                path = PROJECT_ROOT / path
+            roots.append(path.resolve())
+        return tuple(roots)
+
+
+def load_coding_agents() -> CodingAgentsConfig:
+    return CodingAgentsConfig.model_validate(
+        _read_yaml(CONFIGS_DIR / "coding_agents.yaml")
+    )
 
 
 # ---------------------------------------------------------------------------

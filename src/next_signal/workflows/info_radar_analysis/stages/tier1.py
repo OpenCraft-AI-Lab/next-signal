@@ -12,8 +12,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from next_signal.agents.loader import build_from_name
-from next_signal.agents.structured import run_structured
+from next_signal.agents.stage import run_stage
 from next_signal.workflows.info_radar_analysis._helpers import item_description
 from next_signal.workflows.info_radar_analysis.goals import Goal, render_goals_block
 from next_signal.workflows.info_radar_analysis.schemas import (
@@ -28,7 +27,7 @@ def run_batch(items: list[dict[str, Any]], goals: list[Goal]) -> list[Tier1Verdi
 
     Raises ``RuntimeError`` if the agent returns the wrong number of
     decisions or wrong indices. Callers (the runner) catch and fall back to
-    size-1 calls. The structured-output retry inside ``run_structured``
+    size-1 calls. The structured-output retry inside ``run_stage``
     handles JSON / schema failures internally with one repair pass.
     """
     if not items:
@@ -45,8 +44,11 @@ def run_batch(items: list[dict[str, Any]], goals: list[Goal]) -> list[Tier1Verdi
             for i, item in enumerate(items)
         ],
     }
-    agent = build_from_name("radar_tier1_filter")
-    batch = run_structured(agent, json.dumps(payload, ensure_ascii=False), Tier1Batch)
+    batch = run_stage(
+        "radar_tier1_filter",
+        json.dumps(payload, ensure_ascii=False),
+        Tier1Batch,
+    )
 
     if len(batch.decisions) != len(items):
         raise RuntimeError(

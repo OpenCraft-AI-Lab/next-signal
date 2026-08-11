@@ -251,20 +251,13 @@ def test_empty_range_makes_no_agent_call_and_writes_no_row(fake_store, monkeypat
 def test_payload_carries_summaries_and_never_impact_md(fake_store, monkeypatch):
     captured: dict[str, Any] = {}
 
-    class _DummyAgent:
-        name = "radar_recap"
-
-    monkeypatch.setattr(
-        "next_signal.agents.loader.build_from_name", lambda name: _DummyAgent()
-    )
-
-    def fake_run_structured(agent, agent_input, schema, **kw):  # noqa: ARG001
+    def fake_run_stage(agent_name, agent_input, schema, **kw):  # noqa: ARG001
         captured["input"] = agent_input
         return RecapOutput(
             headline="h", themes=[Theme(title="t", narrative="n", item_ids=[1])]
         )
 
-    monkeypatch.setattr("next_signal.agents.structured.run_structured", fake_run_structured)
+    monkeypatch.setattr(recap, "run_stage", fake_run_stage)
     fake_store["candidates"] = [_item(1)]
     fake_store["considered"] = 1
     recap.run(since="2026-07-13", until="2026-07-19")

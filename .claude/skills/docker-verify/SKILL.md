@@ -153,11 +153,20 @@ user, and `next-signal` does not exist — omitting it fails with
 Two databases on the one server: `next_signal` (next-signal's own) and `gbrain`
 (gbrain's store, `GBRAIN_DATABASE_URL`).
 
-Five business tables: `radar_items`, `radar_analyses`, `radar_pushed_topics`,
-`radar_recaps`, `knowledge_reviews` — the keys of
+Six business tables: `radar_items`, `radar_analyses`, `radar_pushed_topics`,
+`radar_recaps`, `knowledge_reviews`, `schedule_state` — the keys of
 `next_signal.core.db.BUSINESS_TABLE_COLUMNS`, which `next-signal doctor` checks the live
 schema against. (`knowledge_tag_labels` was listed here but exists in no DDL,
 no query, and no database.)
+
+`schedule_state` is the scheduler's durable state, one row per job. It is the
+fastest way to see what an unattended run is doing — `last_status` is `running`
+from the moment a slot is claimed until the chain ends:
+
+```bash
+docker compose exec -T postgres psql -U next_signal -d next_signal \
+  -c 'select job, last_slot_at, last_run_at, last_status, last_error from schedule_state;'
+```
 
 **Agno's tables (sessions / memory / traces) are provisioned lazily** — they only
 appear once an agent has run against that database. Their absence is not
@@ -172,14 +181,23 @@ docker compose exec -T postgres psql -U next_signal -d next_signal -c '\d radar_
 
 ### Dashboard
 
-Published on `localhost:3000`. Pages: `/`, `/radar`, `/knowledge`, `/goals`,
-`/subscriptions`, `/design`. All read-only to render.
+Published on `127.0.0.1:3000` (loopback by default — `DASHBOARD_BIND_ADDRESS`
+widens it). Pages: `/`, `/radar`, `/radar/[id]`, `/knowledge`, `/goals`,
+`/subscriptions`, `/settings`, `/design`. All read-only to render.
 
-Three API routes, all `GET`, all read-only — safe to poll freely:
+**`/` answers 307, not 200** — it redirects rather than rendering. Assert on
+`307` for it, or a sweep that demands 200 everywhere reports a working stack as
+broken.
+
+Three `GET` routes are read-only — safe to poll freely:
 
 - `/api/radar/run` — analyze progress (`{running, done, total}`)
 - `/api/radar/recap?since=&until=` — recap status
 - `/api/radar/export` — rendered signal digest
+
+`/api/coding-agents/auth/<provider>` is **not** in that set. Its `GET` is a
+status read, but `POST` starts a real provider login session, `PUT` feeds it an
+authorization code, and `DELETE` cancels it. Do not poll it as a health check.
 
 `next start` logs almost nothing per request, so **do not verify a page from the
 container logs** — use the HTTP status plus a content assertion.
@@ -198,10 +216,38 @@ the change is specifically in a model path.
 | `next-signal info-radar pull` / `sweep` | `next-signal run-workflow knowledge_ingest` |
 | `next-signal info-radar subscriptions --json` | `next-signal info-radar analyze` |
 | all dashboard pages, all `/api/radar/*` GETs | `next-signal info-radar recap` |
+| `next-signal coding-agent doctor` | `next-signal coding-agent run` |
 | `psql`, `gbrain` health | |
 
 Dashboard controls map the same way: **Review** and **Pull** are free;
 **Analyze**, **Recap**, and **Re-index** are not.
+
+**Embedding is only free while the embedder is local.** The dedup gate inside
+`info-radar analyze` embeds every kept item, and `~/.next-signal/embedding.json`
+decides where that goes. On the default `omlx` provider it is local inference —
+GPU time, no bill, nothing leaves the machine. Selecting `openai` or an
+OpenAI-compatible endpoint makes the same step a **paid off-machine call, once
+per kept item**, including on unattended scheduler runs. Check the selected
+provider before assuming the embedding half of a run is free:
+
+```bash
+docker compose exec dashboard next-signal doctor   # prints the resolved embedder identity
+```
+
+`doctor` itself stays free under every provider — it reports configuration and
+never issues an embedding request.
+
+**The `scheduler` service spends tokens with nobody typing a command.** It is
+the one entry here that is not something you run — `docker compose up` starts
+it, and if `~/.next-signal/schedule.json` has `enabled: true` it fires
+`info_radar_pull` → `info_radar_analysis` at each configured time, on whatever
+engine `~/.next-signal/engine.json` selects. Two consequences when verifying:
+
+- A run you did not start can appear mid-verification. `docker compose logs
+  scheduler` and the `schedule_state` row say whether one is in flight
+  (`last_status = 'running'`).
+- To verify anything else without that risk, either leave the schedule disabled
+  (an absent file reads as disabled) or `docker compose stop scheduler` first.
 
 `next-signal info-radar pull` is the workhorse for verifying the collector path — real
 network, real DB writes, no model, and idempotent (re-running reports items as
@@ -398,6 +444,13 @@ foreach ($i in 1..30) {
 
 ### Route smoke check
 
-After any `dashboard/` change, sweep all six and confirm every one is 200:
+After any `dashboard/` change, sweep all seven and confirm each answers as noted
+— `/` redirects (307), the other six render (200):
 
-`/` · `/radar` · `/knowledge` · `/goals` · `/subscriptions` · `/design`
+`/` (307) · `/radar` · `/knowledge` · `/goals` · `/subscriptions` · `/settings` · `/design`
+
+```bash
+for p in / /radar /knowledge /goals /subscriptions /settings /design; do
+  printf "%-16s %s\n" "$p" "$(curl -fsS -o /dev/null -w '%{http_code}' http://localhost:3000$p)"
+done
+```

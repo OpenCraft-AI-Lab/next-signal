@@ -1,7 +1,7 @@
 # Containerized cloud-LLM deployment for next-signal.
 # See docs/containerized-deployment.md for the full design.
 #
-#   docker compose up --build            # postgres + bootstrap + dashboard
+#   docker compose up --build            # postgres + bootstrap + dashboard + scheduler
 #
 # Cloud-LLM by default: OMLX is left unset so model profiles fall back to the
 # cloud (DeepSeek/Claude, per configs/models.yaml). To use the LOCAL LLM
@@ -25,6 +25,8 @@ x-app: &app
     args:
       GBRAIN_REF: ${GBRAIN_REF:-a25209bbb2bacf1b88e06fd5282b27f1bf4a3e7a}
       OPENCLI_REF: ${OPENCLI_REF:-v1.8.1}
+      CODEX_CLI_VERSION: ${CODEX_CLI_VERSION:-0.145.0}
+      CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.220}
   image: next-signal:latest
   # Cloud API keys come from .env (secrets stay OUT of the image).
   env_file:
@@ -43,6 +45,7 @@ x-app: &app
     GBRAIN_DATABASE_URL: postgresql://${POSTGRES_USER:-next_signal}:${POSTGRES_PASSWORD:-next_signal}@postgres:5432/gbrain
     OPENCLI_BIN: /opt/opencli/dist/src/main.js
     HOME: /root                              # writable HOME for npx (folocli) cache
+    DISABLE_AUTOUPDATER: "1"                 # image rebuilds own Claude upgrades
   volumes:
     - pstate:/state
     # Host knowledge dirs — sources come from .env (${WIKI_DIR} etc.),
@@ -54,6 +57,17 @@ x-app: &app
   extra_hosts:
     - "host.docker.internal:host-gateway"
   restart: unless-stopped
+
+# Dashboard and scheduler invoke the coding-agent CLIs. Keep credentials in
+# provider-owned homes, separate from next-signal's /state volume and image.
+x-app-with-coding-agent-auth: &app-with-coding-agent-auth
+  <<: *app
+  volumes:
+    - pstate:/state
+    - codex_auth:/root/.codex
+    - claude_auth:/root/.claude
+    - ${WIKI_DIR:?set WIKI_DIR in .env}:/wiki
+    - ${WIKI_RAW_DIR:?set WIKI_RAW_DIR in .env}:/wiki-raw
 
 services:
   # --- Postgres 16 + pgvector: next-signal's main DB (agno + business tables) ---
@@ -85,10 +99,26 @@ services:
   # Spawns `next-signal` CLI children + gbrain/folocli as subprocesses, so it runs
   # from the same image. `next start` binds 0.0.0.0, reachable once published.
   dashboard:
-    <<: *app
+    <<: *app-with-coding-agent-auth
     command: ["next-signal", "dashboard", "--start", "--port", "3000"]
     ports:
-      - "3000:3000"
+      # Login/logout endpoints mutate provider auth state. Keep them local by
+      # default; use an authenticated reverse proxy before publishing remotely.
+      - "${DASHBOARD_BIND_ADDRESS:-127.0.0.1}:3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+
+  # --- Wall-clock scheduler: fires the radar chain on a schedule (:no ports) ---
+  # Deliberately not behind a Compose profile. An absent ~/.next-signal/schedule.json
+  # reads as disabled, so a stack whose operator never opens the settings page
+  # gets an idle container rather than a crash loop — and turning the schedule on
+  # in the dashboard needs no `docker compose` flag to have been remembered.
+  scheduler:
+    <<: *app-with-coding-agent-auth
+    command: ["next-signal", "schedule"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,3 +128,5 @@ services:
 volumes:
   pgdata:      # Postgres data
   pstate:      # NEXT_SIGNAL_STATE_DIR (host default ~/.next-signal) + gbrain PGLite
+  codex_auth:  # provider-owned /root/.codex login/config, shared by app services
+  claude_auth: # provider-owned /root/.claude login/config, shared by app services

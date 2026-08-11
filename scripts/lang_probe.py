@@ -10,7 +10,8 @@ different failure mode with a different noise profile — `knowledge_frontmatter
 returns the same article in different languages on different runs, so repeats
 are mandatory even though the metric is binary.
 
-What is identical to production: the same `tier1.run_batch` at the same chunk
+What is identical to production: the same stage adapter and frozen live engine,
+the same `tier1.run_batch` at the same chunk
 size, the same `fetch.run` (snapshotted once, then replayed so a variant
 comparison isolates the prompt), the same `tier2.run` including the opinion
 ceiling, the same `write_frontmatter` input shape, and the real agent loader —
@@ -20,8 +21,8 @@ block for prompts that carry no token).
 
 Usage::
 
-    python scripts/lang_probe.py snapshot --items en --limit 10
-    python scripts/lang_probe.py run \\
+    uv run python scripts/lang_probe.py snapshot --items en --limit 10
+    uv run python scripts/lang_probe.py run \\
         --agent radar --items en --limit 10 --repeats 3 --target zh
 
 `--target` is required on `run`, and means different things per agent:
@@ -53,8 +54,9 @@ from typing import Any
 import psycopg
 from psycopg.rows import dict_row
 
-from next_signal.agents.loader import build_from_name
-from next_signal.agents.structured import run_structured
+from next_signal.agents.loader import _compose_instructions
+from next_signal.agents.stage import run_stage, stage_job, stage_job_provenance
+from next_signal.core.config import load_agent
 from next_signal.core import language as language_module
 from next_signal.core.db import database_url
 from next_signal.core.language import LANGUAGE_TOKEN
@@ -169,7 +171,8 @@ def cmd_snapshot(args: argparse.Namespace) -> None:
 
 
 def _instruction_digest(agent_name: str) -> str:
-    return hashlib.sha256(str(build_from_name(agent_name).instructions).encode()).hexdigest()[:12]
+    instructions = _compose_instructions(load_agent(agent_name))
+    return hashlib.sha256(instructions.encode()).hexdigest()[:12]
 
 
 def _assert_language_applied(agent_name: str, target: str) -> str:
@@ -189,7 +192,7 @@ def _assert_language_applied(agent_name: str, target: str) -> str:
     edited mid-run — ``prompts/`` is bind-mounted live, so a run started before
     an edit silently measures a mix of two prompt versions.
     """
-    instructions = str(build_from_name(agent_name).instructions)
+    instructions = _compose_instructions(load_agent(agent_name))
     if LANGUAGE_TOKEN in instructions:
         sys.exit(f"ABORT: {agent_name} shipped an unsubstituted {LANGUAGE_TOKEN}")
     expected = {"zh": "Simplified Chinese", "en": "English"}[target]
@@ -249,7 +252,6 @@ def _run_frontmatter(items, cache, repeats, target, result) -> None:
             # `knowledge_frontmatter` resolves `global`: no per-call override,
             # exactly as a real ingestion run builds it. The target reaches it
             # through the patched `global_language` in `cmd_run`.
-            agent = build_from_name("knowledge_frontmatter")
             payload = json.dumps(
                 {"source_type": "markitdown", "category": "ai-engineering",
                  "title": snap["title"], "metadata": {},
@@ -257,7 +259,7 @@ def _run_frontmatter(items, cache, repeats, target, result) -> None:
                 ensure_ascii=False,
             )
             try:
-                d = run_structured(agent, payload, FrontmatterDraft)
+                d = run_stage("knowledge_frontmatter", payload, FrontmatterDraft)
             except Exception as e:  # noqa: BLE001
                 result["frontmatter"].append({"item_id": item["id"], "repeat": rep, "error": str(e)})
                 print(f"  fm rep{rep} item{item['id']} FAILED {e}", flush=True)
@@ -296,22 +298,24 @@ def _run_cleaner(items, cache, repeats, target, result) -> None:
             snap = cache[str(item["id"])]
             body = snap["content"].strip()[:_PROD_MAX_MARKDOWN_CHARS]
             detected = detect_language(snap["title"] or body)
-            agent = build_from_name("knowledge_artifact_editor", language=detected)
+            instructions = _compose_instructions(
+                load_agent("knowledge_artifact_editor"), override=detected
+            )
             # Every repeat, not just the first: this doubles as the mid-run
             # prompt-drift guard that `cmd_run`'s digest check gives the other
             # agents. `prompts/` is bind-mounted live, so an edit partway
             # through would otherwise mix two prompt versions into one result
             # file silently. The agent is rebuilt per call anyway, so it's free.
-            _assert_names_only(agent, detected, target, item["id"])
+            _assert_names_only(instructions, detected, target, item["id"])
             payload = json.dumps(
                 {"source_type": "markitdown", "title": snap["title"], "markdown": body},
                 ensure_ascii=False,
             )
             try:
-                response = agent.run(payload)
-                cleaned = _strip_code_fence(
-                    str(getattr(response, "content", response))
-                ).strip()
+                response = run_stage(
+                    "knowledge_artifact_editor", payload, language=detected
+                )
+                cleaned = _strip_code_fence(str(response)).strip()
                 if not cleaned:
                     raise RuntimeError("cleaner returned an empty body")
             except Exception as e:  # noqa: BLE001 — mirrors the stage's isolation
@@ -336,7 +340,9 @@ def _run_cleaner(items, cache, repeats, target, result) -> None:
             )
 
 
-def _assert_names_only(agent, expected: str, adversary: str, item_id: int) -> None:
+def _assert_names_only(
+    instructions: str, expected: str, adversary: str, item_id: int
+) -> None:
     """Fail loud unless this agent's rule targets the detected language, not the setting.
 
     The negative half is the point: it proves the `global` preference never
@@ -350,7 +356,6 @@ def _assert_names_only(agent, expected: str, adversary: str, item_id: int) -> No
     """
     names = {"zh": "Simplified Chinese", "en": "English"}
     directive = "your output in {}".format
-    instructions = str(agent.instructions)
     if directive(names[expected]) not in instructions:
         sys.exit(
             f"ABORT: item {item_id}: cleaner rule does not target "
@@ -395,22 +400,25 @@ def cmd_run(args: argparse.Namespace) -> None:
         flush=True,
     )
 
-    if args.agent == "radar":
-        _run_radar(items, cache, load_goals(), args.repeats, target, result)
-    elif args.agent == "cleaner":
-        _run_cleaner(items, cache, args.repeats, target, result)
-    else:
-        _run_frontmatter(items, cache, args.repeats, target, result)
+    with stage_job() as engine_state:
+        if args.agent == "radar":
+            _run_radar(items, cache, load_goals(), args.repeats, target, result)
+        elif args.agent == "cleaner":
+            _run_cleaner(items, cache, args.repeats, target, result)
+        else:
+            _run_frontmatter(items, cache, args.repeats, target, result)
 
-    # prompts/ is bind-mounted live: an edit mid-run silently mixes two prompt
-    # versions into one result set. Refuse to write a contaminated file.
-    for name, before in digests.items():
-        after = _instruction_digest(name)
-        if after != before:
-            sys.exit(
-                f"ABORT: {name}'s instructions changed mid-run ({before} -> {after}). "
-                "The prompts were edited while this was running; results discarded."
-            )
+        # prompts/ is bind-mounted live: an edit mid-run silently mixes two
+        # prompt versions into one result set. Refuse to write a contaminated file.
+        for name, before in digests.items():
+            after = _instruction_digest(name)
+            if after != before:
+                sys.exit(
+                    f"ABORT: {name}'s instructions changed mid-run "
+                    f"({before} -> {after}). The prompts were edited while "
+                    "this was running; results discarded."
+                )
+        result["engine"] = stage_job_provenance(engine_state)
     result["digests"] = digests
 
     # `<items>2<target>` reads as a direction, which is only true for the

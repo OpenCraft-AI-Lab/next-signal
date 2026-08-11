@@ -5,9 +5,7 @@ The contract the containerized stack offers to anything verifying against it: wh
 ## Purpose
 
 Runtime and end-to-end verification happens in containers, not on the host. That only produces trustworthy results if the verifier can tell whether the container is running the code under test — `/app` is image-baked, so an edit to `src/` followed by an immediate `docker compose exec` silently verifies the previous code. These requirements pin the facts a verifier depends on, so a pass means what it claims and so verifying plumbing does not incur model cost.
-
 ## Requirements
-
 ### Requirement: Source visibility contract
 
 The containerized stack SHALL make explicit which host paths are live inside a
@@ -69,15 +67,15 @@ The stack SHALL offer a documented set of commands that exercise the CLI, the
 database, and the dashboard without invoking any local or remote model, so that
 plumbing can be verified without incurring model cost.
 
-`paca list`, `paca doctor`, `paca knowledge review`, `paca info-radar pull`,
-`paca info-radar sweep`, and `paca info-radar subscriptions --json` SHALL be free
-of model calls. `paca run-agent`, `paca knowledge ingest`,
-`paca run-workflow knowledge_ingest`, `paca info-radar analyze`, and
-`paca info-radar recap` SHALL be documented as incurring model calls.
+`next-signal list`, `next-signal doctor`, `next-signal knowledge review`, `next-signal info-radar pull`,
+`next-signal info-radar sweep`, and `next-signal info-radar subscriptions --json` SHALL be free
+of model calls. `next-signal run-agent`, `next-signal knowledge ingest`,
+`next-signal run-workflow knowledge_ingest`, `next-signal info-radar analyze`, and
+`next-signal info-radar recap` SHALL be documented as incurring model calls.
 
 #### Scenario: Verifying the collector path without model cost
 
-- **WHEN** `paca info-radar pull` is run inside the container
+- **WHEN** `next-signal info-radar pull` is run inside the container
 - **THEN** it fetches from configured sources and writes `radar_items`
 - **AND** no agent is constructed and no model endpoint is contacted
 - **AND** re-running it reports items as skipped rather than duplicating rows
@@ -121,22 +119,22 @@ that project executables resolve. Invocations MUST NOT use a login shell.
 #### Scenario: Login shell erases the virtualenv
 
 - **WHEN** a command is invoked via `sh -lc` inside the app container
-- **THEN** `/app/.venv/bin` is dropped from `PATH` and `paca` fails to resolve
+- **THEN** `/app/.venv/bin` is dropped from `PATH` and `next-signal` fails to resolve
 
 #### Scenario: Non-login shell preserves the virtualenv
 
-- **WHEN** the same command is invoked via `sh -c`, or `paca` is exec'd directly
-- **THEN** `PATH` retains `/app/.venv/bin` and `paca` resolves
+- **WHEN** the same command is invoked via `sh -c`, or `next-signal` is exec'd directly
+- **THEN** `PATH` retains `/app/.venv/bin` and `next-signal` resolves
 
 ### Requirement: Health-check exit code semantics
 
-`paca doctor` SHALL report per-check status independently of its exit code. A
+`next-signal doctor` SHALL report per-check status independently of its exit code. A
 non-zero exit MUST NOT be read as stack failure when the failing checks are
 optional under the active deployment profile.
 
 #### Scenario: Cloud-only profile
 
-- **WHEN** `paca doctor` runs in a container with no OMLX endpoint configured
+- **WHEN** `next-signal doctor` runs in a container with no OMLX endpoint configured
 - **THEN** it exits non-zero because `OMLX_BASE_URL` and unset model keys report ✗
 - **AND** the stack is nonetheless healthy if `DATABASE_URL`, Postgres,
   configured agents, and registered tools all report ✔
@@ -149,7 +147,7 @@ from the action log plus the resulting database state.
 
 #### Scenario: Confirming a dashboard-triggered run
 
-- **WHEN** a dashboard control spawns a `paca` subprocess
+- **WHEN** a dashboard control spawns a `next-signal` subprocess
 - **THEN** the action reports only that the work started
 - **AND** progress is observable in the action log under the container's `$HOME`
 - **AND** completion is confirmed by querying the table the work writes
@@ -171,3 +169,4 @@ only.
 - **WHEN** `pytest` is invoked inside the app container
 - **THEN** it fails because neither the runner nor `tests/` is present
 - **AND** the suite must be run on the host via `uv run pytest`
+

@@ -5,16 +5,14 @@ YAML-driven agent loader. Python defines the *shape*; YAML defines model profile
 ## Purpose
 
 Adding or tuning an agent must not require Python edits. Each agent is described by `configs/agents/<name>.yaml` plus an optional `prompts/agents/<name>.md`.
-
 ## Requirements
-
 ### Requirement: Agents are defined in YAML
 
 The loader SHALL build each agent from `configs/agents/<name>.yaml`, where the file stem matches the YAML `name:` field (snake_case).
 
 #### Scenario: agent built from name
 
-- **WHEN** `paca.agents.loader.build_from_name("knowledge_classifier")` is called
+- **WHEN** `next_signal.agents.loader.build_from_name("knowledge_classifier")` is called
 - **THEN** the loader reads `configs/agents/knowledge_classifier.yaml`, resolves the model profile, attaches the listed tools, and returns an agno `Agent`
 
 #### Scenario: agent instructions use owner path
@@ -79,5 +77,6 @@ When an agent is built outside the AgentOS context (CLI `run-agent`, tests), the
 
 #### Scenario: CLI run-agent does not phone home
 
-- **WHEN** `paca run-agent <name> "<prompt>"` is invoked
+- **WHEN** `next-signal run-agent <name> "<prompt>"` is invoked
 - **THEN** the constructed agent has telemetry disabled
+

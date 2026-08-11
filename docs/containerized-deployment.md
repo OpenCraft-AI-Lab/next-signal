@@ -85,19 +85,37 @@ flowchart TB
 
 **Two connection classes** — the whole point of the boundary:
 
-- **(A) Local LLM — stays on host.** Cloud *chat* runs remote (B), but the
-  **embedder is OMLX-only** (info-radar `analyze` dedup). The `app` container
-  reaches the host MLX server at `host.docker.internal:<port>`; that traffic
-  never leaves your Mac. Omit it and that pipeline degrades (see §7).
+- **(A) Local LLM — stays on host.** Cloud *chat* runs remote (B); the embedder
+  is selectable and defaults to OMLX (info-radar `analyze` dedup). The `app`
+  container reaches the host MLX server at `host.docker.internal:<port>`; that
+  traffic never leaves your Mac. Omit it and either select a hosted embedder or
+  accept that the dedup gate degrades (see §7).
 - **(B) Remote — the only thing that leaves the machine.** Cloud LLM APIs, the
   Folo backend, the GitHub REST API (knowledge repo lookups), and public-web
   HTTP fetches — outbound HTTPS/WSS from the `app` container.
 
-One service is enough besides Postgres: a single `app` image that bundles
-every runnable piece. The dashboard and `next-signal` **must share one image**
-because the dashboard's server actions spawn `next-signal` CLI children (and shell out
+One image is enough besides Postgres: a single `app` image that bundles every
+runnable piece. The dashboard and `next-signal` **must share one image** because
+the dashboard's server actions spawn `next-signal` CLI children (and shell out
 to `gbrain` / `folocli`) as subprocesses — see
 `dashboard/lib/actions/spawn-cli.ts`.
+
+That image backs two long-running services plus the one-shot `bootstrap`:
+`dashboard` (:3000) and `scheduler`. The **scheduler** runs `next-signal
+schedule`, a poll loop that fires the radar chain at a configured wall-clock
+time — see [operations](./operations.md#unattended-runs). Putting it in a
+container is what makes scheduling portable: host schedulers would mean
+maintaining cron, launchd, and Windows Task Scheduler separately, whereas the
+container sees the same Linux on all three.
+
+It is deliberately **not** behind a Compose profile. An absent
+`~/.next-signal/schedule.json` reads as disabled, so a stack whose operator
+never configures a schedule gets an idle container rather than a crash loop.
+
+The corresponding limit: **nothing fires while the host is not running Docker.**
+No container can start Docker, so a machine that was asleep or shut down simply
+misses the window; the schedule's `catch_up` option softens that by running one
+chain once the scheduler is watching again, and cannot do more.
 
 ---
 
@@ -116,7 +134,12 @@ Three buckets — the honest split is not just container vs. host, but also
 | gbrain binary | `app` | Bun-compiled from a pinned upstream clone at build time (Bun lives only in the builder stage) |
 | opencli (Node) | `app` | `weixin download` uses plain HTTP; no browser bundled or needed |
 | folocli | `app` | Pulled via `npx --yes` at runtime; talks to the cloud Folo backend |
+| Codex CLI + Claude Code CLI | `app` | Exact npm versions installed at image build; direct repository tasks and selected production LLM stages use the bounded next-signal bridge |
 | gbrain storage | `postgres` | Its own `gbrain` database on the same Postgres server (`GBRAIN_DATABASE_URL`). The bun-compiled binary can't run PGLite (extension bundles aren't embedded), and pgvector already ships `vector` + `pg_trgm` — so gbrain uses its Postgres engine |
+
+Production CLI stages are stricter than direct repository tasks: they run with
+provider tools/customizations disabled and see only a fresh empty temporary
+directory, not the repository or the read-only `.env` mount.
 
 ### 3.2 On the parent OS (host)
 
@@ -125,9 +148,9 @@ Three buckets — the honest split is not just container vs. host, but also
 | Docker Desktop / colima | The container runtime itself |
 | `.env` | Mounted read-only into `app`; kept out of the image because it holds live secrets |
 | `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | Knowledge content; bind-mounted so host and container agree. Paths must match `WIKI_DIR` / `WIKI_RAW_DIR` *inside* the container |
-| `~/.next-signal/` state | knowledge_ingest_manifest.json, agent-tmp/ — named volume (or bind mount) so it survives rebuilds |
+| `~/.next-signal/` state | knowledge_ingest_manifest.json, agent-tmp/, and the settings the dashboard writes — `language.json`, `engine.json`, `coding-agents.json`, `schedule.json`, `embedding.json`. A named volume (or bind mount) so it survives rebuilds. These five are the reason the state root cannot be baked into the image: the dashboard writes them at runtime, every reader picks them up at call time without a restart, and they are hand-editable when a panel is not reachable |
 | Published ports | `localhost:3000` is how you reach the container |
-| **OMLX / MLX model server** *(optional)* | **Cannot be containerized** (needs Metal GPU). Only required for info-radar `analyze` **embeddings**. Cloud chat models do not need it. If used, the container reaches it at `host.docker.internal:<port>` |
+| **OMLX / MLX model server** *(optional)* | **Cannot be containerized** (needs Metal GPU). Required for info-radar `analyze` **embeddings** unless a hosted embedder is selected in Settings. Cloud chat models do not need it. If used, the container reaches it at `host.docker.internal:<port>` |
 
 ### 3.3 External / internet (neither container nor host)
 
@@ -142,8 +165,9 @@ Reached by the `app` container via outbound HTTPS/WSS only — nothing to instal
 - **Container → host:** published port (3000); bind mounts (`.env`, wiki
   dirs); optional `host.docker.internal` calls to a host OMLX server.
 - **Container → external:** all LLM + Folo + GitHub + web traffic, outbound only.
-- **Persisted state:** `pgdata` and gbrain storage as named volumes; user state as
-  a volume or host bind mount.
+- **Persisted state:** `pgdata` and gbrain storage as named volumes; user state
+  in `pstate`; provider authentication in separate `codex_auth` and
+  `claude_auth` named volumes.
 
 ---
 
@@ -188,6 +212,23 @@ converts HTML→markdown. Public WeChat Official Account articles are
 server-rendered and need no login, so the `app` image stays browser-free —
 no Chrome, no Xvfb.
 
+### 5.1 Pinned coding-agent CLIs
+
+The image installs exact `CODEX_CLI_VERSION` and `CLAUDE_CODE_VERSION` build
+arguments (currently `0.145.0` and `2.1.220`) in a dedicated Node stage. It
+runs both version commands during the build, copies their launchers and package
+directories into the runtime stage, and sets `DISABLE_AUTOUPDATER=1`. Upgrades
+are image changes, not mutations inside a running container:
+
+```bash
+CODEX_CLI_VERSION=0.145.0 CLAUDE_CODE_VERSION=2.1.220 docker compose build dashboard scheduler
+docker compose up -d --force-recreate dashboard scheduler
+```
+
+Do not use `latest` in deployment automation. Rebuilding/recreating services
+does not remove their saved login because authentication lives in named
+volumes, not the image.
+
 ---
 
 ## 6. Build → run lifecycle
@@ -199,7 +240,8 @@ no Chrome, no Xvfb.
 2. Copy dependency manifests first (`pyproject.toml`, `uv.lock`, dashboard
    `package.json` + lockfile); `uv sync` and `pnpm install` — before source — for
    layer caching.
-3. Pinned-clone + build gbrain (Bun) and opencli (npm) in the builder stage.
+3. Pinned-clone + build gbrain (Bun) and opencli (npm), and install exact Codex
+   CLI and Claude Code CLI releases, in builder stages.
 4. Copy application source (next-signal `src/`, `configs/`, `prompts/`, `scripts/`,
    dashboard app); `pnpm build` the dashboard.
 5. Runtime stage copies only artifacts. **Never bake** `.env`, secrets, `state/`,
@@ -263,22 +305,59 @@ root. Prerequisites: Docker Engine + Compose v2, and a `.env` (copy from
 4. Wait for `bootstrap` to finish (one-shot, gated on Postgres health) —
    `dashboard` waits for it automatically.
 5. Open <http://localhost:3000> for the dashboard.
-6. `docker compose down` to stop (keeps `pgdata`/`pstate` volumes); add `-v`
-   only if you want to wipe them.
+6. Open **Settings → Codex CLI / Claude Code CLI → Connect** once for each
+   provider you intend to use; complete the official browser login and paste
+   Claude's authorization code back when requested. Explicitly save that CLI's
+   model and effort (plus Codex speed), then select the production engine.
+7. `docker compose down` to stop (keeps every named volume). Add `-v` only if
+   you intentionally want to wipe database, app state, and both CLI logins.
 
 - **Services:** `postgres` (pgvector), `bootstrap` (one-shot schema), `dashboard`
-  (`next-signal dashboard --start`).
+  (`next-signal dashboard --start`), and `scheduler` (`next-signal schedule`).
 - **Config:** `.env` is injected via `env_file` (never baked into the image);
   `DATABASE_URL` and the in-container wiki/state paths are overridden in the
-  compose `environment:` block. Peer-tool refs are build args
-  (`GBRAIN_REF` / `OPENCLI_REF`).
+  compose `environment:` block. Peer-tool refs and coding-agent versions are
+  build args (`GBRAIN_REF`, `OPENCLI_REF`, `CODEX_CLI_VERSION`, and
+  `CLAUDE_CODE_VERSION`).
 - **Persistence:** named volumes `pgdata` (Postgres — including the `gbrain`
-  database) and `pstate` (`~/.next-signal` state + gbrain `config.json`).
-  `docker compose down` keeps them; add `-v` to wipe.
+  database), `pstate` (`~/.next-signal` state + gbrain `config.json`),
+  `codex_auth` (`/root/.codex`), and `claude_auth` (`/root/.claude`).
+  `docker compose down` keeps them; `down -v` wipes all four.
 
-**Local LLM (optional).** Cloud is the default (OMLX unset → DeepSeek/Claude
-fallback). To enable the OMLX embedder — required for info-radar `analyze` —
-run an OMLX server on the **host** and add to `.env`:
+### Coding-agent CLI login
+
+The Dashboard login endpoint is intentionally not a shell. The browser selects
+only `codex` or `claude`; server code maps that to `codex login --device-auth`
+or `claude auth login --claudeai`, runs it in a bounded PTY, accepts at most one
+authorization-code line, and permits navigation only to HTTPS URLs on the
+provider's domain allowlist. Transcripts are short-lived memory state and are
+not written to `/state` or application logs.
+
+The Compose port binds to `127.0.0.1` by default because login and logout change
+credential state. If the Dashboard must be remote, put it behind an
+authenticated HTTPS reverse proxy and then set `DASHBOARD_BIND_ADDRESS`
+deliberately. Do not publish the port unauthenticated.
+
+If the UI cannot complete a provider flow, use the same mounted volume from the
+Dashboard container terminal:
+
+```bash
+docker compose exec dashboard codex login --device-auth
+docker compose exec dashboard claude auth login --claudeai
+docker compose exec dashboard next-signal coding-agent auth-status codex
+docker compose exec dashboard next-signal coding-agent auth-status claude
+```
+
+Rebuilds and `docker compose down` preserve both logins. To remove one login,
+use **Disconnect** in Settings (preferred) or its provider logout command. To
+destroy the credential files even if a CLI is broken, remove only the relevant
+named volume after stopping services; avoid `docker compose down -v` unless all
+Postgres and next-signal state should also be lost.
+
+**Local LLM (optional).** On a cloud-only deployment, select DeepSeek or a
+logged-in CLI in Settings (or configure it as the pre-first-response fallback).
+To enable the OMLX engine and embedder — required for info-radar `analyze`
+semantic dedup — run an OMLX server on the **host** and add to `.env`:
 `OMLX_BASE_URL=http://host.docker.internal:<port>/v1`. `host.docker.internal` is
 wired for Linux via `extra_hosts: host-gateway`.
 
@@ -292,11 +371,31 @@ switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--por
 
 ## 8. Caveats specific to a cloud-only container
 
-1. **The embedder has no cloud fallback.** `next_signal.core.models.get_embedder` is
-   OMLX-only. So info-radar `analyze` dedup **fails** in a pure container (it
-   needs `Qwen3-Embedding` for similarity). Chat, agents, and dashboard pages
-   work. To enable that pipeline, expose a host/remote OMLX endpoint via
-   `OMLX_BASE_URL=http://host.docker.internal:<port>/v1`.
+1. **The embedder is selectable, but never falls back on its own.** It defaults
+   to OMLX, so in a pure container info-radar `analyze` dedup **fails** until you
+   act — every item then reads as novel. Chat, agents, and dashboard pages work.
+   Two ways out:
+
+   - expose a host/remote OMLX endpoint via
+     `OMLX_BASE_URL=http://host.docker.internal:<port>/v1`; or
+   - open **Settings → Embedding** and select OpenAI (needs `OPENAI_API_KEY`) or
+     an OpenAI-compatible endpoint of your own.
+
+   A hosted embedder has two consequences worth deciding on deliberately. Every
+   kept item's analysis summary is **sent to that provider** — text that
+   otherwise never leaves the machine when OMLX serves both halves — and every
+   item **can be billed**, including the unattended scheduler runs nobody is
+   watching. There is deliberately no automatic fallback between embedders:
+   substituting one silently would change vector space and park the selected
+   provider's dedup memory, so a failure stays loud and the item is treated as
+   novel.
+
+   Credentials come from the process environment, not from the state file.
+   Editing `.env` does **not** reach an already-running container: recreate the
+   service (`docker compose up -d --force-recreate dashboard scheduler`) before
+   expecting the new value to exist. `docker compose exec dashboard next-signal doctor`
+   reports the resolved embedder identity and whether its variable is present,
+   without making a model request.
 2. **`next-signal doctor` exits non-zero if any check fails** — treat OMLX / Anthropic ✗
    as expected under cloud-only; do not let it block startup.
 3. **Secrets stay out of the image.** `.env` currently holds live keys; mount it at
@@ -355,5 +454,5 @@ Two containers: `postgres` (`pgvector/pgvector:pg16`) + one `app` image bundling
 Python(uv)+next-signal, Node(pnpm)+dashboard, plus gbrain (Bun-built) and opencli
 (HTTP-only), both pinned-cloned from upstream at build time. The host keeps only
 the Docker runtime, the mounted files (`.env`, wiki, state), and — *only if you
-opt into embeddings* — a host OMLX server. Everything else is either in the
-containers or reached as an external cloud API.
+want local embeddings rather than a hosted one* — a host OMLX server. Everything
+else is either in the containers or reached as an external cloud API.

@@ -14,11 +14,18 @@ Supported providers:
 The factory intentionally keeps the surface tiny: callers ask for a profile
 name and get back something that quacks like ``agno.models.base.Model``.
 Provider-specific tuning lives in the YAML, not in code.
+
+Embedders live at the bottom of this module and follow a different shape:
+``get_embedder()`` takes no profile name and resolves one immutable snapshot
+per item from ``~/.next-signal/embedding.json``. See that section's header.
 """
 
 from __future__ import annotations
 
+import math
 import os
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
@@ -26,7 +33,13 @@ from agno.models.base import Model
 
 from next_signal.core.concurrency import ProviderConcurrency
 from next_signal.core.config import ModelProfile, load_models
+from next_signal.core.embedding_preferences import (
+    embedder_identity,
+    load_embedding_preferences,
+)
+from next_signal.core.engine_preferences import EnginePreferences
 from next_signal.core.logging import get_logger
+from next_signal.core.omlx import resolve_omlx_endpoint
 
 log = get_logger(__name__)
 
@@ -45,15 +58,48 @@ def get_model(profile_name: str) -> Model:
     instead. This preserves the design promise that local-first agents stay
     available when the local model is down.
     """
-    _ensure_concurrency_configured()
+    ensure_concurrency_configured()
     return _build(profile_name)
 
 
-def _ensure_concurrency_configured() -> None:
+def ensure_concurrency_configured() -> None:
     global _concurrency_configured
     if not _concurrency_configured:
         ProviderConcurrency.configure(load_models().concurrency)
         _concurrency_configured = True
+
+
+def get_stage_model(
+    engine: str,
+    preferences: EnginePreferences,
+    *,
+    structured: bool,
+) -> Model:
+    """Build an uncached API model from one job's live engine settings."""
+    ensure_concurrency_configured()
+    profiles = load_models().profiles
+    if engine == "omlx":
+        baseline = profiles["local_structured" if structured else "local"]
+        profile = baseline.model_copy(update={"model_id": preferences.omlx.model})
+        ProviderConcurrency.set_limit("omlx", preferences.omlx.parallel)
+        return _wrap_with_concurrency(
+            _build_omlx(profile, base_url=preferences.omlx.base_url),
+            "omlx",
+        )
+    if engine == "deepseek":
+        baseline = profiles["deepseek_structured" if structured else "deepseek_smart"]
+        extra = dict(baseline.extra)
+        if preferences.deepseek.reasoning == "off":
+            extra.pop("reasoning_effort", None)
+            extra["extra_body"] = {"thinking": {"type": "disabled"}}
+        else:
+            extra["reasoning_effort"] = preferences.deepseek.reasoning
+            extra.pop("extra_body", None)
+        profile = baseline.model_copy(
+            update={"model_id": preferences.deepseek.model, "extra": extra}
+        )
+        return _wrap_with_concurrency(_build_deepseek(profile), "deepseek")
+    raise ValueError(f"stage engine {engine!r} is not an API model provider")
 
 
 @lru_cache(maxsize=32)
@@ -160,22 +206,16 @@ def omlx_endpoint() -> dict[str, str]:
     call this rather than re-reading ``OMLX_*`` env vars directly. See
     design.md §3.10.
     """
-    base_url = os.environ.get("OMLX_BASE_URL")
-    if not base_url:
-        raise RuntimeError(
-            "OMLX_BASE_URL not set. Either set OMLX_BASE_URL (and OMLX_API_KEY) "
-            "in .env, or use a non-omlx model profile."
-        )
-    return {"base_url": base_url, "api_key": os.environ.get("OMLX_API_KEY", "")}
+    return resolve_omlx_endpoint()
 
 
-def _build_omlx(p: ModelProfile) -> Model:
+def _build_omlx(p: ModelProfile, *, base_url: str | None = None) -> Model:
     """OMLX serves an OpenAI-compatible API; we use agno's OpenAILike adapter
     plus a few Qwen3-specific knobs (disable thinking, sampling tweaks).
     """
     from agno.models.openai.like import OpenAILike
 
-    ep = omlx_endpoint()
+    ep = resolve_omlx_endpoint(base_url=base_url) if base_url else omlx_endpoint()
     extra_body: dict[str, Any] = {
         "chat_template_kwargs": {"enable_thinking": False},
         "top_k": 20,
@@ -278,71 +318,167 @@ def reset_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Embedders — OMLX OpenAI-compatible /v1/embeddings only
+# Embedders — provider-neutral, one immutable snapshot per item
 # ---------------------------------------------------------------------------
+#
+# Unlike LLM profiles, an embedder is not addressed by name: the live selection
+# is whatever ``~/.next-signal/embedding.json`` says at the moment an item
+# starts, and ``configs/models.yaml::embedders`` only supplies each provider's
+# baseline. ``get_embedder()`` reads that state and the process environment
+# exactly once and freezes the answer into a ``ResolvedEmbedder``, so a settings
+# write landing mid-request cannot relabel a vector that is already in flight —
+# the consumer stores ``snapshot.identity``, never a fresh read.
+
+EMBEDDING_DIMENSIONS = 1024
+OPENAI_API_ROOT = "https://api.openai.com/v1"
 
 
-def get_embedder(profile_name: str = "local"):
-    """Return ``embed(text: str) -> list[float]`` for the named embedder profile.
+@dataclass(frozen=True)
+class ResolvedEmbedder:
+    """One item's embedder: what produced the vector, and how to produce it."""
 
-    The default profile name is ``local`` and is expected to point at OMLX's
-    OpenAI-compatible ``/v1/embeddings`` endpoint (see ``configs/models.yaml``
-    section ``embedders:``). Connection failures raise ``RuntimeError`` so
-    callers can decide their own fallback policy — see design.md §D5 for the
-    info-radar-analysis policy (treat as novel + log loud).
+    provider: str
+    model_id: str
+    identity: str
+    embed: Callable[[str], list[float]]
 
-    Each ``embed`` call goes through ``ProviderConcurrency.acquire_sync`` for
-    the embedder's provider so it shares the same per-provider cap as
-    LLM calls — local OMLX is one GPU and overlapping LLM + embedding
-    inference would starve both.
 
-    The dimensionality of the returned vector is whatever the server returns;
-    callers that persist into a fixed-dim column must validate length
-    themselves.
+def get_embedder() -> ResolvedEmbedder:
+    """Freeze the live embedding selection into one immutable snapshot.
+
+    Reads ``embedding.json`` and the credential for the selected provider once,
+    here — not inside ``embed()`` — so every call on the returned object talks to
+    the same endpoint under the same identity.
+
+    There is no fallback: providers are not substitutable, and quietly embedding
+    into a different vector space would park the selected provider's dedup memory
+    without saying so. Missing credentials, transport errors, non-2xx responses,
+    malformed bodies, and wrong-shaped vectors all raise ``RuntimeError``; the
+    info-radar dedup gate owns the conservative policy (log loud, treat as novel,
+    store no topic row).
+
+    Each ``embed`` call takes ``ProviderConcurrency`` for its own provider, so
+    OMLX embedding queues behind OMLX inference on the single local GPU while a
+    hosted provider never consumes that slot.
     """
-    _ensure_concurrency_configured()
-    profiles = load_models().embedders
-    if profile_name not in profiles:
-        raise KeyError(
-            f"unknown embedder profile {profile_name!r}; "
-            f"have {list(profiles)}; add it under embedders: in configs/models.yaml"
-        )
-    profile = profiles[profile_name]
-    # `provider` is Literal["omlx"] in pydantic, so any other value would
-    # have failed validation. No runtime branch needed today; when we add a
-    # second provider this becomes a dispatch.
-    provider = profile.provider
+    ensure_concurrency_configured()
+    prefs = load_embedding_preferences()
+    provider = prefs.provider
 
-    ep = omlx_endpoint()
-    model_id = profile.model_id
+    if provider == "omlx":
+        endpoint = omlx_endpoint()
+        model_id = prefs.omlx.model
+        url = endpoint["base_url"].rstrip("/") + "/embeddings"
+        api_key = endpoint["api_key"]
+        # OMLX's route has no `dimensions` parameter and the shipped model
+        # already emits 1024 values; a model that does not is caught on response.
+        dimensions: int | None = None
+    elif provider == "openai":
+        model_id = prefs.openai.model
+        url = f"{OPENAI_API_ROOT}/embeddings"
+        api_key = _required_credential("OPENAI_API_KEY")
+        dimensions = EMBEDDING_DIMENSIONS
+    else:
+        compatible = prefs.openai_compatible
+        model_id = compatible.model
+        url = f"{compatible.base_url}/embeddings"
+        api_key = _required_credential(compatible.api_key_env)
+        dimensions = EMBEDDING_DIMENSIONS
 
     def embed(text: str) -> list[float]:
-        import httpx
+        return _post_embedding(
+            url,
+            provider=provider,
+            model_id=model_id,
+            api_key=api_key,
+            dimensions=dimensions,
+            text=text,
+        )
 
-        url = ep["base_url"].rstrip("/") + "/embeddings"
-        headers = {"Content-Type": "application/json"}
-        if ep["api_key"]:
-            headers["Authorization"] = f"Bearer {ep['api_key']}"
-        with ProviderConcurrency.acquire_sync(provider):
-            try:
-                with httpx.Client(timeout=30.0) as client:
-                    resp = client.post(
-                        url,
-                        json={"input": text, "model": model_id},
-                        headers=headers,
-                    )
-            except httpx.HTTPError as e:
-                raise RuntimeError(f"embedder request failed ({url}): {e}") from e
-        if resp.status_code >= 400:
-            raise RuntimeError(
-                f"embedder returned {resp.status_code} from {url}: {resp.text[:200]}"
-            )
+    return ResolvedEmbedder(
+        provider=provider,
+        model_id=model_id,
+        identity=embedder_identity(prefs),
+        embed=embed,
+    )
+
+
+def _required_credential(name: str) -> str:
+    """Read a required key from *this* process's environment, at call time."""
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise RuntimeError(
+            f"{name} is not set in this process. Add it to .env, then restart the "
+            "host process or recreate the Compose service — an already-running "
+            "process does not pick up file edits."
+        )
+    return value
+
+
+def _post_embedding(
+    url: str,
+    *,
+    provider: str,
+    model_id: str,
+    api_key: str,
+    dimensions: int | None,
+    text: str,
+) -> list[float]:
+    import httpx
+
+    payload: dict[str, Any] = {"input": text, "model": model_id}
+    if dimensions is not None:
+        payload["dimensions"] = dimensions
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    with ProviderConcurrency.acquire_sync(provider):
         try:
-            data = resp.json()["data"]
-        except (KeyError, ValueError) as e:
-            raise RuntimeError(f"embedder returned malformed body: {e}") from e
-        if not data or "embedding" not in data[0]:
-            raise RuntimeError(f"embedder returned empty data array: {resp.text[:200]}")
-        return list(data[0]["embedding"])
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(url, json=payload, headers=headers)
+        except httpx.HTTPError as e:
+            raise RuntimeError(f"embedder request failed ({url}): {e}") from e
+    if resp.status_code >= 400:
+        raise RuntimeError(
+            f"embedder returned {resp.status_code} from {url}: {resp.text[:200]}"
+        )
+    try:
+        data = resp.json()["data"]
+    except (KeyError, TypeError, ValueError) as e:
+        raise RuntimeError(f"embedder returned malformed body from {url}: {e}") from e
+    if not data or "embedding" not in data[0]:
+        raise RuntimeError(f"embedder returned empty data array: {resp.text[:200]}")
+    return _validated_vector(data[0]["embedding"], url)
 
-    return embed
+
+def _validated_vector(raw: Any, url: str) -> list[float]:
+    """Accept exactly ``EMBEDDING_DIMENSIONS`` finite numbers, or raise.
+
+    Never truncates, pads, or normalizes. ``radar_pushed_topics.embedding`` is
+    ``vector(1024)`` and the column survives provider switches only because a
+    model that cannot produce that width is rejected here rather than reshaped.
+    """
+    if not isinstance(raw, list):
+        raise RuntimeError(f"embedder returned a non-list embedding from {url}")
+    if len(raw) != EMBEDDING_DIMENSIONS:
+        raise RuntimeError(
+            f"embedder returned {len(raw)} values from {url}; exactly "
+            f"{EMBEDDING_DIMENSIONS} are required — this model cannot back "
+            "radar_pushed_topics.embedding"
+        )
+    vector: list[float] = []
+    for index, value in enumerate(raw):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise RuntimeError(
+                f"embedder returned a non-numeric value at index {index} "
+                f"from {url}: {value!r}"
+            )
+        number = float(value)
+        if not math.isfinite(number):
+            raise RuntimeError(
+                f"embedder returned a non-finite value at index {index} "
+                f"from {url}: {number}"
+            )
+        vector.append(number)
+    return vector

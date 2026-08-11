@@ -5,7 +5,7 @@ TBD - created by archiving change info-radar. Update Purpose after archive.
 ## Requirements
 ### Requirement: Source descriptors live in a single YAML file
 
-`paca/collectors/info_radar/` SHALL load source descriptors from `configs/info_radar/sources.yaml`. Each entry MUST declare `name` (unique), `enabled`, `cli` (with `argv` or `argv_template`, and `timeout_sec`), and `parser` (a registered parser name).
+`next_signal/collectors/info_radar/` SHALL load source descriptors from `configs/info_radar/sources.yaml`. Each entry MUST declare `name` (unique), `enabled`, `cli` (with `argv` or `argv_template`, and `timeout_sec`), and `parser` (a registered parser name).
 
 #### Scenario: enabled flag controls inclusion
 
@@ -19,7 +19,7 @@ TBD - created by archiving change info-radar. Update Purpose after archive.
 
 ### Requirement: Parser registry exposes named parser functions
 
-`paca/collectors/info_radar/parsers/__init__.py` SHALL export `PARSERS: dict[str, Callable[[str, str], list[RadarItem]]]`. Each parser MUST take the CLI's stdout and the source name, and return a list of `RadarItem`. Parsers MUST NOT perform any database I/O.
+`next_signal/collectors/info_radar/parsers/__init__.py` SHALL export `PARSERS: dict[str, Callable[[str, str], list[RadarItem]]]`. Each parser MUST take the CLI's stdout and the source name, and return a list of `RadarItem`. Parsers MUST NOT perform any database I/O.
 
 #### Scenario: parser returns RadarItem list
 
@@ -28,7 +28,7 @@ TBD - created by archiving change info-radar. Update Purpose after archive.
 
 ### Requirement: RadarItem contract
 
-`paca.collectors.info_radar.schema.RadarItem` SHALL be a frozen dataclass with fields `source_id: str`, `title: str`, `url: str | None`, `excerpt: str | None`, `published_at: datetime | None`, and `payload: dict`. Parsers MUST populate `source_id` and `title`; other fields MAY be `None`.
+`next_signal.collectors.info_radar.schema.RadarItem` SHALL be a frozen dataclass with fields `source_id: str`, `title: str`, `url: str | None`, `excerpt: str | None`, `published_at: datetime | None`, and `payload: dict`. Parsers MUST populate `source_id` and `title`; other fields MAY be `None`.
 
 #### Scenario: parser omits optional fields
 
@@ -55,7 +55,7 @@ Folo source descriptors MUST NOT pass `--unread-only` and MUST NOT call any `fol
 
 ### Requirement: 30-day retention enforced at write and read
 
-The runner SHALL `DELETE FROM radar_items WHERE fetched_at < now() - interval '30 days'` after every successful source pull (best-effort; failure logs but does not abort the pull). All query helpers in `paca/collectors/info_radar/store.py` SHALL include `fetched_at > now() - interval '30 days'` in their WHERE clause.
+The runner SHALL `DELETE FROM radar_items WHERE fetched_at < now() - interval '30 days'` after every successful source pull (best-effort; failure logs but does not abort the pull). All query helpers in `next_signal/collectors/info_radar/store.py` SHALL include `fetched_at > now() - interval '30 days'` in their WHERE clause.
 
 #### Scenario: items older than 30 days are removed
 
@@ -83,24 +83,24 @@ If a source's CLI exits non-zero, times out, or its parser raises, the runner SH
 
 ### Requirement: Manual entry uses thin workflow shell
 
-`paca/workflows/info_radar_pull.py` SHALL define a `run(**inputs)` function registered as a workflow shell via `configs/workflows/info_radar_pull.yaml` (`expose.agent_os: false`, `extra.run_now`). Its only responsibility is to call `paca.collectors.info_radar.runner.run_all()` and return a summary. Day-to-day pulls run through the dedicated `paca info-radar pull` command.
+`next_signal/workflows/info_radar_pull.py` SHALL define a `run(**inputs)` function registered as a workflow shell via `configs/workflows/info_radar_pull.yaml` (`expose.agent_os: false`, `extra.run_now`). Its only responsibility is to call `next_signal.collectors.info_radar.runner.run_all()` and return a summary. Day-to-day pulls run through the dedicated `next-signal info-radar pull` command.
 
 #### Scenario: manual pull via workflow shell
 
-- **WHEN** `paca run-workflow info_radar_pull` is invoked
+- **WHEN** `next-signal run-workflow info_radar_pull` is invoked
 - **THEN** the workflow shell invokes the collector and persists items without involving any LLM
-
 
 ### Requirement: seen_at is owned by the analysis layer
 
-The collector (`paca/collectors/info_radar/`) SHALL NOT write to `radar_items.seen_at`. Only the analysis workflow (`paca/workflows/info_radar_analysis/`) SHALL set `seen_at` — either when tier-1 drops an item, when tier-2 completes (success or fallback), or when a per-item tier-2 error is persisted. The 30-day retention sweep operates on `fetched_at`, not `seen_at`, and is unchanged.
+The collector (`next_signal/collectors/info_radar/`) SHALL NOT write to `radar_items.seen_at`. Only the analysis workflow (`next_signal/workflows/info_radar_analysis/`) SHALL set `seen_at` — either when tier-1 drops an item, when tier-2 completes (success or fallback), or when a per-item tier-2 error is persisted. The 30-day retention sweep operates on `fetched_at`, not `seen_at`, and is unchanged.
 
 #### Scenario: collector pull does not mark items seen
 
-- **WHEN** `paca info-radar pull` runs against any source
+- **WHEN** `next-signal info-radar pull` runs against any source
 - **THEN** no `radar_items.seen_at` column is set or modified by the collector code path
 
 #### Scenario: tier 1 drop sets seen_at
 
 - **WHEN** the analysis workflow's tier-1 stage returns `verdict='drop'` for an item
 - **THEN** that `radar_items.seen_at` is set to `now()` after the `radar_analyses` row is committed
+

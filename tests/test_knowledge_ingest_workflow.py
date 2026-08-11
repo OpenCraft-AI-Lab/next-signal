@@ -11,6 +11,8 @@ import next_signal.workflows.stages.knowledge_ingest.classify as classify_mod
 import next_signal.workflows.stages.knowledge_ingest.fetch as pipeline_fetch
 import next_signal.workflows.stages.knowledge_ingest.persist as persist_mod
 from next_signal.core import paths
+from next_signal.agents import stage
+from next_signal.core.engine_preferences import configured_engine_defaults
 from next_signal.workflows.stages.knowledge_ingest import KnowledgeArtifact
 from next_signal.workflows import knowledge_ingest
 
@@ -27,11 +29,6 @@ def wiki_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(persist_mod, "gbrain_query", lambda q, limit=None: {"ok": True, "stdout": ""})
     monkeypatch.setattr(persist_mod, "write_related_section", lambda md_path, paths: None)
     return tmp_path
-
-
-class _FakeResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
 
 
 def _stub_bilibili(monkeypatch) -> None:
@@ -60,29 +57,21 @@ def _stub_editor(monkeypatch, *, calls: list | None = None, clean: str | None = 
         "freshness": "evolving",
     }
 
-    class FakeAgent:
-        def __init__(self, name: str) -> None:
-            self.name = name
+    def fake_run_stage(name, agent_input, output_schema=None, **kwargs):
+        if calls is not None:
+            calls.append(str(agent_input))
+        if name == "knowledge_artifact_editor":
+            return clean if clean is not None else json.loads(agent_input)["markdown"]
+        return output_schema.model_validate(frontmatter)
 
-        def run(self, agent_input, **kwargs):
-            if calls is not None:
-                calls.append(str(agent_input))
-            if self.name == "knowledge_artifact_editor":
-                body = clean if clean is not None else json.loads(agent_input)["markdown"]
-                return _FakeResponse(body)
-            return _FakeResponse(json.dumps(frontmatter, ensure_ascii=False))
-
-    monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
-    )
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", fake_run_stage)
 
 
 def _stub_classifier(monkeypatch, category: str = "knowledge/ai-ml") -> None:
-    class FakeAgent:
-        def run(self, agent_input, **kwargs):
-            return _FakeResponse(json.dumps({"category": category}, ensure_ascii=False))
+    def fake_run_stage(name, agent_input, output_schema, **kwargs):  # noqa: ARG001
+        return output_schema.model_validate({"category": category})
 
-    monkeypatch.setattr(classify_mod, "build_from_name", lambda name: FakeAgent())
+    monkeypatch.setattr(classify_mod, "run_stage", fake_run_stage)
 
 
 def test_single_source_workflow_runs_all_steps_and_returns_artifact(wiki_paths, monkeypatch) -> None:
@@ -102,6 +91,58 @@ def test_single_source_workflow_runs_all_steps_and_returns_artifact(wiki_paths, 
     assert final.artifact_edit is not None and final.artifact_edit["tags"] == ["alpha", "beta"]
     assert final.clean_path is not None and Path(final.clean_path).exists()
     assert final.ingest_result == {"ok": True}
+
+
+def test_direct_agent_os_workflow_run_pins_one_stage_engine(monkeypatch) -> None:
+    artifact = KnowledgeArtifact(
+        value="source",
+        source_type="url",
+        digest="digest",
+        created_at="2026-08-10T00:00:00Z",
+        category="temp-inbox",
+        markdown="# Source",
+    )
+    calls: list[str] = []
+
+    def invoke(engine, *args):
+        calls.append(engine)
+        if engine == "codex_cli":
+            raise stage.StageInvocationError("offline")
+        return "ok"
+
+    def stage_then_return(name, value):
+        stage.run_stage(name, "input")
+        return value
+
+    monkeypatch.setattr(
+        stage,
+        "load_engine_preferences",
+        lambda: configured_engine_defaults().model_copy(
+            update={"primary": "codex_cli", "fallback": "claude_cli"}
+        ),
+    )
+    monkeypatch.setattr(stage, "_invoke_engine", invoke)
+    monkeypatch.setattr(knowledge_ingest, "fetch", lambda *args, **kwargs: artifact)
+    monkeypatch.setattr(
+        knowledge_ingest,
+        "clean_body",
+        lambda value: stage_then_return("knowledge_frontmatter", value),
+    )
+    monkeypatch.setattr(
+        knowledge_ingest,
+        "write_frontmatter",
+        lambda value: stage_then_return("knowledge_frontmatter", value),
+    )
+    monkeypatch.setattr(
+        knowledge_ingest,
+        "classify_category",
+        lambda value: stage_then_return("knowledge_frontmatter", value),
+    )
+    monkeypatch.setattr(knowledge_ingest, "persist", lambda value, ingest: value)
+
+    knowledge_ingest.build().run(input="source")
+
+    assert calls == ["codex_cli", "claude_cli", "claude_cli", "claude_cli"]
 
 
 def test_single_source_ingest_records_manifest_so_reindex_skips(wiki_paths, monkeypatch) -> None:
@@ -181,7 +222,7 @@ def test_category_override_sets_category_and_skips_classifier(wiki_paths, monkey
     def _boom(name):
         raise AssertionError("classifier must be skipped when a category is pinned")
 
-    monkeypatch.setattr(classify_mod, "build_from_name", _boom)
+    monkeypatch.setattr(classify_mod, "run_stage", _boom)
 
     result = knowledge_ingest.ingest_one(
         "https://www.bilibili.com/video/BV1", ingest=False, category="investing/quant"

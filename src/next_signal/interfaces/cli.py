@@ -19,8 +19,10 @@ from next_signal.core.paths import PROJECT_ROOT
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 knowledge_app = typer.Typer(help="Manage knowledge adapters and GBrain.")
 info_radar_app = typer.Typer(help="Pull and sweep the info-radar collector.")
+coding_agent_app = typer.Typer(help="Run optional Codex or Claude Code CLI workers.")
 app.add_typer(knowledge_app, name="knowledge")
 app.add_typer(info_radar_app, name="info-radar")
+app.add_typer(coding_agent_app, name="coding-agent")
 
 
 def _check_folocli() -> tuple[str, bool, str]:
@@ -49,6 +51,50 @@ def _check_goals_yaml() -> tuple[str, bool, str]:
     return ("info-radar goals.yaml", True, f"{len(goals)} goal(s)")
 
 
+def _check_embedder() -> tuple[str, bool, str]:
+    """Report the active vector-space identity and whether its key is present.
+
+    Configuration only — no embedding request is made, so this check never
+    spends money or GPU. It answers "will the 08:00 scheduler be able to embed",
+    not "is the endpoint up".
+    """
+    from next_signal.core.embedding_preferences import (
+        embedder_identity,
+        load_embedding_preferences,
+    )
+
+    try:
+        prefs = load_embedding_preferences()
+    except RuntimeError as e:
+        return ("embedder", False, str(e))
+    identity = embedder_identity(prefs)
+
+    if prefs.provider == "omlx":
+        from next_signal.core.models import omlx_endpoint
+
+        # OMLX_API_KEY stays optional — the local server usually has none —
+        # so only the base URL can fail this check.
+        try:
+            return ("embedder", True, f"{identity} at {omlx_endpoint()['base_url']}")
+        except RuntimeError as e:
+            return ("embedder", False, f"{identity} — {e}")
+
+    if prefs.provider == "openai":
+        variable, where = "OPENAI_API_KEY", "https://api.openai.com/v1"
+    else:
+        variable = prefs.openai_compatible.api_key_env
+        where = prefs.openai_compatible.base_url
+    if not os.environ.get(variable, "").strip():
+        return (
+            "embedder",
+            False,
+            f"{identity} — {variable} not set in this process; add it to .env, then "
+            "restart the host process or recreate the Compose service (a running "
+            "process does not pick up file edits)",
+        )
+    return ("embedder", True, f"{identity} at {where} ({variable} set)")
+
+
 def _check_gbrain() -> tuple[str, bool, str]:
     from next_signal.integrations.gbrain import gbrain_env
 
@@ -73,20 +119,6 @@ def _check_gbrain() -> tuple[str, bool, str]:
         return ("GBrain", ok, msg)
     except Exception as e:  # noqa: BLE001
         return ("GBrain", False, f"unhealthy: {e}")
-
-
-def _run_workflow_now(workflow: str, inputs: dict | None = None) -> dict:
-    from next_signal.core.config import load_workflow
-    from next_signal.orchestrator.runnable_loader import load_factory
-
-    try:
-        cfg = load_workflow(workflow)
-    except FileNotFoundError as e:
-        raise RuntimeError(f"manual run is not implemented for workflow: {workflow}") from e
-    run_now = str(cfg.extra.get("run_now") or "").strip()
-    if not run_now:
-        raise RuntimeError(f"manual run is not implemented for workflow: {workflow}")
-    return load_factory(run_now)(**(inputs or {}))
 
 
 @app.callback()
@@ -117,6 +149,19 @@ def serve(port: int = 7777, reload: bool = True) -> None:
     uvicorn.run("next_signal.os_app:app", host="127.0.0.1", port=port, reload=reload)
 
 
+@app.command("schedule")
+def schedule() -> None:
+    """Run the wall-clock scheduler in the foreground until interrupted.
+
+    The command for the `scheduler` container service. No flags: the schedule
+    lives in `~/.next-signal/schedule.json` so the dashboard and the operator
+    edit one source of truth, and it is re-read on every poll.
+    """
+    from next_signal.orchestrator.schedule import run
+
+    run()
+
+
 @app.command("dashboard")
 def dashboard(
     build: bool = typer.Option(False, "--build", help="Run `pnpm build` instead of dev"),
@@ -145,9 +190,7 @@ def dashboard(
         raise typer.Exit(code=2)
     cwd = PROJECT_ROOT / "dashboard"
     if not (cwd / "package.json").is_file():
-        typer.secho(
-            f"dashboard/package.json missing under {cwd}", fg=typer.colors.RED, err=True
-        )
+        typer.secho(f"dashboard/package.json missing under {cwd}", fg=typer.colors.RED, err=True)
         raise typer.Exit(code=2)
     if build and start:
         typer.secho("--build and --start are mutually exclusive", fg=typer.colors.RED, err=True)
@@ -182,6 +225,140 @@ def run_agent(
         typer.echo(result.content if hasattr(result, "content") else str(result))
 
 
+@coding_agent_app.command("doctor")
+def coding_agent_doctor() -> None:
+    """Check configured coding-agent binaries without making a model request."""
+    from next_signal.core.config import load_coding_agents
+    from next_signal.integrations.coding_agents.runner import check_provider_version
+
+    try:
+        cfg = load_coding_agents()
+    except Exception as e:  # noqa: BLE001 — config errors are operator output
+        typer.echo(f"✗ coding-agent config: {e}", err=True)
+        raise typer.Exit(code=1) from e
+
+    failed = False
+    for provider in ("codex", "claude"):
+        ok, detail = check_provider_version(provider, cfg)
+        typer.echo(f"{'✓' if ok else '✗'} {provider}: {detail}")
+        failed = failed or not ok
+    if failed:
+        raise typer.Exit(code=1)
+
+
+def _validated_coding_agent_provider(provider: str) -> str:
+    if provider not in {"codex", "claude"}:
+        typer.echo(
+            f"unknown coding-agent provider {provider!r}; valid providers: claude, codex",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+    return provider
+
+
+@coding_agent_app.command("auth-status", hidden=True)
+def coding_agent_auth_status(provider: str = typer.Argument(...)) -> None:
+    """Emit sanitized provider login status for the local Dashboard."""
+    import json
+
+    from next_signal.integrations.coding_agents.auth import check_auth_status
+
+    selected = _validated_coding_agent_provider(provider)
+    status = check_auth_status(selected)
+    typer.echo(json.dumps(status, ensure_ascii=False, separators=(",", ":")))
+    if not status["available"]:
+        raise typer.Exit(code=1)
+
+
+@coding_agent_app.command("auth-login", hidden=True)
+def coding_agent_auth_login(provider: str = typer.Argument(...)) -> None:
+    """Run one bounded PTY login session using a fixed provider command."""
+    import json
+    import sys
+
+    from next_signal.integrations.coding_agents.auth import run_login_session
+
+    selected = _validated_coding_agent_provider(provider)
+
+    def emit(event: dict[str, object]) -> None:
+        typer.echo(json.dumps(event, ensure_ascii=False, separators=(",", ":")))
+
+    result = run_login_session(selected, emit=emit, input_stream=sys.stdin)
+    if not result["ok"]:
+        raise typer.Exit(code=1)
+
+
+@coding_agent_app.command("auth-logout", hidden=True)
+def coding_agent_auth_logout(provider: str = typer.Argument(...)) -> None:
+    """Remove one provider's saved login through its fixed logout command."""
+    import json
+
+    from next_signal.integrations.coding_agents.auth import logout
+
+    selected = _validated_coding_agent_provider(provider)
+    result = logout(selected)
+    typer.echo(json.dumps(result, ensure_ascii=False, separators=(",", ":")))
+    if not result["ok"]:
+        raise typer.Exit(code=1)
+
+
+@coding_agent_app.command("run")
+def coding_agent_run(
+    provider: str = typer.Argument(..., help="Provider: codex or claude"),
+    prompt: str = typer.Argument(..., help="Repository task prompt"),
+    cwd: Path = typer.Option(..., "--cwd", help="Repository working directory"),
+    profile: str | None = typer.Option(
+        None, "--profile", help="Execution profile (default: configured review profile)"
+    ),
+    progress: bool = typer.Option(
+        False, "--progress", help="Emit provider events and final result as JSONL"
+    ),
+) -> None:
+    """Run one bounded, non-persistent coding-agent task."""
+    import asyncio
+
+    from next_signal.core.config import load_coding_agents
+    from next_signal.integrations.coding_agents.runner import run_coding_agent
+    from next_signal.integrations.coding_agents.types import (
+        CodingAgentEvent,
+        CodingAgentRunRequest,
+    )
+
+    _validated_coding_agent_provider(provider)
+
+    try:
+        cfg = load_coding_agents()
+        cfg.profile(profile)
+        request = CodingAgentRunRequest(
+            provider=provider,
+            prompt=prompt,
+            cwd=cwd,
+            profile=profile,
+        )
+    except Exception as e:  # noqa: BLE001 — validation errors are operator output
+        typer.echo(f"coding-agent: {e}", err=True)
+        raise typer.Exit(code=2) from e
+
+    def emit(event: CodingAgentEvent) -> None:
+        typer.echo(event.model_dump_json())
+
+    result = asyncio.run(
+        run_coding_agent(
+            request,
+            config=cfg,
+            on_event=emit if progress else None,
+        )
+    )
+    if progress:
+        typer.echo(result.model_dump_json())
+    else:
+        import json
+
+        typer.echo(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
+    if not result.ok:
+        raise typer.Exit(code=1)
+
+
 @app.command("doctor")
 def doctor() -> None:
     """Check that the environment is set up enough to run the system."""
@@ -194,19 +371,28 @@ def doctor() -> None:
         (
             "ANTHROPIC_API_KEY",
             bool(os.environ.get("ANTHROPIC_API_KEY")),
-            "set" if os.environ.get("ANTHROPIC_API_KEY") else "not set (claude_* profiles will fail)",
+            "set"
+            if os.environ.get("ANTHROPIC_API_KEY")
+            else "not set (claude_* profiles will fail)",
         )
     )
     checks.append(
         (
             "DEEPSEEK_API_KEY",
             bool(os.environ.get("DEEPSEEK_API_KEY")),
-            "set" if os.environ.get("DEEPSEEK_API_KEY") else "not set (local* fallback to deepseek will fail)",
+            "set"
+            if os.environ.get("DEEPSEEK_API_KEY")
+            else "not set (local* fallback to deepseek will fail)",
         )
     )
 
-    # 2. OMLX endpoint (env-driven; see next_signal.core.models.omlx_endpoint)
-    omlx_url = os.environ.get("OMLX_BASE_URL")
+    # 2. OMLX endpoint (centralized in next_signal.core.models.omlx_endpoint)
+    from next_signal.core.models import omlx_endpoint
+
+    try:
+        omlx_url = omlx_endpoint()["base_url"]
+    except RuntimeError:
+        omlx_url = ""
     checks.append(
         (
             "OMLX_BASE_URL",
@@ -231,6 +417,12 @@ def doctor() -> None:
         )
     except RuntimeError as e:
         checks.append(("content language", False, str(e)))
+
+    # 2c. Which embedder the dedup gate will resolve, and whether its
+    # credential is in *this* process. The scheduler embeds unattended, and a
+    # hosted provider with no key turns every item into `novel` with nobody
+    # reading the logs live.
+    checks.append(_check_embedder())
 
     # 3. Postgres reachable, and is its schema current?
     # Reachability alone is not health: a stack running a pre-migration image
@@ -413,11 +605,14 @@ def run_workflow(name: str = typer.Argument(..., help="Workflow config name.")) 
     """Run one workflow immediately via its ``extra.run_now`` entry point.
 
     The dashboard uses this to trigger jobs (e.g. the knowledge re-index) from
-    the UI; there is no background scheduler.
+    the UI. `next-signal schedule` drives the radar chain on a wall clock; the
+    re-index is deliberately not on it.
     """
     import json
 
-    result = _run_workflow_now(name)
+    from next_signal.orchestrator.run_now import run_workflow_now
+
+    result = run_workflow_now(name)
     typer.echo(json.dumps(result, ensure_ascii=False, indent=2))
 
 
@@ -500,8 +695,7 @@ def info_radar_recap(
     status = result["status"]
     if status == "empty":
         typer.echo(
-            f"info-radar recap: no items cleared the gate for "
-            f"{result['since']}..{result['until']}"
+            f"info-radar recap: no items cleared the gate for {result['since']}..{result['until']}"
         )
         return
     if status == "running":

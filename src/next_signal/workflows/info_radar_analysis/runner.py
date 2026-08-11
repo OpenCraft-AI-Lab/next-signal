@@ -26,13 +26,24 @@ from __future__ import annotations
 import logging
 import queue
 import threading
+import time
+from contextvars import copy_context
 from typing import Any
 
+from next_signal.agents.stage import stage_job
+from next_signal.core.logging import get_logger
 from next_signal.workflows.info_radar_analysis import store as analysis_store
 from next_signal.workflows.info_radar_analysis.goals import Goal, load_goals
 from next_signal.workflows.info_radar_analysis.schemas import Tier1Verdict
 from next_signal.workflows.info_radar_analysis.stages import dedup, fetch, tier1, tier2
 
+# Everything structured goes through structlog: the stdlib handler is
+# configured with a bare `%(message)s` format, so an `extra=` field never
+# renders — a per-item failure logged that way says an item failed and nothing
+# about which one or why. The stdlib logger survives for exactly one call,
+# `log.exception` in the producer, because structlog's processor chain here has
+# no `format_exc_info` and would drop the traceback in JSON mode.
+events = get_logger(__name__)
 log = logging.getLogger(__name__)
 
 # Tier-1 batch chunk size. Conservative so xgrammar's structured-output
@@ -51,6 +62,11 @@ def run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any
     Returns a counters dict summarizing the run. Always returns — never raises
     — except for the one fatal precondition (no goals.yaml).
     """
+    with stage_job():
+        return _run(limit=limit, source=source)
+
+
+def _run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any]:
     goals = load_goals()  # fail-fast intentional: empty/missing → RuntimeError
 
     items = analysis_store.fetch_unseen_items(limit=limit, source=source)
@@ -80,8 +96,12 @@ def run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any
             # and retry next run.
             work_queue.put(_DONE)
 
+    producer_context = copy_context()
     producer = threading.Thread(
-        target=_producer, name="info-radar-tier1", daemon=True
+        target=producer_context.run,
+        args=(_producer,),
+        name="info-radar-tier1",
+        daemon=True,
     )
     producer.start()
 
@@ -91,18 +111,31 @@ def run(*, limit: int | None = None, source: str | None = None) -> dict[str, Any
     # or mark_seen) so one item never aborts the batch — strict superset of
     # the spec's tier1/fetch/tier2/dedup isolation requirement.
     while True:
+        # Time the blocking get separately: a consumer starved by tier-1 and a
+        # consumer stuck in its own stages look identical in wall clock, and
+        # only the split says which one to go fix.
+        waited = time.monotonic()
         msg = work_queue.get()
+        queue_wait = time.monotonic() - waited
         if msg is _DONE:
             break
         item, verdict = msg
+        timing: dict[str, float] = {}
+        started = time.monotonic()
         try:
-            _process_item(item, verdict, goals, counters)
+            _process_item(item, verdict, goals, counters, timing)
         except Exception as e:  # noqa: BLE001
-            log.warning(
-                "item_unexpected_raise",
-                extra={"item_id": item.get("id"), "error": str(e)},
+            events.warning(
+                "item_unexpected_raise", item_id=item.get("id"), error=str(e)
             )
             counters["item_error"] += 1
+        events.info(
+            "item_timing",
+            item_id=item.get("id"),
+            queue_wait_s=round(queue_wait, 1),
+            total_s=round(time.monotonic() - started, 1),
+            **{k: round(v, 1) for k, v in timing.items()},
+        )
 
     producer.join()
     return counters
@@ -117,22 +150,30 @@ def _run_chunk(
     chunk: list[dict[str, Any]], goals: list[Goal]
 ) -> list[Tier1Verdict | None]:
     """Try the batched call; on any failure, fall back to per-item calls."""
+    started = time.monotonic()
     try:
-        return list(tier1.run_batch(chunk, goals))
+        verdicts = list(tier1.run_batch(chunk, goals))
     except Exception as batch_err:  # noqa: BLE001
-        log.warning(
+        events.warning(
             "tier1_batch_failed_falling_back_to_single",
-            extra={"chunk_size": len(chunk), "error": str(batch_err)},
+            chunk_size=len(chunk),
+            error=str(batch_err),
         )
+    else:
+        events.info(
+            "tier1_batch_done",
+            size=len(chunk),
+            seconds=round(time.monotonic() - started, 1),
+        )
+        return verdicts
 
     out: list[Tier1Verdict | None] = []
     for item in chunk:
         try:
             out.append(tier1.run(item, goals))
         except Exception as e:  # noqa: BLE001
-            log.warning(
-                "tier1_single_failed",
-                extra={"item_id": item.get("id"), "error": str(e)},
+            events.warning(
+                "tier1_single_failed", item_id=item.get("id"), error=str(e)
             )
             out.append(None)
     return out
@@ -148,6 +189,7 @@ def _process_item(
     verdict: Tier1Verdict | None,
     goals: list[Goal],
     counters: dict[str, int],
+    timing: dict[str, float],
 ) -> None:
     item_id = int(item["id"])
 
@@ -166,22 +208,28 @@ def _process_item(
     counters["tier1_kept"] += 1
 
     # --- Fetch -------------------------------------------------------------
+    stage_started = time.monotonic()
     try:
         content, content_status = fetch.run(item)
     except Exception as e:  # noqa: BLE001
-        log.warning("fetch_unexpected_raise", extra={"item_id": item_id, "error": str(e)})
+        events.warning("fetch_unexpected_raise", item_id=item_id, error=str(e))
         content, content_status = "", "fallback"
+    finally:
+        timing["fetch_s"] = time.monotonic() - stage_started
 
     # --- Tier 2 ------------------------------------------------------------
+    stage_started = time.monotonic()
     try:
         analysis = tier2.run(item, content, content_status, goals)
     except Exception as e:  # noqa: BLE001
         # Symmetric with tier-1: do NOT persist or mark seen, so a transient
         # LLM failure retries next batch instead of freezing an empty analysis
         # forever (radar_analyses is UNIQUE per item, with no reanalyze path).
-        log.warning("tier2_failed", extra={"item_id": item_id, "error": str(e)})
+        events.warning("tier2_failed", item_id=item_id, error=str(e))
         counters["tier2_error"] += 1
         return
+    finally:
+        timing["tier2_s"] = time.monotonic() - stage_started
 
     if content_status == "fallback":
         counters["tier2_fallback"] += 1
@@ -189,7 +237,9 @@ def _process_item(
         counters["tier2_ok"] += 1
 
     # --- Dedup gate --------------------------------------------------------
+    stage_started = time.monotonic()
     outcome = dedup.run(analysis.summary)
+    timing["dedup_s"] = time.monotonic() - stage_started
     if outcome.status == "duplicate":
         counters["dedup_duplicate"] += 1
         analysis_store.insert_analysis(
@@ -211,13 +261,11 @@ def _process_item(
                     topic_id=outcome.matched_topic_id, item_id=item_id
                 )
             except Exception as e:  # noqa: BLE001
-                log.warning(
+                events.warning(
                     "dedup_append_failed",
-                    extra={
-                        "item_id": item_id,
-                        "topic_id": outcome.matched_topic_id,
-                        "error": str(e),
-                    },
+                    item_id=item_id,
+                    topic_id=outcome.matched_topic_id,
+                    error=str(e),
                 )
     else:
         counters["dedup_novel"] += 1
@@ -225,10 +273,15 @@ def _process_item(
         if outcome.embedding is not None:
             try:
                 new_topic_id = analysis_store.insert_topic(
-                    summary=analysis.summary, embedding=outcome.embedding, item_id=item_id
+                    summary=analysis.summary,
+                    embedding=outcome.embedding,
+                    # The identity captured when this vector was produced, not a
+                    # re-read of live settings — see dedup.DedupOutcome.
+                    embedder=outcome.embedder,
+                    item_id=item_id,
                 )
             except Exception as e:  # noqa: BLE001
-                log.warning("topic_insert_failed", extra={"item_id": item_id, "error": str(e)})
+                events.warning("topic_insert_failed", item_id=item_id, error=str(e))
         analysis_store.insert_analysis(
             radar_item_id=item_id,
             verdict="keep",

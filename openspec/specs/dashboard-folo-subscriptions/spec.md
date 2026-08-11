@@ -29,11 +29,11 @@ The dashboard SHALL render `/subscriptions` as a read-only inventory of the oper
 
 ### Requirement: Folo subscription list integration
 
-The system SHALL expose a stable server-side boundary that combines `folocli subscription list` with `folocli unread list`, using the same pinned argv/auth conventions as `paca.integrations.info_radar.folo`.
+The system SHALL expose a stable server-side boundary that combines `folocli subscription list` with `folocli unread list`, using the same pinned argv/auth conventions as `next_signal.integrations.info_radar.folo`.
 
 #### Scenario: CLI command returns normalized JSON
 
-- **WHEN** `uv run paca info-radar subscriptions --json` is run with valid Folo auth
+- **WHEN** `uv run next-signal info-radar subscriptions --json` is run with valid Folo auth
 - **THEN** it invokes the pinned `folocli` subscription-list and unread-list commands, parses both JSON envelopes, and returns a JSON-safe list of normalized subscription rows
 
 #### Scenario: unread counts are merged per feed

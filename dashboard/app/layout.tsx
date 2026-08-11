@@ -7,7 +7,6 @@ import { Toaster } from "sonner";
 import { I18nProvider } from "@/components/i18n-provider";
 import { Nav } from "@/components/nav";
 import { ThemeProvider } from "@/components/theme-provider";
-import { getContentLanguage } from "@/lib/actions/language";
 import { getLocale } from "@/lib/i18n/server";
 import "./globals.css";
 
@@ -20,10 +19,10 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // Both settings resolve on the server so the nav paints its actual state on
-  // first render. They are independent: `locale` is UI chrome (cookie),
-  // `contentLanguage` is what the pipeline generates in (state file).
-  const [locale, contentLanguage] = await Promise.all([getLocale(), getContentLanguage()]);
+  // The nav only needs the UI-chrome locale (a cookie). Every other setting
+  // moved to `/settings` and resolves there, so a page that is not the settings
+  // page no longer reads four state files and a DB row to paint its header.
+  const locale = await getLocale();
   // Geist exposes `--font-geist-sans` / `--font-geist-mono`; the design's
   // `--font-sans` / `--font-mono` resolve to those (see globals.css).
   return (
@@ -37,7 +36,7 @@ export default async function RootLayout({
           <ThemeProvider>
             <I18nProvider locale={locale}>
               <div className="app">
-                <Nav contentLanguage={contentLanguage} />
+                <Nav />
                 <main>{children}</main>
               </div>
               <Toaster richColors position="bottom-right" />

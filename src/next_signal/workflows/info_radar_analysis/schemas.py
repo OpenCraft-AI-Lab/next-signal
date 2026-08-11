@@ -1,8 +1,8 @@
 """Pydantic schemas for the three info-radar-analysis agents.
 
-Each schema is passed to ``next_signal.agents.structured.run_structured`` as the
-per-call ``output_schema``. OMLX's xgrammar constrained decoding then forces
-the model to emit JSON that matches.
+Each schema is passed to ``next_signal.agents.stage.run_stage`` as the per-call
+``output_schema``. The selected engine receives the contract through its
+supported mechanism, and the adapter always validates the result locally.
 """
 
 from __future__ import annotations

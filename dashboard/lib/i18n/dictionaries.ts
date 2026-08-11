@@ -25,10 +25,160 @@ export const dictionaries = {
     settings: {
       trigger: "Settings",
       heading: "Settings",
+      subtitle:
+        "What next-signal generates, when it runs, and which engine it runs on.",
+      saveFailed: "Could not save. Check the dashboard logs.",
+      save: "Save",
+      saving: "Saving…",
+      reset: "Reset",
+      unsaved: "Unsaved changes",
+
+      railLanguage: "Language",
+      railSchedule: "Scheduled runs",
+      railEngine: "Engine",
+      railEmbedding: "Embedding",
+
       contentLanguage: "Content language",
       contentLanguageHint:
-        "Language for generated content — radar analyses and wiki frontmatter. Does not change the interface language.",
-      saveFailed: "Could not save. Check the dashboard logs.",
+        "The language radar analyses and wiki frontmatter are written in. The interface language is the toggle in the top bar — the two are independent.",
+      contentLanguageSaved: "Content language saved",
+
+      schedule: "Scheduled runs",
+      scheduleHint:
+        "Pull and analyse the radar unattended at every time listed below.",
+      scheduleOn: "On",
+      scheduleOff: "Off",
+      scheduleTime: "Runs every day at",
+      scheduleAdd: "Add",
+      scheduleRemoveTime: "Remove this time",
+      scheduleNext: (at: string, tz: string) => `Next run today at ${at} · ${tz}`,
+      scheduleNextTomorrow: (at: string, tz: string) =>
+        `Next run tomorrow at ${at} · ${tz}`,
+      scheduleTimezone: "Time zone",
+      // Stated, not offered: the same value fixes radar day grouping and review
+      // due dates, so it is one environment-wide decision rather than a
+      // per-schedule one.
+      scheduleTimezoneHint:
+        "The zone the times above fire in, read from INFO_RADAR_TIMEZONE. Change it in the environment and restart the stack — radar day grouping follows the same value.",
+      scheduleOnMissed: "If a run is missed",
+      scheduleOnMissedHint:
+        "Catch up runs once for missed times, however many went by — including ones missed while the machine was asleep. Changing the schedule never fires a time that has just passed.",
+      scheduleSkip: "Skip",
+      scheduleCatchUp: "Catch up",
+      scheduleSaved: "Schedule saved",
+      scheduleNeverRun: "Has not run yet",
+      scheduleRunning: (ago: string) => `Running · started ${ago}`,
+      scheduleLastOk: (ago: string) => `Last run ${ago} · succeeded`,
+      scheduleLastFailed: (ago: string) => `Last run ${ago} · failed`,
+
+      engine: "Engine",
+      engineHint: "Which engine next-signal calls. Pick one — its settings open below.",
+      engineSaved: "Engine settings saved",
+      engineOmlx: "Local model",
+      engineDeepseek: "DeepSeek",
+      engineCodex: "Codex CLI",
+      engineClaude: "Claude Code CLI",
+      engineKindLocal: "on-device",
+      engineKindCloud: "cloud API",
+      engineKindCli: "local CLI",
+      engineStatusKeySet: "Key set",
+      engineStatusNoKey: "No API key",
+      engineStatusConfigured: "Configured",
+      engineStatusUnset: "Not configured",
+      engineFallback: "If it is unreachable",
+      engineFallbackHint:
+        "Where work goes when the engine above cannot be reached.",
+      engineFallbackNone: "Nothing — fail loudly",
+      engineFallbackSaved: "Fallback saved",
+
+      omlxEndpoint: "Endpoint",
+      omlxModel: "Model",
+      omlxParallel: "Parallel requests",
+      omlxHint:
+        "Runs on your own machine — nothing is billed and nothing leaves it. Any OpenAI-compatible server works; a single one rarely parallelises cleanly, so keep this low.",
+
+      deepseekModel: "Model",
+      deepseekReasoning: "Reasoning",
+      deepseekOff: "Off",
+      deepseekLow: "Low",
+      deepseekHigh: "High",
+      deepseekHint:
+        "Billed per token. Reasoning bills thinking tokens as output — Low keeps some chain-of-thought without the full cost.",
+      deepseekKeyHint:
+        "The API key stays in .env as DEEPSEEK_API_KEY; the dashboard only reports whether it is set.",
+
+      codexModel: "Model",
+      codexEffort: "Reasoning effort",
+      codexSpeed: "Speed",
+      codexRequired: "Required",
+      codexSelect: "Select…",
+      codexStandard: "Standard",
+      codexFast: "Fast",
+      codexHint:
+        "Model, effort, and speed must be selected before next-signal can call Codex. Fast uses more credits on supported models.",
+      codexSaved: "Codex settings saved",
+
+      claudeModel: "Model",
+      claudeEffort: "Thinking effort",
+      claudeHint:
+        "Model and effort must be selected before next-signal can call Claude Code. Available effort levels depend on the selected model.",
+      claudeSaved: "Claude settings saved",
+
+      embedding: "Embedding",
+      embeddingHint:
+        "Which embedder the radar's duplicate check uses. Pick one — its settings open below.",
+      embeddingSaved: "Embedding settings saved",
+      embeddingOmlx: "Local model",
+      embeddingOpenai: "OpenAI",
+      embeddingCompatible: "Custom endpoint",
+      embeddingKindEndpoint: "OpenAI-compatible API",
+      embeddingIdentity: "Active vector space",
+      embeddingIdentityHint:
+        "The identity stamped on every new vector. The duplicate check only compares vectors carrying this exact value.",
+      embeddingSwitchHint:
+        "Switching parks the topics remembered under the previous identity rather than translating them, so the radar calls some already-seen topics new until it rebuilds memory here. Switching back restores them — nothing is deleted.",
+      embeddingLegacyHint:
+        "Topics stored before this setting existed are labelled legacy:unknown and stay parked: the old schema never recorded which model produced them, and guessing would compare unrelated vectors. Relabelling them is a deliberate manual SQL step — see docs/operations.md.",
+      embeddingOmlxHint:
+        "Runs on your own machine — nothing is billed and nothing leaves it. Embedding shares the local GPU limit with on-device inference.",
+      embeddingHostedHint:
+        "Hosted: each radar summary is sent to this endpoint, and every item can be billed — including unattended scheduled runs.",
+      embeddingOpenaiKeyHint:
+        "The API key stays in .env as OPENAI_API_KEY; the dashboard only reports whether it is set. After editing .env, restart the host process or recreate the Compose service — a running process does not pick up file edits.",
+      embeddingWidthHint:
+        "The request asks for 1024 values. A model that cannot return exactly 1024 is rejected at call time rather than reshaped.",
+      embeddingBaseUrl: "API root",
+      embeddingBaseUrlHint:
+        "A plain API root such as https://host.example/v1 — the /embeddings route is appended for you. A key or parameter inside the URL is rejected.",
+      embeddingApiKeyEnv: "API key variable",
+      embeddingApiKeyEnvHint:
+        "The NAME of the environment variable holding the key, never the key itself. The value is read from the pipeline's own environment, so nothing secret is stored here or sent to this page.",
+      embeddingSpaceId: "Vector space id",
+      embeddingSpaceIdHint:
+        "Your own name for the vectors this endpoint produces. Change it whenever the weights, tokenizer, pooling, or quantization change; moving the same service to a new URL does not need a new id.",
+      embeddingCompatibleSaveHint:
+        "This endpoint is not in use yet. Save all four fields to store it and switch to it.",
+
+      authAccount: "CLI account",
+      authConnected: "Connected",
+      authNotConnected: "Not connected",
+      authUnavailable: "CLI unavailable",
+      authConnecting: "Connecting…",
+      authConnect: "Connect",
+      authReconnect: "Reconnect",
+      authDisconnect: "Disconnect",
+      authDisconnected: "CLI account disconnected",
+      authCancel: "Cancel login",
+      authStarted: "Login started",
+      authFailed: "Authentication failed",
+      authHint:
+        "Login is saved in the provider's own Docker volume. The dashboard can only run the fixed login, status, and logout commands.",
+      authOpenLogin: "Open login page",
+      authCopyLink: "Copy link",
+      authLinkCopied: "Login link copied",
+      authCodePlaceholder: "Paste the Claude authorization code",
+      authSubmitCode: "Submit code",
+      authCodeSent: "Authorization code submitted",
     },
     theme: {
       toggle: "Toggle theme",
@@ -195,8 +345,7 @@ export const dictionaries = {
           `${count} signal${count === 1 ? "" : "s"} analyzed since this recap`,
         coverage: (shown: number, considered: number) =>
           `Synthesized from the top ${shown} of ${considered} signals`,
-        cited: (count: number) =>
-          `${count} source${count === 1 ? "" : "s"}`,
+        cited: (count: number) => `${count} source${count === 1 ? "" : "s"}`,
         sweptCitation: "source no longer retained",
         savedTitle: "Saved recaps",
         savedSub: "click any to reopen it above",
@@ -233,7 +382,8 @@ export const dictionaries = {
         refreshVerb: "Review refresh",
         refreshStarted: "Review refresh started",
         refreshToastTitle: "Refreshing reviews…",
-        refreshToastDescription: "Reconciling the wiki and generating recall points",
+        refreshToastDescription:
+          "Reconciling the wiki and generating recall points",
         curve: (count: number) => `Ebbinghaus curve · ${count} docs`,
         curveDone: "done",
         curveDueKey: "due",
@@ -244,7 +394,8 @@ export const dictionaries = {
         curveDoneStatTitle: "Past the final stage — no longer scheduled",
         curveTitle: (stage: string, total: number, due: number) =>
           `${stage}: ${total} docs, ${due} due`,
-        curveDoneTitle: (total: number) => `Past the final stage: ${total} docs`,
+        curveDoneTitle: (total: number) =>
+          `Past the final stage: ${total} docs`,
       },
       reindex: {
         idle: "Re-index",
@@ -401,10 +552,153 @@ export const dictionaries = {
     settings: {
       trigger: "设置",
       heading: "设置",
+      subtitle: "next-signal 生成什么、什么时候跑、用哪个引擎跑。",
+      saveFailed: "保存失败，请查看 dashboard 日志。",
+      save: "保存",
+      saving: "保存中…",
+      reset: "还原",
+      unsaved: "有未保存的改动",
+
+      railLanguage: "语言",
+      railSchedule: "定时运行",
+      railEngine: "模型引擎",
+      railEmbedding: "向量嵌入",
+
       contentLanguage: "内容语言",
       contentLanguageHint:
-        "生成内容的语言——雷达分析与知识库 frontmatter。不影响界面语言。",
-      saveFailed: "保存失败，请查看 dashboard 日志。",
+        "雷达分析和知识库 frontmatter 的写作语言。界面语言是顶栏那个开关，两者互不影响。",
+      contentLanguageSaved: "内容语言已保存",
+
+      schedule: "定时运行",
+      scheduleHint: "在下面列出的每个时间点无人值守地拉取并分析雷达。",
+      scheduleOn: "开启",
+      scheduleOff: "关闭",
+      scheduleTime: "每天运行于",
+      scheduleAdd: "添加",
+      scheduleRemoveTime: "移除这个时间",
+      scheduleNext: (at: string, tz: string) => `下一次：今天 ${at}（${tz}）`,
+      scheduleNextTomorrow: (at: string, tz: string) =>
+        `下一次：明天 ${at}（${tz}）`,
+      scheduleTimezone: "时区",
+      scheduleTimezoneHint:
+        "上面的时间按这个时区触发，取自 INFO_RADAR_TIMEZONE。要改就改环境变量再重启整个栈——雷达的按天分组用的是同一个值。",
+      scheduleOnMissed: "错过某次运行时",
+      scheduleOnMissedHint:
+        "补跑会为错过的时间点补一次，不管错过了几次——包括机器睡眠期间错过的。改动计划本身永远不会触发刚过去的时间点。",
+      scheduleSkip: "跳过",
+      scheduleCatchUp: "补跑",
+      scheduleSaved: "计划已保存",
+      scheduleNeverRun: "尚未运行",
+      scheduleRunning: (ago: string) => `正在运行·开始于 ${ago}`,
+      scheduleLastOk: (ago: string) => `上次运行 ${ago}·成功`,
+      scheduleLastFailed: (ago: string) => `上次运行 ${ago}·失败`,
+
+      engine: "模型引擎",
+      engineHint: "next-signal 调用哪个引擎。选一个，它的设置会在下面展开。",
+      engineSaved: "引擎设置已保存",
+      engineOmlx: "本地模型",
+      engineDeepseek: "DeepSeek",
+      engineCodex: "Codex CLI",
+      engineClaude: "Claude Code CLI",
+      engineKindLocal: "本机推理",
+      engineKindCloud: "云端 API",
+      engineKindCli: "本地 CLI",
+      engineStatusKeySet: "密钥已配置",
+      engineStatusNoKey: "缺少 API 密钥",
+      engineStatusConfigured: "已配置",
+      engineStatusUnset: "未配置",
+      engineFallback: "连不上时",
+      engineFallbackHint: "上面的引擎连不上时，任务转到哪里。",
+      engineFallbackNone: "不回落（直接失败）",
+      engineFallbackSaved: "回落设置已保存",
+
+      omlxEndpoint: "端点",
+      omlxModel: "模型",
+      omlxParallel: "并发请求",
+      omlxHint:
+        "跑在你自己的机器上——不计费，数据不出本机。任何 OpenAI 兼容的服务都可以；单个服务通常并行不干净，这个值保持小一点。",
+
+      deepseekModel: "模型",
+      deepseekReasoning: "推理",
+      deepseekOff: "关闭",
+      deepseekLow: "低",
+      deepseekHigh: "高",
+      deepseekHint:
+        "按 token 计费。推理会把思考 token 算进输出——「低」保留一部分思考链但不吃满成本。",
+      deepseekKeyHint:
+        "API 密钥留在 .env 的 DEEPSEEK_API_KEY 里；dashboard 只报告它有没有配置。",
+
+      codexModel: "模型",
+      codexEffort: "推理强度",
+      codexSpeed: "速度",
+      codexRequired: "必填",
+      codexSelect: "请选择…",
+      codexStandard: "标准",
+      codexFast: "快速",
+      codexHint:
+        "必须先选择模型、推理强度和速度，next-signal 才能调用 Codex；支持的模型使用快速模式会消耗更多额度。",
+      codexSaved: "Codex 设置已保存",
+
+      claudeModel: "模型",
+      claudeEffort: "思考强度",
+      claudeHint:
+        "必须先选择模型和思考强度，next-signal 才能调用 Claude Code；可用的思考强度取决于所选模型。",
+      claudeSaved: "Claude 设置已保存",
+
+      embedding: "向量嵌入",
+      embeddingHint: "雷达的去重判断用哪个嵌入模型。选一个，它的设置会在下面展开。",
+      embeddingSaved: "嵌入设置已保存",
+      embeddingOmlx: "本地模型",
+      embeddingOpenai: "OpenAI",
+      embeddingCompatible: "自定义端点",
+      embeddingKindEndpoint: "OpenAI 兼容 API",
+      embeddingIdentity: "当前向量空间",
+      embeddingIdentityHint:
+        "打在每条新向量上的身份标识。去重只会比较带着这个完全相同取值的向量。",
+      embeddingSwitchHint:
+        "切换会把上一个身份下记住的主题搁置起来，而不是翻译过去——在这边重新积累记忆之前，雷达会把一些见过的主题当成新的。切回去它们就回来了，不会删任何数据。",
+      embeddingLegacyHint:
+        "这个设置出现之前存下的主题标为 legacy:unknown 并保持搁置：旧表结构没记录是哪个模型产生的，猜一个就等于去比较毫不相干的向量。要重新打标是一步刻意的手工 SQL——见 docs/operations.md。",
+      embeddingOmlxHint:
+        "跑在你自己的机器上——不计费，数据不出本机。嵌入和本机推理共用同一个本地 GPU 并发上限。",
+      embeddingHostedHint:
+        "云端：每条雷达摘要都会发到这个端点，每个条目都可能计费——包括无人值守的定时运行。",
+      embeddingOpenaiKeyHint:
+        "API 密钥留在 .env 的 OPENAI_API_KEY 里，dashboard 只报告它有没有配置。改完 .env 要重启宿主进程或重建 Compose 服务——已经在跑的进程不会自己读到文件改动。",
+      embeddingWidthHint:
+        "请求会要 1024 个值。返回不是正好 1024 的模型会在调用时被拒绝，而不是被截断或补齐。",
+      embeddingBaseUrl: "API 根地址",
+      embeddingBaseUrlHint:
+        "填 API 根地址，例如 https://host.example/v1——/embeddings 这段由程序自己拼。URL 里带密钥或参数会被拒绝。",
+      embeddingApiKeyEnv: "API 密钥变量名",
+      embeddingApiKeyEnvHint:
+        "填存放密钥的环境变量的名字，不是密钥本身。取值时从流水线自己的环境里读，所以这里不存任何机密，也不会发到这个页面。",
+      embeddingSpaceId: "向量空间 id",
+      embeddingSpaceIdHint:
+        "你自己给这个端点产出的向量起的名字。权重、分词器、pooling 或量化变了就换一个；同一个服务换个 URL 不需要换 id。",
+      embeddingCompatibleSaveHint:
+        "这个端点还没启用。四个字段都填好并保存，才会存下来并切过去。",
+
+      authAccount: "CLI 账号",
+      authConnected: "已连接",
+      authNotConnected: "未连接",
+      authUnavailable: "CLI 不可用",
+      authConnecting: "连接中…",
+      authConnect: "连接",
+      authReconnect: "重新连接",
+      authDisconnect: "断开连接",
+      authDisconnected: "CLI 账号已断开",
+      authCancel: "取消登录",
+      authStarted: "已开始登录",
+      authFailed: "认证失败",
+      authHint:
+        "登录信息保存在 provider 自己的 Docker volume 中。Dashboard 只能运行固定的登录、状态和退出命令。",
+      authOpenLogin: "打开登录页面",
+      authCopyLink: "复制链接",
+      authLinkCopied: "登录链接已复制",
+      authCodePlaceholder: "粘贴 Claude 授权码",
+      authSubmitCode: "提交授权码",
+      authCodeSent: "授权码已提交",
     },
     theme: {
       toggle: "切换主题",

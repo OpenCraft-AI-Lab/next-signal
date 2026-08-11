@@ -16,8 +16,7 @@ import logging
 import re
 from typing import Any
 
-from next_signal.agents.loader import build_from_name
-from next_signal.agents.structured import run_structured
+from next_signal.agents.stage import run_stage
 from next_signal.workflows.stages.knowledge_ingest.artifact import KnowledgeArtifact
 from next_signal.workflows.stages.knowledge_ingest.schemas import FrontmatterDraft
 
@@ -84,8 +83,8 @@ def _run_editor(
     already detected, rather than left to the model's default tendency to
     preserve input language.
     """
-    agent = build_from_name(agent_name, language=artifact.detected_language)
-    response = agent.run(
+    response = run_stage(
+        agent_name,
         json.dumps(
             {
                 "source_type": artifact.source_type,
@@ -93,9 +92,10 @@ def _run_editor(
                 "markdown": body[:_MAX_MARKDOWN_CHARS],
             },
             ensure_ascii=False,
-        )
+        ),
+        language=artifact.detected_language,
     )
-    cleaned = _strip_code_fence(str(getattr(response, "content", response))).strip()
+    cleaned = _strip_code_fence(response).strip()
     if not cleaned:
         raise RuntimeError("knowledge artifact editor returned an empty body")
     return cleaned
@@ -116,7 +116,6 @@ def write_frontmatter(artifact: KnowledgeArtifact) -> KnowledgeArtifact:
         if artifact.source_type == "github"
         else "knowledge_frontmatter"
     )
-    agent = build_from_name(agent_name)
     agent_input = json.dumps(
         {
             "source_type": artifact.source_type,
@@ -127,7 +126,7 @@ def write_frontmatter(artifact: KnowledgeArtifact) -> KnowledgeArtifact:
         },
         ensure_ascii=False,
     )
-    draft = run_structured(agent, agent_input, FrontmatterDraft)
+    draft = run_stage(agent_name, agent_input, FrontmatterDraft)
     artifact.title = draft.title or artifact.title
     artifact.artifact_edit = draft.to_artifact_edit()
     return artifact

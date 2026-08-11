@@ -25,17 +25,11 @@ def wiki_paths(tmp_path, monkeypatch):
         "next_signal.workflows.knowledge_ingest._MANIFEST", tmp_path / "knowledge_ingest_manifest.json"
     )
 
-    class _FakeClassifier:
-        def run(self, agent_input, **kwargs):
-            return _FakeResponse(json.dumps({"category": "knowledge/ai-ml"}))
+    def fake_classifier(name, agent_input, output_schema, **kwargs):  # noqa: ARG001
+        return output_schema.model_validate({"category": "knowledge/ai-ml"})
 
-    monkeypatch.setattr(classify_mod, "build_from_name", lambda name: _FakeClassifier())
+    monkeypatch.setattr(classify_mod, "run_stage", fake_classifier)
     return tmp_path
-
-
-class _FakeResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
 
 
 def _stub_editor(
@@ -49,29 +43,20 @@ def _stub_editor(
     """Stub both edit-phase agents: the body cleaner echoes the body, the
     frontmatter writer returns the canned fields."""
 
-    class FakeAgent:
-        def __init__(self, name: str) -> None:
-            self.name = name
+    def fake_run_stage(name, agent_input, output_schema=None, **kwargs):
+        data = json.loads(agent_input)
+        if name == "knowledge_artifact_editor":
+            return data["markdown"]
+        return output_schema.model_validate(
+            {
+                "title": title if title is not None else data["title"],
+                "summary": summary,
+                "tags": list(tags),
+                "freshness": freshness,
+            }
+        )
 
-        def run(self, agent_input, **kwargs):
-            data = json.loads(agent_input)
-            if self.name == "knowledge_artifact_editor":
-                return _FakeResponse(data["markdown"])
-            return _FakeResponse(
-                json.dumps(
-                    {
-                        "title": title if title is not None else data["title"],
-                        "summary": summary,
-                        "tags": list(tags),
-                        "freshness": freshness,
-                    },
-                    ensure_ascii=False,
-                )
-            )
-
-    monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
-    )
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", fake_run_stage)
 
 
 def _frontmatter(path: str) -> dict:

@@ -3,16 +3,14 @@
 ## Purpose
 
 Two-tier LLM analysis layer that consumes the `radar_items` table populated by the `info-radar` collector, filters items against user-declared goals, deepens analysis on what survives via full-content fetch, and dedups against a vector-backed long-term memory before any user-facing push. Owns `radar_items.seen_at` (collector never writes it); a tier-2 failure leaves the item unpersisted and unseen so it is retried on the next analysis run.
-
 ## Requirements
-
 ### Requirement: Goals declared in a single user-editable YAML
 
-`paca/workflows/info_radar_analysis/` SHALL load goal descriptors from `configs/info_radar/goals.yaml`. The file MUST contain a top-level `goals:` list. Each entry MUST declare `name` (unique, kebab-case), `description`, `topics` (list of strings), and `keywords` (list of strings). Unknown top-level keys or unknown per-entry keys SHALL raise `RuntimeError` at load time. A missing or empty `goals.yaml` SHALL raise `RuntimeError` — the workflow MUST NOT fall back to an implicit default goal.
+`next_signal/workflows/info_radar_analysis/` SHALL load goal descriptors from `configs/info_radar/goals.yaml`. The file MUST contain a top-level `goals:` list. Each entry MUST declare `name` (unique, kebab-case), `description`, `topics` (list of strings), and `keywords` (list of strings). Unknown top-level keys or unknown per-entry keys SHALL raise `RuntimeError` at load time. A missing or empty `goals.yaml` SHALL raise `RuntimeError` — the workflow MUST NOT fall back to an implicit default goal.
 
 #### Scenario: missing goals.yaml aborts the run
 
-- **WHEN** `paca info-radar analyze` runs and `configs/info_radar/goals.yaml` does not exist
+- **WHEN** `next-signal info-radar analyze` runs and `configs/info_radar/goals.yaml` does not exist
 - **THEN** the workflow raises `RuntimeError` referencing the missing path and exits non-zero before any LLM call
 
 #### Scenario: duplicate goal names fail fast
@@ -22,11 +20,11 @@ Two-tier LLM analysis layer that consumes the `radar_items` table populated by t
 
 ### Requirement: Tier 1 filter uses title and description only
 
-The tier-1 filter stage SHALL invoke a registered agent (`radar_tier1_filter`) with input limited to `radar_items.title` plus `payload.entries.description` (or `summary` when description is blank). It MUST NOT fetch full article content. The agent SHALL return a structured output enforced by an OMLX json_schema constrained-decoding `output_schema`.
+The tier-1 filter stage SHALL invoke the production stage adapter with the registered `radar_tier1_filter` configuration and input limited to `radar_items.title` plus `payload.entries.description` (or `summary` when description is blank). It MUST NOT fetch full article content. The selected engine SHALL return a `Tier1Batch` validated against its Pydantic schema through the adapter's provider-appropriate structured-output path.
 
-#### Scenario: dropped item is marked seen and persisted as drop verdict
+#### Scenario: Tier 1 drop short-circuits
 
-- **WHEN** the tier-1 agent returns `verdict: "drop"` for a `radar_item`
+- **WHEN** the stage adapter returns `verdict: drop`
 - **THEN** the workflow writes a `radar_analyses` row with `verdict='drop'` and `tier1_reason` set, and sets `radar_items.seen_at` to `now()`, and does not invoke tier-2 for that item
 
 ### Requirement: Tier 1 is batched with per-chunk fallback
@@ -131,31 +129,12 @@ The tier-2 agent (`radar_tier2_impact`) SHALL be invoked with the loaded goals c
 
 ### Requirement: YouTube subtitle enrichment is opportunistic
 
-When a tier-1-kept item's `payload.entries.url` is a YouTube watch URL or `payload.feeds.url` matches `rsshub://youtube/...`, the workflow SHALL attempt native subtitle extraction via `paca.integrations.info_radar.youtube_subs.fetch_captions(url)`. If captions are returned, they MUST be concatenated into the tier-2 input as additional context. If the helper raises or returns empty, the workflow MUST proceed without subtitles. Audio-transcription fallback is explicitly out of scope.
+When a tier-1-kept item's `payload.entries.url` is a YouTube watch URL or `payload.feeds.url` matches `rsshub://youtube/...`, the workflow SHALL attempt native subtitle extraction via `next_signal.integrations.info_radar.youtube_subs.fetch_captions(url)`. If captions are returned, they MUST be concatenated into the tier-2 input as additional context. If the helper raises or returns empty, the workflow MUST proceed without subtitles. Audio-transcription fallback is explicitly out of scope.
 
 #### Scenario: no captions available falls through silently
 
 - **WHEN** subtitle fetch raises or returns empty for a YouTube item
 - **THEN** the workflow logs the absence and runs tier-2 on title+description without raising
-
-### Requirement: Dedup gate via pgvector ANN plus LLM judge
-
-For every tier-2 `keep` result, the workflow SHALL embed the tier-2 `summary` and run an ANN search over `radar_pushed_topics.embedding` using cosine distance, limited to the top 5 candidates within a configurable distance threshold (default 0.40). If at least one candidate is found, the workflow SHALL invoke the `radar_dedup_judge` agent with the new summary and the candidate summaries. The judge SHALL return `{is_duplicate, matched_topic_id, reason}` via constrained decoding. `is_duplicate=true` SHALL set the analysis row's `dedup_status='duplicate'` and `dedup_match_id`. `is_duplicate=false` (or no ANN candidates) SHALL set `dedup_status='novel'` and insert a new `radar_pushed_topics` row.
-
-#### Scenario: novel item creates a new topic
-
-- **WHEN** ANN returns no candidates within the threshold for a tier-2 summary
-- **THEN** the workflow writes the analysis row with `dedup_status='novel'` and inserts a new `radar_pushed_topics` row with the summary, embedding, and the radar_item_id in `item_ids`
-
-#### Scenario: duplicate item links to existing topic
-
-- **WHEN** ANN returns candidates and the judge agent returns `is_duplicate=true`
-- **THEN** the workflow writes the analysis row with `dedup_status='duplicate'` and `dedup_match_id` set to the matched topic id, and appends the radar_item_id to that topic's `item_ids`
-
-#### Scenario: embedder failure conservatively treats as novel
-
-- **WHEN** the embedder call raises
-- **THEN** the workflow logs the failure loudly, persists the analysis row with `dedup_status='novel'`, and does NOT insert a `radar_pushed_topics` row
 
 ### Requirement: Per-item failure isolation
 
@@ -177,44 +156,49 @@ The workflow SHALL select only `radar_items` with `seen_at IS NULL`. The `radar_
 
 ### Requirement: Business tables and DDL
 
-`scripts/bootstrap_db.py` SHALL provision `radar_analyses` and `radar_pushed_topics` tables with the columns described in design.md §D7 and §D8. The `embedding` column on `radar_pushed_topics` SHALL be `vector(1024)` and an `ivfflat` cosine index SHALL be created. ON DELETE CASCADE from `radar_items` to `radar_analyses` SHALL be configured.
+`scripts/bootstrap_db.py` SHALL provision `radar_analyses` and
+`radar_pushed_topics` with the existing analysis columns plus
+`radar_pushed_topics.embedder TEXT NOT NULL`. The embedding column SHALL remain
+`vector(1024)`, whose width is enforced by `core-embedding`.
+
+Bootstrap SHALL remove the former mixed-space IVFFlat index and create a normal
+index on `embedder`. Existing rows that predate provenance SHALL be labelled
+`legacy:unknown` without deleting or rewriting their vectors. The existing
+`ON DELETE CASCADE` from `radar_items` to `radar_analyses` remains unchanged.
 
 #### Scenario: bootstrap is idempotent
 
-- **WHEN** `scripts/bootstrap_db.py` is run twice
-- **THEN** both runs succeed and the tables / indexes exist exactly once
+- **WHEN** bootstrap runs twice
+- **THEN** both runs succeed with one embedder index, no old IVFFlat index, and
+  unchanged topic rows
+
+#### Scenario: DDL is stable across provider switches
+
+- **WHEN** the active embedding provider changes
+- **THEN** the vector column and indexes are not rebuilt and no row is deleted
 
 ### Requirement: CLI surface
 
-`paca info-radar analyze` SHALL be a Typer subcommand under the existing `info-radar` group. It SHALL accept `--limit N` (max items processed this run) and `--source NAME` (restrict to a single collector source). It SHALL print a one-line summary including the counters from the workflow return value.
+`next-signal info-radar analyze` SHALL be a Typer subcommand under the existing `info-radar` group. It SHALL accept `--limit N` (max items processed this run) and `--source NAME` (restrict to a single collector source). It SHALL print a one-line summary including the counters from the workflow return value.
 
 #### Scenario: limit caps the batch
 
-- **WHEN** `paca info-radar analyze --limit 5` is invoked and 20 unseen items exist
+- **WHEN** `next-signal info-radar analyze --limit 5` is invoked and 20 unseen items exist
 - **THEN** at most 5 items are processed, and the printed summary reflects counts that sum to ≤ 5
 
 ### Requirement: Workflow entry is present and idempotent across runs
 
-`configs/workflows/info_radar_analysis.yaml` SHALL set `expose.agent_os: false` and `extra.run_now: paca.workflows.info_radar_analysis:run`. How often it runs is operator-controlled and NOT a stable contract — the workflow's idempotency (`seen_at` gate plus `UNIQUE(radar_item_id)` on `radar_analyses`) SHALL make it safe to run at any frequency.
+`configs/workflows/info_radar_analysis.yaml` SHALL set `expose.agent_os: false` and `extra.run_now: next_signal.workflows.info_radar_analysis:run`. How often it runs is operator-controlled and NOT a stable contract — the workflow's idempotency (`seen_at` gate plus `UNIQUE(radar_item_id)` on `radar_analyses`) SHALL make it safe to run at any frequency.
 
 #### Scenario: manual run invokes the workflow
 
-- **WHEN** `paca info-radar analyze` (or `paca run-workflow info_radar_analysis`) is invoked
-- **THEN** it calls `paca.workflows.info_radar_analysis:run()` and processes unseen items
+- **WHEN** `next-signal info-radar analyze` (or `next-signal run-workflow info_radar_analysis`) is invoked
+- **THEN** it calls `next_signal.workflows.info_radar_analysis:run()` and processes unseen items
 
 #### Scenario: running back-to-back produces no duplicate analyses
 
 - **WHEN** two runs occur in quick succession with no collector pull between them
 - **THEN** the second run processes zero items because all unseen items from the first run were marked `seen_at`
-
-### Requirement: paca doctor checks goals.yaml
-
-`paca doctor` SHALL include a `goals.yaml` check that reports OK with the goal count when the file exists and parses, and reports FAIL with the loader's error message otherwise. The check SHALL NOT invoke any LLM.
-
-#### Scenario: missing goals.yaml fails the doctor check
-
-- **WHEN** `paca doctor` runs and `configs/info_radar/goals.yaml` does not exist
-- **THEN** the doctor output includes a FAIL line for the goals.yaml check
 
 ### Requirement: Tier-2 prose fields follow the configured output language
 
@@ -261,3 +245,81 @@ The previously shipped conditional phrasing ("match the language of `goals`") SH
 
 - **WHEN** `radar_dedup_judge` evaluates a candidate pair whose stored summaries are in different languages
 - **THEN** its `reason` field's language is not required to match the configured output language, the source summaries, or anything else
+
+### Requirement: next-signal doctor checks goals.yaml
+
+`next-signal doctor` SHALL include a `goals.yaml` check that reports OK with the goal count when the file exists and parses, and reports FAIL with the loader's error message otherwise. The check SHALL NOT invoke any LLM.
+
+#### Scenario: missing goals.yaml fails the doctor check
+
+- **WHEN** `next-signal doctor` runs and `configs/info_radar/goals.yaml` does not exist
+- **THEN** the doctor output includes a FAIL line for the goals.yaml check
+
+### Requirement: One selected engine covers the complete radar LLM pipeline
+
+`info_radar_analysis.run` SHALL establish one stage-job context shared with its Tier-1 producer thread. Tier 1, Tier 2, and every invoked dedup judge SHALL therefore use the same pinned engine, while fetch, embedding, ANN, and persistence remain unchanged.
+
+#### Scenario: CLI selection reaches all radar LLM stages
+
+- **WHEN** a batch starts with `claude_cli` selected and at least one item is kept with ANN candidates
+- **THEN** Tier 1, Tier 2, and the dedup judge all invoke Claude Code and neither Codex nor an agno text model is invoked
+
+### Requirement: Dedup gate via provider-scoped pgvector search plus LLM judge
+
+For every tier-2 `keep` result, the workflow SHALL resolve one
+`core-embedding` snapshot, embed the tier-2 summary with it, and carry the
+snapshot's identity beside that vector through search and persistence. A live
+settings re-read after embedding SHALL NOT determine the stored identity.
+
+The workflow SHALL run an exact cosine search over
+`radar_pushed_topics.embedding`, restricted first to rows whose `embedder`
+equals the query vector's captured identity, limited to the top 5 candidates
+within a configurable distance threshold (default 0.40). Rows from another
+identity, including `legacy:unknown`, SHALL NOT participate in candidate
+generation or be shown to the judge.
+
+If candidates exist, the workflow SHALL invoke `radar_dedup_judge` with the new
+summary and candidate summaries. A valid duplicate verdict SHALL set
+`dedup_status='duplicate'` and `dedup_match_id`; a non-duplicate verdict or no
+candidates SHALL set `dedup_status='novel'` and insert a new topic row containing
+the exact vector and identity from the same resolved snapshot.
+
+Changing selection parks post-migration rows under the previous identity and
+switching back restores them. Pre-change `legacy:unknown` rows remain retained
+but inactive unless an operator explicitly relabels them after independently
+verifying their provenance.
+
+#### Scenario: novel item stores its resolved identity
+
+- **WHEN** provider-scoped search finds no candidate
+- **THEN** the workflow stores a novel analysis and a topic row containing the
+  summary, vector, captured identity, and item id
+
+#### Scenario: duplicate item links to same-space topic
+
+- **WHEN** same-identity candidates exist and the judge returns duplicate
+- **THEN** the analysis links to the matched topic and appends the item id
+
+#### Scenario: embedding failure remains conservative
+
+- **WHEN** snapshot resolution or embedding raises
+- **THEN** the workflow logs loudly, stores the analysis as novel, and inserts no
+  topic row
+
+#### Scenario: settings change cannot mislabel an in-flight vector
+
+- **WHEN** provider A is resolved and state changes to B before topic insertion
+- **THEN** the current item's search and insert still use identity A, while the
+  next item resolves B
+
+#### Scenario: another vector space does not affect candidate generation
+
+- **WHEN** the table contains rows under identities A, B, and `legacy:unknown`
+  and the query identity is B
+- **THEN** exact distance ordering examines only B rows
+
+#### Scenario: switching back restores post-migration memory
+
+- **WHEN** the operator switches from A to B and later back to A
+- **THEN** previously stored A rows become candidates again without re-embedding
+

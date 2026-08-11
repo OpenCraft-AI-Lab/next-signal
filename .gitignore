@@ -28,6 +28,8 @@ state/
 dashboard/node_modules/
 dashboard/.next/
 dashboard/out/
+# pnpm's content-addressable package store, when it lands inside the repo
+.pnpm-store/
 
 # Private shared-context drafts (committed shared files start with digits)
 prompts/_shared/99_*.md

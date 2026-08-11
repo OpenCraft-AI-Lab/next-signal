@@ -1,19 +1,35 @@
-"""Embedder helper tests — monkeypatch httpx; no live OMLX required."""
+"""Embedder snapshot tests — monkeypatch httpx; no live provider required."""
 
 from __future__ import annotations
+
+import json
 
 import pytest
 
 from next_signal.core import models as models_mod
+from next_signal.core.embedding_preferences import (
+    configured_embedding_defaults,
+    load_embedding_preferences,
+)
+
+VECTOR = [0.1] * 1024
+COMPATIBLE = {
+    "base_url": "https://host.example/v1/",
+    "model": "bge-m3",
+    "api_key_env": "MY_EMBED_KEY",
+    "space_id": "house-bge-m3",
+}
 
 
 class _FakeResponse:
-    def __init__(self, *, status_code: int = 200, body: dict | None = None, text: str = ""):
+    def __init__(self, *, status_code: int = 200, body: object = None, text: str = ""):
         self.status_code = status_code
-        self._body = body or {}
+        self._body = body if body is not None else {}
         self.text = text or "ok"
 
-    def json(self) -> dict:
+    def json(self) -> object:
+        if isinstance(self._body, Exception):
+            raise self._body
         return self._body
 
 
@@ -38,73 +54,166 @@ class _FakeClient:
 
 
 @pytest.fixture
-def omlx_env(monkeypatch):
-    monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:11434/v1")
-    monkeypatch.setenv("OMLX_API_KEY", "test-key")
+def state(tmp_path, monkeypatch):
+    """Point ``get_embedder()`` at a per-test state file, re-read on every call.
+
+    The real loader and validators still run — only the path moves.
+    """
+    path = tmp_path / "embedding.json"
+    defaults = configured_embedding_defaults()
+    monkeypatch.setattr(
+        models_mod,
+        "load_embedding_preferences",
+        lambda: load_embedding_preferences(path, defaults=defaults),
+    )
+
+    def select(payload: dict) -> None:
+        path.write_text(json.dumps(payload), encoding="utf-8")
+
+    return select
 
 
-def test_get_embedder_happy_path(omlx_env, monkeypatch) -> None:
-    vec = [0.1] * 1024
-    body = {"data": [{"embedding": vec}]}
-    fake_client = _FakeClient(_FakeResponse(body=body))
-
+@pytest.fixture
+def responds(monkeypatch):
+    """Install a fake httpx client and hand back its recorded calls."""
     import httpx
 
-    monkeypatch.setattr(httpx, "Client", lambda *a, **kw: fake_client)
+    def install(
+        body: object = None, *, status_code: int = 200, text: str = "", raise_exc=None
+    ) -> _FakeClient:
+        if body is None and raise_exc is None:
+            body = {"data": [{"embedding": VECTOR}]}
+        client = _FakeClient(
+            _FakeResponse(status_code=status_code, body=body, text=text),
+            raise_exc=raise_exc,
+        )
+        monkeypatch.setattr(httpx, "Client", lambda *a, **kw: client)
+        return client
 
-    embed = models_mod.get_embedder("local")
-    result = embed("hello world")
+    return install
 
-    assert result == vec
-    assert len(fake_client.calls) == 1
-    call = fake_client.calls[0]
+
+def test_omlx_snapshot_uses_the_centralized_endpoint(state, responds, monkeypatch) -> None:
+    monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("OMLX_API_KEY", "test-key")
+    state({"provider": "omlx"})
+    client = responds()
+
+    snapshot = models_mod.get_embedder()
+
+    assert snapshot.provider == "omlx"
+    assert snapshot.identity == "omlx:Qwen3-Embedding-0.6B-8bit"
+    assert snapshot.embed("hello world") == VECTOR
+    call = client.calls[0]
     assert call["url"] == "http://localhost:11434/v1/embeddings"
+    # OMLX's route has no `dimensions` parameter — the shipped model is 1024.
     assert call["json"] == {"input": "hello world", "model": "Qwen3-Embedding-0.6B-8bit"}
     assert call["headers"]["Authorization"] == "Bearer test-key"
 
 
-def test_get_embedder_unknown_profile_raises(omlx_env) -> None:
-    with pytest.raises(KeyError, match="unknown embedder profile 'nope'"):
-        models_mod.get_embedder("nope")
+def test_openai_snapshot_requests_the_fixed_width(state, responds, monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    state({"provider": "openai", "openai": {"model": "text-embedding-3-large"}})
+    client = responds()
+
+    snapshot = models_mod.get_embedder()
+
+    assert snapshot.identity == "openai:text-embedding-3-large"
+    assert snapshot.embed("hello") == VECTOR
+    call = client.calls[0]
+    assert call["url"] == "https://api.openai.com/v1/embeddings"
+    assert call["json"]["dimensions"] == 1024
+    assert call["headers"]["Authorization"] == "Bearer sk-test"
 
 
-def test_get_embedder_http_failure_raises_runtime(omlx_env, monkeypatch) -> None:
+def test_compatible_snapshot_appends_the_route(state, responds, monkeypatch) -> None:
+    monkeypatch.setenv("MY_EMBED_KEY", "secret")
+    state({"provider": "openai_compatible", "openai_compatible": COMPATIBLE})
+    client = responds()
+
+    snapshot = models_mod.get_embedder()
+
+    # The identity names the vector space, never the endpoint that served it.
+    assert snapshot.identity == "openai_compatible:house-bge-m3"
+    assert snapshot.model_id == "bge-m3"
+    assert snapshot.embed("hello") == VECTOR
+    call = client.calls[0]
+    assert call["url"] == "https://host.example/v1/embeddings"
+    assert call["json"]["dimensions"] == 1024
+    assert call["headers"]["Authorization"] == "Bearer secret"
+
+
+def test_openai_without_a_key_names_the_variable(state, monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    state({"provider": "openai"})
+
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY is not set"):
+        models_mod.get_embedder()
+
+
+def test_compatible_without_its_key_names_that_variable(state, monkeypatch) -> None:
+    monkeypatch.delenv("MY_EMBED_KEY", raising=False)
+    state({"provider": "openai_compatible", "openai_compatible": COMPATIBLE})
+
+    with pytest.raises(RuntimeError, match="MY_EMBED_KEY is not set"):
+        models_mod.get_embedder()
+
+
+@pytest.fixture
+def omlx_snapshot(state, monkeypatch):
+    monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:11434/v1")
+    state({"provider": "omlx"})
+    return models_mod.get_embedder
+
+
+def test_transport_failure_raises_runtime(omlx_snapshot, responds) -> None:
     import httpx
 
-    monkeypatch.setattr(
-        httpx,
-        "Client",
-        lambda *a, **kw: _FakeClient(raise_exc=httpx.ConnectError("connection refused")),
-    )
-
-    embed = models_mod.get_embedder("local")
+    responds(raise_exc=httpx.ConnectError("connection refused"))
     with pytest.raises(RuntimeError, match="embedder request failed"):
-        embed("hello")
+        omlx_snapshot().embed("hello")
 
 
-def test_get_embedder_non_200_raises_runtime(omlx_env, monkeypatch) -> None:
-    import httpx
-
-    monkeypatch.setattr(
-        httpx,
-        "Client",
-        lambda *a, **kw: _FakeClient(_FakeResponse(status_code=500, text="boom")),
-    )
-
-    embed = models_mod.get_embedder("local")
+def test_non_2xx_raises_runtime(omlx_snapshot, responds) -> None:
+    responds({}, status_code=500, text="boom")
     with pytest.raises(RuntimeError, match="embedder returned 500"):
-        embed("hello")
+        omlx_snapshot().embed("hello")
 
 
-def test_get_embedder_malformed_body_raises(omlx_env, monkeypatch) -> None:
-    import httpx
-
-    monkeypatch.setattr(
-        httpx,
-        "Client",
-        lambda *a, **kw: _FakeClient(_FakeResponse(body={"data": []})),
-    )
-
-    embed = models_mod.get_embedder("local")
-    with pytest.raises(RuntimeError, match="empty data array"):
-        embed("hello")
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        pytest.param(ValueError("not json"), "malformed body", id="unparseable"),
+        pytest.param([1, 2, 3], "malformed body", id="not-an-object"),
+        pytest.param({"error": "nope"}, "malformed body", id="no-data-key"),
+        pytest.param({"data": []}, "empty data array", id="empty-data"),
+        pytest.param({"data": [{}]}, "empty data array", id="no-embedding-key"),
+        pytest.param(
+            {"data": [{"embedding": [0.1] * 1536}]}, "1536 values", id="wrong-width"
+        ),
+        pytest.param(
+            {"data": [{"embedding": "not-a-list"}]}, "non-list", id="not-a-list"
+        ),
+        pytest.param(
+            {"data": [{"embedding": ["x"] + [0.1] * 1023}]},
+            "non-numeric value at index 0",
+            id="non-numeric",
+        ),
+        pytest.param(
+            {"data": [{"embedding": [float("nan")] + [0.1] * 1023}]},
+            "non-finite value at index 0",
+            id="nan",
+        ),
+        pytest.param(
+            {"data": [{"embedding": [0.1] * 1023 + [float("inf")]}]},
+            "non-finite value at index 1023",
+            id="infinity",
+        ),
+    ],
+)
+def test_unusable_response_raises_rather_than_degrading(
+    omlx_snapshot, responds, body, message
+) -> None:
+    responds(body)
+    with pytest.raises(RuntimeError, match=message):
+        omlx_snapshot().embed("hello")

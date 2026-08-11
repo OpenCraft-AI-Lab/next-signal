@@ -1,10 +1,9 @@
 """Postgres I/O for ``knowledge_reviews``.
 
 Short-lived ``psycopg`` connections, same posture as
-``next_signal.workflows.info_radar_recap.store``. The timezone helpers mirror that
-module deliberately (both read ``INFO_RADAR_TIMEZONE``) so "today" means the
-same local day across radar and review; they are not promoted to core to keep
-this change surgical.
+``next_signal.workflows.info_radar_recap.store``. The timezone helpers are
+re-exported from ``next_signal.core.clock`` so "today" means the same local day
+across radar, review, and the scheduler.
 
 Only reconciliation runs in Python — the dashboard reads due cards and advances
 stages with its own SQL — so this store is enroll / unenroll / count_due plus
@@ -13,26 +12,12 @@ the shared "today".
 
 from __future__ import annotations
 
-import os
-from datetime import date, datetime
 from typing import Any
-from zoneinfo import ZoneInfo
 
 import psycopg
 
+from next_signal.core.clock import radar_timezone, today_local
 from next_signal.core.db import database_url
-
-_DEFAULT_TZ = "America/Los_Angeles"
-
-
-def radar_timezone() -> str:
-    """Local timezone for day boundaries. Read at call time, not at import."""
-    return os.environ.get("INFO_RADAR_TIMEZONE", "").strip() or _DEFAULT_TZ
-
-
-def today_local() -> date:
-    """Today in the radar timezone — the same 'today' the dashboard uses."""
-    return datetime.now(ZoneInfo(radar_timezone())).date()
 
 
 def existing_doc_paths() -> set[str]:

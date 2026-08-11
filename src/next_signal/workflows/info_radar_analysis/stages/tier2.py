@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from next_signal.agents.loader import build_from_name
-from next_signal.agents.structured import run_structured
+from next_signal.agents.stage import run_stage
 from next_signal.workflows.info_radar_analysis.goals import Goal, render_goals_block
 from next_signal.workflows.info_radar_analysis.schemas import Tier2Analysis
 
@@ -43,6 +42,9 @@ def run(
         "content": truncated,
         "content_status": content_status,
     }
-    agent = build_from_name("radar_tier2_impact")
-    analysis = run_structured(agent, json.dumps(payload, ensure_ascii=False), Tier2Analysis)
+    analysis = run_stage(
+        "radar_tier2_impact",
+        json.dumps(payload, ensure_ascii=False),
+        Tier2Analysis,
+    )
     return _apply_ceilings(analysis)

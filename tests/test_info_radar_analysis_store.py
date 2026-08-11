@@ -159,28 +159,29 @@ def test_mark_seen_sets_timestamp(source_name) -> None:
     assert seen_at is not None
 
 
-def test_topic_lifecycle_and_ann_search(source_name) -> None:
+def test_topic_lifecycle_and_search(source_name) -> None:
     item_a = _seed_item(source_name, "ta")
     item_b = _seed_item(source_name, "tb")
+    identity = f"omlx:{source_name}"
 
     # Use deterministic, very different unit-ish vectors.
     close_to_a = [1.0] + [0.0] * 1023
     far_from_a = [0.0] * 512 + [1.0] + [0.0] * 511
 
     topic_id = analysis_store.insert_topic(
-        summary="topic-A summary", embedding=close_to_a, item_id=item_a
+        summary="topic-A summary", embedding=close_to_a, embedder=identity, item_id=item_a
     )
     assert topic_id > 0
 
-    # ANN search with a vector close to topic-A should find it.
-    hits = analysis_store.ann_search_topics(close_to_a, k=5, threshold=0.40)
+    # A search from the same space with a close vector should find it.
+    hits = analysis_store.search_topics(close_to_a, embedder=identity, k=5, threshold=0.40)
     found = [h for h in hits if h["id"] == topic_id]
     assert found, f"expected topic {topic_id} in {hits}"
     assert found[0]["distance"] < 0.1
 
-    # ANN search with a far vector should not return our topic under the
-    # threshold (cosine distance to orthogonal ≈ 1.0).
-    hits_far = analysis_store.ann_search_topics(far_from_a, k=5, threshold=0.40)
+    # A far vector should not return our topic under the threshold (cosine
+    # distance to orthogonal ≈ 1.0).
+    hits_far = analysis_store.search_topics(far_from_a, embedder=identity, k=5, threshold=0.40)
     assert all(h["id"] != topic_id for h in hits_far)
 
     # Append item_b to the same topic.
@@ -193,3 +194,55 @@ def test_topic_lifecycle_and_ann_search(source_name) -> None:
             )
             (item_ids,) = cur.fetchone()
     assert sorted(int(x) for x in item_ids) == sorted([item_a, item_b])
+
+
+def test_search_never_crosses_vector_spaces(source_name) -> None:
+    """Identical vectors under different identities must not match each other.
+
+    Equal width does not make two embedders comparable, and the pre-provenance
+    rows carry a sentinel precisely because nobody can prove where they came
+    from. Both must stay invisible to a search from another space.
+    """
+    item_a = _seed_item(source_name, "sa")
+    item_b = _seed_item(source_name, "sb")
+    item_legacy = _seed_item(source_name, "sl")
+    space_a = f"omlx:{source_name}-a"
+    space_b = f"openai:{source_name}-b"
+    vector = [1.0] + [0.0] * 1023
+
+    in_a = analysis_store.insert_topic(
+        summary="same text, space A", embedding=vector, embedder=space_a, item_id=item_a
+    )
+    in_b = analysis_store.insert_topic(
+        summary="same text, space B", embedding=vector, embedder=space_b, item_id=item_b
+    )
+    legacy = analysis_store.insert_topic(
+        summary="pre-provenance row",
+        embedding=vector,
+        embedder="legacy:unknown",
+        item_id=item_legacy,
+    )
+
+    from_a = {h["id"] for h in analysis_store.search_topics(vector, embedder=space_a)}
+    assert in_a in from_a
+    assert in_b not in from_a
+    assert legacy not in from_a
+
+    # Switching away parks A's rows; switching back finds them again, with no
+    # re-embedding and nothing deleted in between.
+    from_b = {h["id"] for h in analysis_store.search_topics(vector, embedder=space_b)}
+    assert from_b & {in_a, legacy} == set()
+    assert in_b in from_b
+    assert in_a in {h["id"] for h in analysis_store.search_topics(vector, embedder=space_a)}
+
+
+def test_insert_without_provenance_is_rejected(source_name) -> None:
+    """The NOT NULL column is the last line of defence against a mislabelled row."""
+    item_id = _seed_item(source_name, "np")
+    with pytest.raises(psycopg.errors.NotNullViolation):
+        analysis_store.insert_topic(
+            summary="no provenance",
+            embedding=[1.0] + [0.0] * 1023,
+            embedder=None,
+            item_id=item_id,
+        )

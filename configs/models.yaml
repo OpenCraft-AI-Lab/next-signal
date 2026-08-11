@@ -9,6 +9,8 @@ concurrency:
   openai: 64
   gemini: 32
   deepseek: 32
+  codex_cli: 2
+  claude_cli: 2
 
 profiles:
   # The single local model. Everything runs here; cloud is fallback only.
@@ -94,13 +96,22 @@ profiles:
   #   model_id: gpt-5.2
   #   temperature: 0.4
 
-# Embedder profiles for dedup / similarity. Uses the local OMLX
-# OpenAI-compatible `/v1/embeddings` endpoint (see next_signal.core.models.get_embedder).
-# Qwen3-Embedding-0.6B-8bit emits 1024-dim vectors which match the
-# radar_pushed_topics.embedding column. Swapping to a different-dim model
-# REQUIRES a column migration.
+# Per-provider embedder baselines for the dedup gate. These are defaults, not
+# the live selection: `~/.next-signal/embedding.json` picks which provider runs
+# and may override these models (see next_signal.core.embedding_preferences).
+# `local` doubles as the fresh-install selection.
+#
+# Every embedder must emit exactly 1024 values — get_embedder rejects anything
+# else, and the hosted providers request `dimensions: 1024` — so
+# radar_pushed_topics.embedding stays vector(1024) across a provider switch.
+# There is no generic-endpoint entry here on purpose: its URL, key variable, and
+# vector-space id have no honest repo-wide default and are operator state.
 embedders:
   local:
     provider: omlx
     model_id: Qwen3-Embedding-0.6B-8bit
+    dim: 1024
+  openai:
+    provider: openai
+    model_id: text-embedding-3-small
     dim: 1024

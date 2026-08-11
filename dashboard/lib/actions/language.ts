@@ -1,9 +1,10 @@
 "use server";
 
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 
 import { DEFAULT_LOCALE, type Locale } from "@/lib/i18n/dictionaries";
-import { languageStateFile, stateRoot } from "@/lib/paths";
+import { languageStateFile } from "@/lib/paths";
+import { writeStateFile } from "@/lib/state-file";
 
 const RECOGNIZED = new Set(["zh", "en"]);
 
@@ -50,16 +51,14 @@ export async function setContentLanguage(lang: string): Promise<void> {
   if (!RECOGNIZED.has(lang)) {
     throw new Error(`unrecognized content language: ${lang}`);
   }
-  await mkdir(stateRoot(), { recursive: true });
-  const target = languageStateFile();
-  const tmp = `${target}.tmp`;
-  const payload = JSON.stringify({
-    content_language: lang,
-    updated_at: new Date().toISOString(),
-    updated_by: "dashboard",
-  });
-  await writeFile(tmp, payload, "utf-8");
-  await rename(tmp, target);
+  await writeStateFile(
+    languageStateFile(),
+    JSON.stringify({
+      content_language: lang,
+      updated_at: new Date().toISOString(),
+      updated_by: "dashboard",
+    }),
+  );
 }
 
 /**

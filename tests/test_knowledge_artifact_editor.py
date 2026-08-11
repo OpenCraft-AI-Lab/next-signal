@@ -25,26 +25,23 @@ def _artifact(
     )
 
 
-class _FakeResponse:
-    def __init__(self, content: str) -> None:
-        self.content = content
-
-
 def _stub_agent(monkeypatch, payload) -> None:
-    """Replace build_from_name with an agent that returns a canned response.
+    """Replace run_stage with a provider that returns a canned response.
 
     `payload` is plain markdown for the body cleaner, or a dict for the
     frontmatter writer.
     """
     text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
 
-    class FakeAgent:
-        def run(self, agent_input, **kwargs):
-            return _FakeResponse(text)
+    def fake_run_stage(agent_name, agent_input, output_schema=None, *, language=None):  # noqa: ARG001
+        if output_schema is None:
+            return text
+        try:
+            return output_schema.model_validate_json(text)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
 
-    monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent()
-    )
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", fake_run_stage)
 
 
 def test_clean_body_threads_detected_language_to_the_agent(monkeypatch) -> None:
@@ -52,15 +49,11 @@ def test_clean_body_threads_detected_language_to_the_agent(monkeypatch) -> None:
     verify it's the artifact's own detected_language, not the global preference."""
     seen_language: list[str | None] = []
 
-    class FakeAgent:
-        def run(self, agent_input, **kwargs):
-            return _FakeResponse("cleaned.")
-
-    def fake_build(name, language=None):
+    def fake_run_stage(name, agent_input, output_schema=None, *, language=None):  # noqa: ARG001
         seen_language.append(language)
-        return FakeAgent()
+        return "cleaned."
 
-    monkeypatch.setattr(artifact_editor_mod, "build_from_name", fake_build)
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", fake_run_stage)
     artifact = _artifact()
     artifact.detected_language = "zh"
     clean_body(artifact)
@@ -74,17 +67,13 @@ def test_write_frontmatter_does_not_pass_a_language_override(monkeypatch) -> Non
     Passing the detected language here would silently re-pin them to it."""
     seen_language: list[str | None] = []
 
-    class FakeAgent:
-        def run(self, agent_input, **kwargs):
-            return _FakeResponse(
-                json.dumps({"title": "T", "summary": "s", "tags": ["a"]}, ensure_ascii=False)
-            )
-
-    def fake_build(name, language=None):
+    def fake_run_stage(name, agent_input, output_schema=None, *, language=None):  # noqa: ARG001
         seen_language.append(language)
-        return FakeAgent()
+        return output_schema.model_validate(
+            {"title": "T", "summary": "s", "tags": ["a"]}
+        )
 
-    monkeypatch.setattr(artifact_editor_mod, "build_from_name", fake_build)
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", fake_run_stage)
     artifact = _artifact()
     artifact.detected_language = "zh"
     write_frontmatter(artifact)
@@ -130,14 +119,11 @@ def test_clean_body_keeps_transcript_scaffold(monkeypatch) -> None:
     prose is sent to the model, so it cannot rewrite or invent headings."""
     seen: list[str] = []
 
-    class FakeAgent:
-        def run(self, agent_input, **kwargs):
-            seen.append(json.loads(agent_input)["markdown"])
-            return _FakeResponse("cleaned spoken body.")
+    def fake_run_stage(name, agent_input, output_schema=None, **kwargs):  # noqa: ARG001
+        seen.append(json.loads(agent_input)["markdown"])
+        return "cleaned spoken body."
 
-    monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent()
-    )
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", fake_run_stage)
 
     result = clean_body(
         _artifact(source_type="bilibili", markdown="# Vid\n\n## Transcript\n\nspoken body.")
@@ -152,17 +138,11 @@ def test_clean_body_github_routes_to_github_cleaner(monkeypatch) -> None:
     and keeps the structured signal sections above `## README` verbatim."""
     seen: list[tuple[str, str]] = []
 
-    class FakeAgent:
-        def __init__(self, name: str) -> None:
-            self.name = name
+    def fake_run_stage(name, agent_input, output_schema=None, **kwargs):  # noqa: ARG001
+        seen.append((name, json.loads(agent_input)["markdown"]))
+        return "Tight condensed README."
 
-        def run(self, agent_input, **kwargs):
-            seen.append((self.name, json.loads(agent_input)["markdown"]))
-            return _FakeResponse("Tight condensed README.")
-
-    monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
-    )
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", fake_run_stage)
 
     body = (
         "# owner/repo\n\n## Repo Signals\n\n- Stars: 1234\n\n"
@@ -188,17 +168,11 @@ def test_clean_body_non_github_uses_default_cleaner(monkeypatch) -> None:
     """Non-github artifacts stay on `knowledge_artifact_editor`, unchanged."""
     seen: list[str] = []
 
-    class FakeAgent:
-        def __init__(self, name: str) -> None:
-            self.name = name
+    def fake_run_stage(name, agent_input, output_schema=None, **kwargs):  # noqa: ARG001
+        seen.append(name)
+        return json.loads(agent_input)["markdown"]
 
-        def run(self, agent_input, **kwargs):
-            seen.append(self.name)
-            return _FakeResponse(json.loads(agent_input)["markdown"])
-
-    monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
-    )
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", fake_run_stage)
 
     clean_body(_artifact(source_type="web", markdown="# Hello\n\nA body."))
     assert seen == ["knowledge_artifact_editor"]
@@ -208,16 +182,7 @@ def test_clean_body_github_collapse_below_floor_raises(monkeypatch) -> None:
     """If the github cleaner returns much less than 20% of the README's content
     chars, the retention guard raises (only triggers when the README is >= 2000)."""
 
-    class FakeAgent:
-        def __init__(self, name: str) -> None:
-            self.name = name
-
-        def run(self, agent_input, **kwargs):
-            return _FakeResponse("x")  # single char — way below 20% floor
-
-    monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
-    )
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", lambda *args, **kwargs: "x")
 
     long_readme = "a" * 3000
     body = f"# owner/repo\n\n## Repo Signals\n\n- Stars: 1\n\n## README\n\n{long_readme}"
@@ -264,27 +229,18 @@ def test_write_frontmatter_github_routes_to_github_summary(monkeypatch) -> None:
     """A github artifact picks the github summary agent; non-github picks the default."""
     seen: list[str] = []
 
-    class FakeAgent:
-        def __init__(self, name: str) -> None:
-            self.name = name
+    def fake_run_stage(name, agent_input, output_schema=None, **kwargs):  # noqa: ARG001
+        seen.append(name)
+        return output_schema.model_validate(
+            {
+                "title": "owner/repo",
+                "summary": "Does X. Value Y. Maturity active-development. Ecosystem python/cli.",
+                "tags": ["python", "cli"],
+                "freshness": "evolving",
+            }
+        )
 
-        def run(self, agent_input, **kwargs):
-            seen.append(self.name)
-            return _FakeResponse(
-                json.dumps(
-                    {
-                        "title": "owner/repo",
-                        "summary": "Does X. Value Y. Maturity active-development. Ecosystem python/cli.",
-                        "tags": ["python", "cli"],
-                        "freshness": "evolving",
-                    },
-                    ensure_ascii=False,
-                )
-            )
-
-    monkeypatch.setattr(
-        artifact_editor_mod, "build_from_name", lambda name, language=None: FakeAgent(name)
-    )
+    monkeypatch.setattr(artifact_editor_mod, "run_stage", fake_run_stage)
 
     write_frontmatter(_artifact(source_type="github", markdown="# owner/repo\n\nbody"))
     write_frontmatter(_artifact(source_type="web", markdown="# Title\n\nbody"))

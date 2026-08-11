@@ -24,6 +24,22 @@ from next_signal.tools._json_extract import extract_json_object
 T = TypeVar("T", bound=BaseModel)
 
 
+def parse_structured(content: object, schema: type[T]) -> T:
+    """Validate one provider response with strict JSON, then JSON5 tolerance."""
+    if isinstance(content, schema):
+        return content
+    extracted = extract_json_object(str(content))
+    try:
+        return schema.model_validate_json(extracted)
+    except (ValidationError, ValueError) as strict_err:
+        try:
+            return schema.model_validate(json5.loads(extracted))
+        except (ValidationError, ValueError) as lenient_err:
+            raise ValueError(
+                f"strict: {strict_err}; lenient: {lenient_err}"
+            ) from lenient_err
+
+
 def run_structured(agent, agent_input: str, schema: type[T], *, max_repairs: int = 1) -> T:
     """Run `agent`, return its output validated as `schema`.
 
@@ -37,28 +53,17 @@ def run_structured(agent, agent_input: str, schema: type[T], *, max_repairs: int
     for _ in range(max_repairs + 1):
         response = agent.run(message, output_schema=schema)
         content = getattr(response, "content", response)
-        if isinstance(content, schema):
-            return content
         raw = str(content)
-        extracted = extract_json_object(raw)
         try:
-            return schema.model_validate_json(extracted)
-        except (ValidationError, ValueError) as strict_err:
-            last_error = str(strict_err)
-            # Tolerant fallback for the xgrammar near-misses (trailing commas,
-            # unescaped quotes in Chinese strings, etc.). Same retry budget —
-            # if this succeeds we skip the repair-prompt round-trip entirely.
-            try:
-                obj = json5.loads(extracted)
-                return schema.model_validate(obj)
-            except (ValidationError, ValueError) as lenient_err:
-                last_error = f"strict: {strict_err}; lenient: {lenient_err}"
-            message = _repair_prompt(agent_input, raw, last_error)
+            return parse_structured(content, schema)
+        except ValueError as exc:
+            last_error = str(exc)
+            message = repair_prompt(agent_input, raw, last_error)
     name = getattr(agent, "name", None) or "agent"
     raise RuntimeError(f"{name} could not produce a valid {schema.__name__}: {last_error}")
 
 
-def _repair_prompt(original: str, bad_output: str, error: str) -> str:
+def repair_prompt(original: str, bad_output: str, error: str) -> str:
     return (
         f"{original}\n\n"
         "Your previous reply was rejected by schema validation.\n"

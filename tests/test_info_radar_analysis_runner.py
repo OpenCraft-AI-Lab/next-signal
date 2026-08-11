@@ -47,7 +47,7 @@ def fake_store(monkeypatch):
     mark_seen_calls: list[int] = []
     topic_calls: list[dict] = []
     append_calls: list[dict] = []
-    ann_response: list[dict] = []  # mutated by tests
+    search_response: list[dict] = []  # mutated by tests
     item_queue: list[dict] = []
 
     def fake_fetch(*, limit=None, source=None):  # noqa: ARG001
@@ -60,15 +60,15 @@ def fake_store(monkeypatch):
     def fake_mark_seen(item_id):
         mark_seen_calls.append(int(item_id))
 
-    def fake_insert_topic(*, summary, embedding, item_id):  # noqa: ARG001
-        topic_calls.append({"summary": summary, "item_id": item_id})
+    def fake_insert_topic(*, summary, embedding, embedder, item_id):  # noqa: ARG001
+        topic_calls.append({"summary": summary, "embedder": embedder, "item_id": item_id})
         return 100 + len(topic_calls)
 
     def fake_append(*, topic_id, item_id):
         append_calls.append({"topic_id": topic_id, "item_id": item_id})
 
-    def fake_ann(embedding, *, k=5, threshold=0.40):  # noqa: ARG001
-        return list(ann_response)
+    def fake_search(embedding, *, embedder, k=5, threshold=0.40):  # noqa: ARG001
+        return list(search_response)
 
     monkeypatch.setattr(runner.analysis_store, "fetch_unseen_items", fake_fetch)
     monkeypatch.setattr(runner.analysis_store, "insert_analysis", fake_insert)
@@ -76,7 +76,7 @@ def fake_store(monkeypatch):
     monkeypatch.setattr(runner.analysis_store, "insert_topic", fake_insert_topic)
     monkeypatch.setattr(runner.analysis_store, "append_item_to_topic", fake_append)
     # dedup stage looks up store via its own import alias
-    monkeypatch.setattr(dedup_mod.analysis_store, "ann_search_topics", fake_ann)
+    monkeypatch.setattr(dedup_mod.analysis_store, "search_topics", fake_search)
 
     monkeypatch.setattr(runner, "load_goals", lambda: [_GOAL])
 
@@ -86,7 +86,7 @@ def fake_store(monkeypatch):
         "mark_seen_calls": mark_seen_calls,
         "topic_calls": topic_calls,
         "append_calls": append_calls,
-        "ann_response": ann_response,
+        "search_response": search_response,
     }
 
 
@@ -204,7 +204,7 @@ def test_tier2_keep_novel_inserts_topic(fake_store, fake_stages) -> None:
         title="t", summary="s", impact="i", score=80, tags=["release"]
     )
     fake_stages["dedup"]["next"] = dedup_mod.DedupOutcome(
-        status="novel", matched_topic_id=None, embedding=[0.1] * 1024
+        status="novel", matched_topic_id=None, embedding=[0.1] * 1024, embedder="omlx:test"
     )
 
     result = runner.run()
@@ -214,6 +214,8 @@ def test_tier2_keep_novel_inserts_topic(fake_store, fake_stages) -> None:
     assert result["dedup_novel"] == 1
     assert len(fake_store["topic_calls"]) == 1
     assert fake_store["topic_calls"][0]["item_id"] == 2
+    # The identity persisted is the one the outcome carried, not a fresh read.
+    assert fake_store["topic_calls"][0]["embedder"] == "omlx:test"
     assert fake_store["mark_seen_calls"] == [2]
     call = fake_store["insert_calls"][0]
     assert call["verdict"] == "keep"
@@ -227,7 +229,7 @@ def test_tier2_keep_duplicate_appends_to_topic(fake_store, fake_stages) -> None:
     fake_stages["fetch"][3] = ("body", "full")
     fake_stages["tier2"][3] = Tier2Analysis(title="t", summary="s", impact="i", score=50, tags=[])
     fake_stages["dedup"]["next"] = dedup_mod.DedupOutcome(
-        status="duplicate", matched_topic_id=42, embedding=[0.0] * 1024
+        status="duplicate", matched_topic_id=42, embedding=[0.0] * 1024, embedder="omlx:test"
     )
 
     result = runner.run()
@@ -254,7 +256,7 @@ def test_tier2_error_is_isolated_and_retries_next_run(fake_store, fake_stages) -
     fake_stages["fetch"][5] = ("body", "full")
     fake_stages["tier2"][5] = Tier2Analysis(title="t", summary="s", impact="i", score=70, tags=[])
     fake_stages["dedup"]["next"] = dedup_mod.DedupOutcome(
-        status="novel", matched_topic_id=None, embedding=[0.0] * 1024
+        status="novel", matched_topic_id=None, embedding=[0.0] * 1024, embedder="omlx:test"
     )
 
     result = runner.run()
@@ -274,7 +276,7 @@ def test_fetch_fallback_flows_through_tier2(fake_store, fake_stages) -> None:
     fake_stages["fetch"][6] = ("description-only body", "fallback")
     fake_stages["tier2"][6] = Tier2Analysis(title="t", summary="s", impact="i", score=30, tags=[])
     fake_stages["dedup"]["next"] = dedup_mod.DedupOutcome(
-        status="novel", matched_topic_id=None, embedding=[0.0] * 1024
+        status="novel", matched_topic_id=None, embedding=[0.0] * 1024, embedder="omlx:test"
     )
 
     result = runner.run()

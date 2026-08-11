@@ -46,15 +46,14 @@ from typing import Any
 import psycopg
 import yaml
 
+from next_signal.agents.stage import stage_job, stage_job_provenance
 from next_signal.core.db import database_url
 from next_signal.core.paths import CONFIGS_DIR, PROMPTS_DIR
 from next_signal.workflows.info_radar_analysis.goals import goals_path, load_goals
+from next_signal.workflows.info_radar_analysis.runner import _BATCH_SIZE
 from next_signal.workflows.info_radar_analysis.stages import fetch, tier1, tier2
 
 log = logging.getLogger("radar_eval")
-
-# Mirror the production chunk size so tier-1 sees the same batch context.
-from next_signal.workflows.info_radar_analysis.runner import _BATCH_SIZE
 
 # Qualified with the `i` alias — every query below joins radar_items AS i
 # alongside radar_eval_cases AS c, which also has an `id`.
@@ -115,8 +114,8 @@ def _connect() -> psycopg.Connection:
     return psycopg.connect(database_url())
 
 
-def prompt_digest() -> str:
-    """Fingerprint of everything that steers a verdict: both prompts + goals."""
+def prompt_digest(engine: dict[str, object] | None = None) -> str:
+    """Fingerprint of prompts, goals, and the frozen engine configuration."""
     h = hashlib.sha256()
     for p in (
         PROMPTS_DIR / "agents" / "radar_tier1_filter.md",
@@ -124,7 +123,14 @@ def prompt_digest() -> str:
         goals_path(),
     ):
         h.update(p.read_bytes())
+    if engine is not None:
+        h.update(json.dumps(engine, sort_keys=True, separators=(",", ":")).encode())
     return h.hexdigest()[:12]
+
+
+def _notes_with_engine(notes: str | None, engine: dict[str, object]) -> str:
+    provenance = "engine=" + json.dumps(engine, sort_keys=True, separators=(",", ":"))
+    return f"{notes}\n{provenance}" if notes else provenance
 
 
 def _rows(cur) -> list[dict]:
@@ -221,9 +227,10 @@ def _load_cases(conn, label_set: str) -> list[dict]:
 
 def cmd_run(args) -> int:
     goals = load_goals()
-    digest = prompt_digest()
 
-    with _connect() as conn:
+    with stage_job() as engine_state, _connect() as conn:
+        initial_engine = stage_job_provenance(engine_state)
+        digest = prompt_digest(initial_engine)
         cases = _load_cases(conn, args.label_set)
         if not cases:
             raise RuntimeError(f"no cases for label_set={args.label_set}; run `load` first")
@@ -233,7 +240,13 @@ def cmd_run(args) -> int:
                 """INSERT INTO radar_eval_runs
                        (label_set, variant, prompt_digest, repeats, notes)
                    VALUES (%s,%s,%s,%s,%s) RETURNING id""",
-                (args.label_set, args.variant, digest, args.repeats, args.notes),
+                (
+                    args.label_set,
+                    args.variant,
+                    digest,
+                    args.repeats,
+                    _notes_with_engine(args.notes, initial_engine),
+                ),
             )
             run_id = cur.fetchone()[0]
         conn.commit()
@@ -291,11 +304,18 @@ def cmd_run(args) -> int:
                 print(f"  rep{rep} item {case['id']:>4} {vstr or 'ERR':<5} "
                       f"{score if score is not None else '':>4}  {case['title'][:48]}")
 
-        conn.execute("UPDATE radar_eval_runs SET finished_at=now() WHERE id=%s", (run_id,))
+        final_engine = stage_job_provenance(engine_state)
+        digest = prompt_digest(final_engine)
+        conn.execute(
+            """UPDATE radar_eval_runs
+                  SET prompt_digest=%s, notes=%s, finished_at=now()
+                WHERE id=%s""",
+            (digest, _notes_with_engine(args.notes, final_engine), run_id),
+        )
         conn.commit()
 
     print(f"\nrun {run_id} complete — report with: "
-          f"python scripts/radar_eval.py report --run-id {run_id}")
+          f"uv run python scripts/radar_eval.py report --run-id {run_id}")
     return 0
 
 

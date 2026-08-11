@@ -1,6 +1,6 @@
 """Tests for the tier-1 batched stage.
 
-These tests stub ``run_structured`` so they don't need a real OMLX. They
+These tests stub ``run_stage`` so they don't need a real engine. They
 verify the validation layer that catches model misbehavior: wrong count,
 wrong indices, single-item wrapper.
 """
@@ -29,22 +29,17 @@ def _item(item_id: int) -> dict:
     }
 
 
-def _stub_run_structured(monkeypatch, response):
-    """Replace ``run_structured`` so we don't touch the real agent."""
-    def fake(agent, agent_input, schema, *, max_repairs=1):  # noqa: ARG001
+def _stub_run_stage(monkeypatch, response):
+    """Replace ``run_stage`` so we don't touch a real provider."""
+    def fake(agent_name, agent_input, schema, *, language=None):  # noqa: ARG001
         if isinstance(response, Exception):
             raise response
         return response
 
-    monkeypatch.setattr(tier1, "run_structured", fake)
-
-
-def _stub_agent(monkeypatch) -> None:
-    monkeypatch.setattr(tier1, "build_from_name", lambda name: object())
+    monkeypatch.setattr(tier1, "run_stage", fake)
 
 
 def test_run_batch_returns_verdicts_in_input_order(monkeypatch) -> None:
-    _stub_agent(monkeypatch)
     # Agent returns decisions in reverse order — runner must re-sort by index.
     response = Tier1Batch(
         decisions=[
@@ -53,7 +48,7 @@ def test_run_batch_returns_verdicts_in_input_order(monkeypatch) -> None:
             Tier1Decision(index=1, verdict="drop", reason="r1"),
         ]
     )
-    _stub_run_structured(monkeypatch, response)
+    _stub_run_stage(monkeypatch, response)
 
     verdicts = tier1.run_batch([_item(0), _item(1), _item(2)], _GOALS)
 
@@ -62,18 +57,16 @@ def test_run_batch_returns_verdicts_in_input_order(monkeypatch) -> None:
 
 
 def test_run_batch_empty_input_returns_empty_list(monkeypatch) -> None:
-    _stub_agent(monkeypatch)
     # Should not call the agent at all on empty input.
     monkeypatch.setattr(
-        tier1, "run_structured", lambda *a, **kw: pytest.fail("should not be called")
+        tier1, "run_stage", lambda *a, **kw: pytest.fail("should not be called")
     )
 
     assert tier1.run_batch([], _GOALS) == []
 
 
 def test_run_batch_rejects_wrong_count(monkeypatch) -> None:
-    _stub_agent(monkeypatch)
-    _stub_run_structured(
+    _stub_run_stage(
         monkeypatch,
         Tier1Batch(decisions=[Tier1Decision(index=0, verdict="keep", reason="r0")]),
     )
@@ -83,8 +76,7 @@ def test_run_batch_rejects_wrong_count(monkeypatch) -> None:
 
 
 def test_run_batch_rejects_wrong_indices(monkeypatch) -> None:
-    _stub_agent(monkeypatch)
-    _stub_run_structured(
+    _stub_run_stage(
         monkeypatch,
         Tier1Batch(
             decisions=[
@@ -99,8 +91,7 @@ def test_run_batch_rejects_wrong_indices(monkeypatch) -> None:
 
 
 def test_run_single_is_batch_of_one(monkeypatch) -> None:
-    _stub_agent(monkeypatch)
-    _stub_run_structured(
+    _stub_run_stage(
         monkeypatch,
         Tier1Batch(decisions=[Tier1Decision(index=0, verdict="keep", reason="ok")]),
     )

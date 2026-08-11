@@ -3,7 +3,6 @@
 ## Purpose
 
 The delivery surface for the knowledge-review schedule: a section at the top of `/knowledge`, above the ingest form, showing the documents currently due. Each due doc renders as a card carrying its title, capture date, position on the curve, and the doc's own frontmatter `summary`; clicking the card opens that doc's full text in the page's existing preview pane and scrolls to it, so a review is a re-read of the source rather than only a reminder. Reading and dismissing are deliberately distinct — opening a card never advances the curve, while a separate "seen" control is a POST server action that does. The section caps at five cards and always states the remainder rather than silently truncating; when nothing is due it drops the cards while keeping its panel, header, and summary-and-chart strip, so it always carries the collection's position on the Ebbinghaus curve rather than going blank. That strip — summary figures on the left, retention histogram flush right — mirrors how the radar tracker seats its score histogram, so the two pages read as one system. The dashboard never writes review state during render: enrollment happens only through a refresh control that spawns the reconcile CLI detached.
-
 ## Requirements
 ### Requirement: Review section on the knowledge page
 
@@ -49,7 +48,7 @@ The "seen" control SHALL be a POST server action that advances the doc's review 
 
 ### Requirement: Refresh spawns reconciliation detached
 
-The section SHALL offer a refresh control that spawns `paca knowledge review` through the shared `spawnPacaDetached` launcher and returns immediately. The dashboard MUST NOT write review state during page render — enrollment happens only through this spawned command.
+The section SHALL offer a refresh control that spawns `next-signal knowledge review` through the shared `spawnCliDetached` launcher and returns immediately. The dashboard MUST NOT write review state during page render — enrollment happens only through this spawned command.
 
 #### Scenario: refresh returns without waiting
 
@@ -203,3 +202,4 @@ state.
 
 - **WHEN** the `/knowledge` page is rendered or prefetched
 - **THEN** no review row is inserted, advanced, or retired
+

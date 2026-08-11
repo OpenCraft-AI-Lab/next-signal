@@ -3,7 +3,6 @@
 ## Purpose
 
 Range-scoped synthesis layer over the `radar_analyses` produced by info-radar-analysis: given a date range plus the radar's quality gate (score threshold + novel-only), it clusters the kept signals into 3–5 themed narratives, each citing the source `radar_items` it rests on. Results are cached in `radar_recaps` keyed by `(since, until, min_score, novel_only)`, so a repeat request is a cache hit and a regeneration is an in-place upsert. An empty range costs no inference; staleness (later analyses landing in the same range) is detected and labelled rather than silently regenerated; citation validation drops hallucinated ids so one bad citation never sinks the whole recap. The layer only reads `radar_analyses` / `radar_items` and writes its own `radar_recaps`.
-
 ## Requirements
 ### Requirement: Recap range is bounded by `analyzed_at` in the radar timezone
 
@@ -55,20 +54,6 @@ The recap agent SHALL receive, per selected item, only `id`, `title`, `score`, `
 
 - **WHEN** the recap payload is assembled for items whose analyses carry non-empty `impact_md`
 - **THEN** the serialized agent input contains each item's `summary` and omits `impact_md` entirely
-
-### Requirement: Recap agent runs on `local_structured` with constrained output
-
-The recap SHALL invoke a registered agent named `radar_recap`, declared in `configs/agents/radar_recap.yaml` with `model_profile: local_structured` and `extra: {db: false, shared_context: false}`, its prompt in `prompts/agents/radar_recap.md`, invoked through `paca.agents.loader.build_from_name` and `paca.agents.structured.run_structured`. The agent SHALL return a structured output enforced by OMLX json_schema constrained decoding, shaped `RecapOutput{headline: str, themes: list[Theme]}` where `Theme{title: str, narrative: str, item_ids: list[int]}`. The `local_structured` `max_tokens` cap of 4096 MUST NOT be widened for this agent, nor overridden per-agent.
-
-#### Scenario: agent is loaded from config, not constructed inline
-
-- **WHEN** the recap workflow needs its LLM step
-- **THEN** it calls `build_from_name("radar_recap")`, and no `Agent(...)` is constructed inline with hardcoded instructions or model id
-
-#### Scenario: token cap is inherited unchanged
-
-- **WHEN** `configs/agents/radar_recap.yaml` is loaded
-- **THEN** it references `model_profile: local_structured` and declares no `max_tokens` override, inheriting the documented 4096 cap
 
 ### Requirement: Citations are validated, and unciteable output degrades rather than aborts
 
@@ -137,15 +122,29 @@ When no items clear the gate for the requested range, the workflow SHALL NOT inv
 
 ### Requirement: Workflow is a manual entrypoint, not an AgentOS-exposed runnable
 
-The recap SHALL be declared in `configs/workflows/info_radar_recap.yaml` with `expose.agent_os: false` and an `extra.run_now` pointing at the module entrypoint, following the existing info-radar workflow shells. Implementation SHALL live under `src/paca/workflows/info_radar_recap/`, with SQL confined to its `store.py`. Cadence is not part of this contract.
+The recap SHALL be declared in `configs/workflows/info_radar_recap.yaml` with `expose.agent_os: false` and an `extra.run_now` pointing at the module entrypoint, following the existing info-radar workflow shells. Implementation SHALL live under `src/next_signal/workflows/info_radar_recap/`, with SQL confined to its `store.py`. Cadence is not part of this contract.
 
 #### Scenario: workflow is reachable manually
 
-- **WHEN** the operator runs `paca run-workflow info_radar_recap`
+- **WHEN** the operator runs `next-signal run-workflow info_radar_recap`
 - **THEN** the config's `extra.run_now` entrypoint is invoked
 
 #### Scenario: workflow is not bound by AgentOS
 
 - **WHEN** AgentOS loads configured runnables
 - **THEN** `info_radar_recap` is not exposed as an AgentOS workflow
+
+### Requirement: Recap agent uses the selected production engine with validated output
+
+The recap SHALL invoke the registered agent configuration named `radar_recap`, declared in `configs/agents/radar_recap.yaml` with `extra: {db: false, shared_context: false}`, through the production stage adapter. The adapter SHALL use the job-selected engine and return a locally validated `RecapOutput{headline: str, themes: list[Theme]}` where `Theme{title: str, narrative: str, item_ids: list[int]}`. Static profile token limits SHALL apply to OMLX/DeepSeek routes; CLI routes SHALL remain bounded by their bridge configuration.
+
+#### Scenario: agent configuration is reused
+
+- **WHEN** the recap workflow needs its LLM step
+- **THEN** it calls `run_stage("radar_recap", ..., output_schema=RecapOutput)`, preserving the existing prompt and language policy without constructing an inline hard-coded agent
+
+#### Scenario: CLI recap is locally validated
+
+- **WHEN** Codex or Claude is selected for recap generation
+- **THEN** its response must validate as `RecapOutput` before citation validation or persistence begins
 

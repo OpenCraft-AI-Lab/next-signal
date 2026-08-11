@@ -9,8 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from next_signal.agents.loader import build_from_name
-from next_signal.agents.structured import run_structured
+from next_signal.agents.stage import run_stage
 from next_signal.workflows.stages.knowledge_ingest.artifact import KnowledgeArtifact
 from next_signal.workflows.stages.knowledge_ingest.schemas import category_model
 from next_signal.workflows.stages.knowledge_ingest.taxonomy import category_paths, load_taxonomy
@@ -83,9 +82,10 @@ def classify_category(artifact: KnowledgeArtifact) -> KnowledgeArtifact:
 def _pick_category(artifact: KnowledgeArtifact) -> str:
     taxonomy = load_taxonomy()
     try:
-        agent = build_from_name("knowledge_classifier")
         schema = category_model(category_paths(taxonomy))
-        result = run_structured(agent, _classifier_input(artifact, taxonomy), schema)
+        result = run_stage(
+            "knowledge_classifier", _classifier_input(artifact, taxonomy), schema
+        )
         return result.category
     except Exception:  # noqa: BLE001 — best-effort; temp-inbox is the designed fallback
         return _FALLBACK_CATEGORY

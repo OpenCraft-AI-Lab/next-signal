@@ -5,16 +5,14 @@ Single-process agno `AgentOS` (FastAPI) that hosts all agents, teams, and workfl
 ## Purpose
 
 All user interfaces (Dashboard, CLI) resolve the same agents, teams, and workflows through one runnable loader. State (sessions, memory, traces) lives in local Postgres + pgvector.
-
 ## Requirements
-
 ### Requirement: Single AgentOS process
 
 The system SHALL run all agents, teams, and workflows inside a single `agno.os.AgentOS` instance, exposed on port 7777.
 
-#### Scenario: paca serve starts the app
+#### Scenario: next-signal serve starts the app
 
-- **WHEN** the operator runs `uv run paca serve`
+- **WHEN** the operator runs `uv run next-signal serve`
 - **THEN** a FastAPI app at `http://localhost:7777` exposes agno endpoints for every registered agent, team, and workflow
 
 #### Scenario: telemetry is disabled
@@ -47,3 +45,4 @@ No team configs currently ship — `configs/teams/` is empty in this repo — bu
 
 - **WHEN** one agent YAML fails to load
 - **THEN** the error is logged and the remaining agents/teams/workflows still load
+
