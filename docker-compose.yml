@@ -48,10 +48,16 @@ x-app: &app
     DISABLE_AUTOUPDATER: "1"                 # image rebuilds own Claude upgrades
   volumes:
     - pstate:/state
-    # Host knowledge dirs — sources come from .env (${WIKI_DIR} etc.),
-    # mounted read-write because ingest/re-index writes into them.
-    - ${WIKI_DIR:?set WIKI_DIR in .env}:/wiki
-    - ${WIKI_RAW_DIR:?set WIKI_RAW_DIR in .env}:/wiki-raw
+    # Host knowledge dirs, mounted read-write because ingest/re-index writes
+    # into them. Default to repo-relative directories so the stack starts
+    # against an untouched .env; point WIKI_DIR at your own vault to override.
+    #
+    # The `./` prefix is REQUIRED. Compose reads a source without a leading
+    # `./` or `../` as a NAMED VOLUME, which would mount an empty box instead
+    # of a directory — and would do it silently, presenting an empty wiki
+    # rather than an error.
+    - ${WIKI_DIR:-./state/wiki}:/wiki
+    - ${WIKI_RAW_DIR:-./state/wiki-raw}:/wiki-raw
   # Lets the container reach a HOST-side OMLX server via
   # host.docker.internal on Linux (Docker Desktop provides it already).
   extra_hosts:
@@ -66,8 +72,10 @@ x-app-with-coding-agent-auth: &app-with-coding-agent-auth
     - pstate:/state
     - codex_auth:/root/.codex
     - claude_auth:/root/.claude
-    - ${WIKI_DIR:?set WIKI_DIR in .env}:/wiki
-    - ${WIKI_RAW_DIR:?set WIKI_RAW_DIR in .env}:/wiki-raw
+    # Same defaults as x-app above; the `./` prefix is required for the same
+    # reason. Keep these two lists in step.
+    - ${WIKI_DIR:-./state/wiki}:/wiki
+    - ${WIKI_RAW_DIR:-./state/wiki-raw}:/wiki-raw
 
 services:
   # --- Postgres 16 + pgvector: next-signal's main DB (agno + business tables) ---

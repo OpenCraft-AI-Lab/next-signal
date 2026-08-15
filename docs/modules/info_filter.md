@@ -7,7 +7,7 @@
 Collect external information streams and filter them down to signal. The current
 instance is **info-radar**: periodically pull the Folo / source CLIs and write
 `radar_items`; then a two-tier selected-engine analysis scores relevance and impact and
-deduplicates according to `configs/info_radar/goals.yaml`, writing
+deduplicates according to the runtime goals file in user state, writing
 `radar_analyses` / `radar_pushed_topics`. The dashboard `/radar` page handles
 reading and manual triggering.
 
@@ -62,8 +62,10 @@ and recap never mix engines after the first successful response.
   one `embedder` identity per row)
 - info-radar recaps: Postgres `radar_recaps`, one row per
   `(since, until, min_score, novel_only)`
-- info-radar goals: `configs/info_radar/goals.yaml` (editable from the dashboard
-  `/goals` page)
+- info-radar goals: `~/.next-signal/goals.yaml` — user state, not `configs/`, so
+  the dashboard and the scheduler share one copy and a rebuild cannot discard it.
+  Seeded by container bootstrap from `configs/info_radar/goals.example.yaml`, and
+  edited from the dashboard `/goals` page
 - info-radar sources: `configs/info_radar/sources.yaml`
 
 ## Invariants
@@ -73,7 +75,10 @@ and recap never mix engines after the first successful response.
 - `radar_analyses.radar_item_id` is a unique key. Analysis only processes rows
   where `seen_at IS NULL`, and writes `seen_at` only after the analysis row is
   committed — which is what keeps reruns idempotent at any cadence.
-- When `configs/info_radar/goals.yaml` is missing or invalid, analysis fails loud.
+- When the runtime goals file is missing, empty, or invalid, analysis fails loud —
+  with a distinct message for each, because "not set up yet", "you cleared them",
+  and "the file is broken" call for different fixes. Loading never creates or
+  repairs the file; provisioning is bootstrap's job.
 - If a tier-1 batch response does not match the expected structure, fall back to
   single-item processing; one failing item must never block the batch.
 - Items that fail tier-1 or tier-2 get no analysis row and no `seen_at`, leaving

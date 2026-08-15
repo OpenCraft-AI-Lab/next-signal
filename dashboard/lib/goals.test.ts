@@ -4,7 +4,9 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { stateRoot } from "./paths";
 import {
+  GOALS_PATH,
   parseGoalsYaml,
   readGoals,
   renderGoalsYaml,
@@ -64,8 +66,19 @@ goals:
   );
 });
 
-test("validateGoals rejects empty list", () => {
-  assert.throws(() => validateGoals([]), /non-empty list/);
+test("validateGoals accepts an empty list", () => {
+  // Clearing the seeded examples is legitimate; the loader, not the writer,
+  // enforces that analysis needs at least one goal.
+  assert.deepEqual(validateGoals([]), []);
+});
+
+test("validateGoals rejects a non-list", () => {
+  assert.throws(() => validateGoals({} as unknown), /must be a list/);
+});
+
+test("parseGoalsYaml round-trips an empty goals list", () => {
+  assert.deepEqual(parseGoalsYaml("goals: []\n", "test.yaml"), []);
+  assert.deepEqual(parseGoalsYaml(renderGoalsYaml([]), "test.yaml"), []);
 });
 
 test("validateGoals rejects non-string topics", () => {
@@ -89,6 +102,25 @@ test("renderGoalsYaml rejects invalid data before writing", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "ns-goals-"));
   const file = path.join(dir, "goals.yaml");
   await writeFile(file, VALID, "utf8");
-  await assert.rejects(() => writeGoalsAtomic([], file), /non-empty list/);
+  await assert.rejects(
+    () => writeGoalsAtomic([{ name: "g", description: "" }], file),
+    /description/,
+  );
   assert.match(await readFile(file, "utf8"), /ai-infra/);
+});
+
+test("writeGoalsAtomic persists an emptied goals list", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ns-goals-"));
+  const file = path.join(dir, "goals.yaml");
+  await writeFile(file, VALID, "utf8");
+  await writeGoalsAtomic([], file);
+  const result = await readGoals(file);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.goals, []);
+});
+
+test("GOALS_PATH resolves under the state root, not the repo", () => {
+  assert.equal(path.basename(GOALS_PATH), "goals.yaml");
+  assert.equal(path.dirname(GOALS_PATH), stateRoot());
+  assert.ok(!GOALS_PATH.includes(`${path.sep}configs${path.sep}`));
 });

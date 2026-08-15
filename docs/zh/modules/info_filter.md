@@ -6,7 +6,7 @@
 
 收集外部信息流并过滤到 signal。当前实例是 **info-radar**：周期性拉
 Folo / source CLI，写 `radar_items`；随后两层 selected-engine analysis 按
-`configs/info_radar/goals.yaml` 做 relevance、impact scoring 和 dedup，
+用户状态里的运行时 goals 文件做 relevance、impact scoring 和 dedup，
 写 `radar_analyses` / `radar_pushed_topics`，dashboard `/radar` 负责阅读和手动触发。
 
 ## 代码位置
@@ -58,7 +58,9 @@ OMLX、DeepSeek、Codex CLI 或 Claude Code CLI。Tier 1、Tier 2、dedup judge 
   每行带一个 `embedder` 身份）
 - info-radar recaps：Postgres `radar_recaps`，一行对应一个
   `(since, until, min_score, novel_only)`
-- info-radar goals：`configs/info_radar/goals.yaml`（dashboard `/goals` 可编辑）
+- info-radar goals：`~/.next-signal/goals.yaml` —— 用户状态，不在 `configs/` 下，
+  这样 dashboard 和 scheduler 读同一份，rebuild 也不会丢。容器 bootstrap 从
+  `configs/info_radar/goals.example.yaml` 填好，在 dashboard `/goals` 页面编辑
 - info-radar sources：`configs/info_radar/sources.yaml`
 
 ## 不变量
@@ -66,7 +68,9 @@ OMLX、DeepSeek、Codex CLI 或 Claude Code CLI。Tier 1、Tier 2、dedup judge 
 - `radar_items.seen_at` 只由 analysis 层写；collector 只写 raw item。
 - `radar_analyses.radar_item_id` 是唯一键；analysis 只处理 `seen_at IS NULL`，并且在
   analysis row commit 后才写 `seen_at`，所以任意 cadence 重跑都保持幂等。
-- `configs/info_radar/goals.yaml` 缺失或非法时，analysis loud fail。
+- 运行时 goals 文件缺失、为空、或非法时，analysis loud fail —— 三种情况消息各不相同，
+  因为"还没配好"、"你自己清空了"、"文件坏了"要采取的动作不一样。load 永远不会创建或
+  修复这个文件；填充它是 bootstrap 的职责。
 - Tier-1 batch 输出结构不匹配时回退到单 item；任一 item 失败不能阻断整批。
 - Tier-1 / Tier-2 失败的 item 不写 analysis row、不写 `seen_at`——留给下一轮重试
   （`radar_analyses` 唯一键 + 无 reanalyze 命令，写空行会把瞬时失败永久冻结）。

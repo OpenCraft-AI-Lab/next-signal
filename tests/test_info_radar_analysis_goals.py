@@ -6,7 +6,14 @@ from pathlib import Path
 
 import pytest
 
-from next_signal.workflows.info_radar_analysis.goals import Goal, load_goals, render_goals_block
+from next_signal.core import paths
+from next_signal.workflows.info_radar_analysis.goals import (
+    Goal,
+    goals_example_path,
+    goals_path,
+    load_goals,
+    render_goals_block,
+)
 
 
 def _write(path: Path, body: str) -> None:
@@ -53,16 +60,45 @@ goals:
     assert goal.keywords == []
 
 
-def test_load_goals_missing_file_raises(tmp_path: Path) -> None:
+def test_load_goals_missing_file_raises_and_creates_nothing(tmp_path: Path) -> None:
+    absent = tmp_path / "absent.yaml"
     with pytest.raises(RuntimeError, match="not found"):
-        load_goals(tmp_path / "absent.yaml")
+        load_goals(absent)
+    # Loading is a pure read: provisioning belongs to bootstrap and to the
+    # dashboard's explicit control, never to a read path.
+    assert not absent.exists()
+    assert list(tmp_path.iterdir()) == []
 
 
-def test_load_goals_empty_list_raises(tmp_path: Path) -> None:
+def test_load_goals_empty_list_raises_distinctly(tmp_path: Path) -> None:
     cfg = tmp_path / "goals.yaml"
     _write(cfg, "goals: []\n")
-    with pytest.raises(RuntimeError, match="non-empty list"):
+    # An empty list is a state the operator can deliberately save, so the
+    # message must not read like a broken or missing file.
+    with pytest.raises(RuntimeError, match="no goals configured") as excinfo:
         load_goals(cfg)
+    assert "not found" not in str(excinfo.value)
+
+
+def test_load_goals_rejects_non_list_goals(tmp_path: Path) -> None:
+    cfg = tmp_path / "goals.yaml"
+    _write(cfg, "goals: nope\n")
+    with pytest.raises(RuntimeError, match="must be a list"):
+        load_goals(cfg)
+
+
+def test_goals_path_resolves_under_state_root(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(paths, "GOALS_FILE", tmp_path / "state" / "goals.yaml")
+    resolved = goals_path()
+    assert resolved == tmp_path / "state" / "goals.yaml"
+    assert "configs" not in resolved.parts
+
+
+def test_goals_example_is_a_valid_runtime_document() -> None:
+    # The example is the seed for every fresh install, so it has to load as-is
+    # rather than being a commented-out template.
+    goals = load_goals(goals_example_path())
+    assert goals, "goals.example.yaml must declare at least one goal"
 
 
 def test_load_goals_duplicate_names_raise(tmp_path: Path) -> None:

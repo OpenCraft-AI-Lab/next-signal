@@ -18,7 +18,7 @@
 |---|---|---|
 | `/radar` | info-radar 阅读器：今日 tracker、过滤排序、Pull + Analyze（带实时进度）、区间 Recap 面板、单条 Ingest to wiki | [info_filter.md](./info_filter.md)、dashboard/README |
 | `/knowledge` | 间隔重复回顾区块（到期卡片 + Seen / Refresh）、wiki tree + 文件管理、ANN search、预览、Re-index、URL 入库表单 + 实时进度面板 | [knowledge.md](./knowledge.md) |
-| `/goals` | 编辑 `configs/info_radar/goals.yaml`（镜像 Python loader 契约，原子写） | dashboard/README |
+| `/goals` | 编辑 `~/.next-signal/goals.yaml` —— 用户状态，与 scheduler 共享（镜像 Python loader 契约，原子写） | dashboard/README |
 | `/subscriptions` | Folo 订阅只读盘点 | dashboard/README |
 
 ## 代码结构

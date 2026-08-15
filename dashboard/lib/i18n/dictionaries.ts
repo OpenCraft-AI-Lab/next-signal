@@ -464,11 +464,17 @@ export const dictionaries = {
     goals: {
       title: "Goals",
       subtitle: (count: number) =>
-        `Steers Tier-1 filtering & scoring · info_radar/goals.yaml · ${count} goals`,
-      missing: "goals.yaml is missing",
+        `Steers Tier-1 filtering & scoring · goals.yaml in user state · ${count} goals`,
+      missing: "No goals file yet",
       attention: "goals.yaml needs attention",
       help: (message: string, path: string) =>
-        `${message}. Use ${path} as a template, or add the first goal below and the dashboard will create the runtime file.`,
+        `${message}. Add the first goal below, or start from the shipped examples in ${path}.`,
+      emptyTitle: "No goals configured",
+      emptyBody:
+        "Tier-1 filtering and Tier-2 scoring both need at least one goal. Analysis will fail until you add one — including unattended scheduled runs.",
+      startFromExample: "Start from example",
+      viewExamples: "View examples",
+      viewExamplesHint: "Shipped reference goals, read-only",
       fields: {
         name: "name",
         nameHintReadOnly: "slug · read-only",
@@ -495,6 +501,9 @@ export const dictionaries = {
         exists: (name: string) => `Goal already exists: ${name}`,
         added: (name: string) => `Added ${name}`,
         deleted: (name: string) => `Deleted ${name}`,
+        seeded: (count: number) => `Added ${count} example goal(s)`,
+        seedRefused:
+          "Goals are already configured — clear them first, or add goals individually",
       },
     },
     subscriptions: {
@@ -973,11 +982,17 @@ export const dictionaries = {
     goals: {
       title: "目标",
       subtitle: (count: number) =>
-        `控制 Tier-1 过滤与评分 · info_radar/goals.yaml · ${count} 个目标`,
-      missing: "缺少 goals.yaml",
+        `控制 Tier-1 过滤与评分 · 用户状态里的 goals.yaml · ${count} 个目标`,
+      missing: "还没有目标文件",
       attention: "goals.yaml 需要处理",
       help: (message: string, path: string) =>
-        `${message}。可以参考 ${path}，或在下面添加第一个目标，dashboard 会创建运行时文件。`,
+        `${message}。可以在下面添加第一个目标，或从 ${path} 里随包提供的示例开始。`,
+      emptyTitle: "没有配置任何目标",
+      emptyBody:
+        "Tier-1 过滤和 Tier-2 评分都至少需要一个目标。在添加之前分析会直接失败——无人值守的定时运行也一样。",
+      startFromExample: "从示例开始",
+      viewExamples: "查看示例",
+      viewExamplesHint: "随包提供的参考目标，只读",
       fields: {
         name: "name",
         nameHintReadOnly: "slug · 只读",
@@ -1004,6 +1019,8 @@ export const dictionaries = {
         exists: (name: string) => `目标已存在：${name}`,
         added: (name: string) => `已添加 ${name}`,
         deleted: (name: string) => `已删除 ${name}`,
+        seeded: (count: number) => `已添加 ${count} 个示例目标`,
+        seedRefused: "已经配置了目标——先清空，或者逐个添加",
       },
     },
     subscriptions: {

@@ -57,7 +57,7 @@ spawn 一次性 `next-signal` CLI 子进程 —— 没有任何一个走 AgentOS
 
 | 名称                       | 默认值                    | 谁在用                                                             |
 | -------------------------- | ------------------------- | ------------------------------------------------------------------ |
-| `WIKI_DIR`                 | （无 —— 必填）            | `/knowledge`（树 + re-index）                                      |
+| `WIKI_DIR`                 | （代码无默认；Compose 默认 `./state/wiki`） | `/knowledge`（树 + re-index）                        |
 | `NEXT_PUBLIC_AGENT_OS_URL` | `http://localhost:7777`   | 浏览器端调 AgentOS（目前没有）                                     |
 | `DATABASE_URL`             | （Postgres URL）          | `dashboard-radar`（直接读 DB）                                     |
 | `NEXT_SIGNAL_DATABASE_URL` | `DATABASE_URL`            | 可选的 dashboard 专用 Postgres URL                                 |
@@ -265,7 +265,7 @@ next-signal 才能调用。这里刻意不硬编码 CLI 默认值，因为 provi
 - `gray-matter` —— 给 knowledge 侧边栏树解析 frontmatter。
 - `pg` / `@types/pg` —— radar 阅读器在 server component 里直连 Postgres，超出
   `agent-ui` 镜像范围。
-- `yaml` —— 给 `/goals` 解析和渲染 `configs/info_radar/goals.yaml`。
+- `yaml` —— 给 `/goals` 解析和渲染运行时 goals 文件。
 - `tsx` —— 聚焦的 TypeScript helper 测试。
 
 ## Radar
@@ -293,8 +293,11 @@ item 后创建一个受跟踪的 knowledge ingest job；Folo 行会先 stage 成
 
 ## Goals
 
-`/goals` 通过 server action 直接编辑 `configs/info_radar/goals.yaml`。dashboard
-镜像了 Python loader 的契约：顶层 `goals` 非空、goal 名唯一且只读、description
+`/goals` 通过 server action 直接编辑 `~/.next-signal/goals.yaml` —— 用户状态，
+所以 scheduler 读的是同一份，rebuild 也不会丢。渲染页面永远不写文件：文件由容器
+bootstrap 填好，或者由显式的 **从示例开始** 按钮写入。空的 `goals:` 列表是可以保存
+的（清空示例是正当操作），但在重新加上目标之前 analysis 会 loud fail。dashboard
+镜像了 Python loader 的契约：顶层 `goals`、goal 名唯一且只读、description
 必填、topics/keywords 为字符串列表、weight 为数字、不允许未知字段。非法的保存在
 写入前就被拒绝；合法的保存走原子 temp-file rename。
 

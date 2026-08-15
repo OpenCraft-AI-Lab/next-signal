@@ -131,8 +131,8 @@ production CLI stage 比直接仓库任务更严格：provider 工具/自定义�
 |---|---|
 | Docker Desktop / colima | 容器运行时本身 |
 | `.env` | 只读挂载进 `app`；不放进镜像因为里面是真实密钥 |
-| `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | 知识内容；bind-mount 让宿主机和容器保持一致。路径必须和容器*内部*的 `WIKI_DIR` / `WIKI_RAW_DIR` 对应 |
-| `~/.next-signal/` state | knowledge_ingest_manifest.json、agent-tmp/，以及 dashboard 写的那几个设置——`language.json`、`engine.json`、`coding-agents.json`、`schedule.json`、`embedding.json`。用具名卷（或 bind mount）以便重建镜像后仍然保留。这五个文件正是 state root 不能烤进镜像的原因：dashboard 在运行时写它们，所有读者都在 call time 读、不用重启就生效，面板不可达时还能手改 |
+| `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | 知识内容；bind-mount 让宿主机和容器保持一致。宿主机侧路径来自 `WIKI_DIR` / `WIKI_RAW_DIR`，不设时默认 `./state/wiki` 和 `./state/wiki-raw`，所以不改 `.env` 也能启动。容器内部则永远是 `/wiki` 和 `/wiki-raw` |
+| `~/.next-signal/` state | knowledge_ingest_manifest.json、agent-tmp/、`goals.yaml`，以及 dashboard 写的那几个设置——`language.json`、`engine.json`、`coding-agents.json`、`schedule.json`、`embedding.json`。用具名卷（或 bind mount）以便重建镜像后仍然保留。这些文件正是 state root 不能烤进镜像的原因：dashboard 在运行时写它们，所有读者都在 call time 读、不用重启就生效，面板不可达时还能手改。`goals.yaml` 的理由更硬——`dashboard` 和 `scheduler` 是同一镜像起的两个容器，写在 `/app/configs` 下对方看不见，下次 build 也会丢 |
 | 发布的端口 | `localhost:3000` 是你访问容器的方式 |
 | **OMLX / MLX 模型服务**（可选） | **无法容器化**（需要 Metal GPU）。除非在设置页选了云端 embedder，否则 info-radar `analyze` 的 **embedding** 需要它。云端对话模型不需要。用的话，容器通过 `host.docker.internal:<port>` 访问 |
 
@@ -250,8 +250,15 @@ docker compose up -d --force-recreate dashboard scheduler
 
 仓库根目录已经带了 `Dockerfile`、`docker-compose.yml` 和 `.dockerignore`。
 前置条件：Docker Engine + Compose v2，以及一个 `.env`（从 `.env.example` 拷），
-里面至少要有一个云 LLM key，以及指向你 wiki 仓库宿主机路径的 `WIKI_DIR` /
-`WIKI_RAW_DIR`。
+里面至少要有一个云 LLM key。`WIKI_DIR` / `WIKI_RAW_DIR` 是可选的——留空则 Compose
+挂载 `./state/wiki` 和 `./state/wiki-raw`；想用自己的 wiki 仓库就填上路径。
+
+> **支持的平台是 macOS 和 Windows 上的 Docker Desktop。** 它的文件共享层会映射
+> 属主，所以 Docker 建出来的默认 wiki 目录在容器里和宿主机上都能用。原生 Linux 的
+> Docker Engine 以 root 跑守护进程，会把目录建成 `root:root`——栈照样能跑，但你要
+> 在宿主机上编辑自己的 wiki，得先跑一次 `sudo chown -R $USER state/`，或者把
+> `WIKI_DIR` 指向一个你已经拥有的目录。这里选择写进文档而不是自动处理：任何自动方案
+> 要么多一个 `.env` 变量，要么要往仓库里提交占位目录，而容器化部署目前不面向 Linux。
 
 > **把栈跑起来 vs. 拿它验证一个改动。** 本节讲前者。如果你要验证一个改动是否生效
 > ——改了什么该跑哪个 loop、容器里跑的到底是不是你的代码、哪些命令不烧 token、
@@ -267,9 +274,9 @@ docker compose up -d --force-recreate dashboard scheduler
 ### 快速开始
 
 1. 安装并启动 Docker Engine + Compose v2（Docker Desktop 或 colima）。
-2. `cp .env.example .env`，然后编辑：至少设一个云 LLM key
-   （DeepSeek/Anthropic/OpenAI），以及把 `WIKI_DIR` / `WIKI_RAW_DIR`
-   设成你 wiki 仓库的宿主机路径。
+2. `cp .env.example .env`，然后至少设一个云 LLM key
+   （DeepSeek/Anthropic/OpenAI）。`WIKI_DIR` / `WIKI_RAW_DIR` 留空就用仓库内的
+   默认目录，或者填成你自己 wiki 仓库的宿主机路径。
 3. 构建并启动整个栈：
    ```bash
    docker compose up --build

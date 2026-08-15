@@ -61,7 +61,7 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 
 | Name                       | Default                   | Used by                                                            |
 | -------------------------- | ------------------------- | ------------------------------------------------------------------ |
-| `WIKI_DIR`                 | (none — required)         | `/knowledge` (tree + re-index)                                     |
+| `WIKI_DIR`                 | (none in code; Compose defaults to `./state/wiki`) | `/knowledge` (tree + re-index)                          |
 | `NEXT_PUBLIC_AGENT_OS_URL` | `http://localhost:7777`   | Browser-side AgentOS calls (none yet)                              |
 | `DATABASE_URL`             | (Postgres URL)            | `dashboard-radar` (direct DB reads)                                |
 | `NEXT_SIGNAL_DATABASE_URL` | `DATABASE_URL`            | Optional dashboard-specific Postgres URL                           |
@@ -315,7 +315,7 @@ Packages added on top of the mirror (and why):
 - `gray-matter` — parse frontmatter for the knowledge sidebar tree.
 - `pg` / `@types/pg` — direct Postgres reads from server components for the
   radar reader, beyond the `agent-ui` mirror.
-- `yaml` — parse and render `configs/info_radar/goals.yaml` for `/goals`.
+- `yaml` — parse and render the runtime goals file for `/goals`.
 - `tsx` — focused TypeScript helper tests.
 
 ## Radar
@@ -348,9 +348,13 @@ non-Folo rows use the validated `radar_items.url`.
 
 ## Goals
 
-`/goals` edits `configs/info_radar/goals.yaml` directly through server actions.
-The dashboard mirrors the Python loader contract: top-level non-empty `goals`,
-unique read-only goal names, required description, string-list topics/keywords,
+`/goals` edits `~/.next-signal/goals.yaml` directly through server actions — user
+state, so the scheduler reads the same file and a rebuild cannot discard it.
+Rendering the page never writes: the file is provisioned by container bootstrap,
+or by the explicit **Start from example** control. An empty `goals:` list is valid
+to save (clearing the examples is a legitimate step); analysis then fails loud
+until a goal exists. The dashboard mirrors the Python loader contract: top-level
+`goals`, unique read-only goal names, required description, string-list topics/keywords,
 numeric weight, and no unknown fields. Invalid saves are rejected before writing;
 valid saves use an atomic temp-file rename.
 

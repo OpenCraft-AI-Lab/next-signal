@@ -8,10 +8,17 @@
 #    The bun-compiled gbrain binary can't run PGLite (extension bundles aren't
 #    embedded), and pgvector already ships `vector` + `pg_trgm`, so gbrain lives
 #    in its own DB on the same server.
+# 3) the runtime goals file on the state volume, if it isn't there yet.
 set -eu
 
 echo "[bootstrap] next-signal main DB schema"
 python scripts/bootstrap_db.py
+
+# Goals are user data on the shared state volume, not image content. Provisioning
+# here rather than from a read path keeps `load_goals` a pure read; the step is a
+# no-op once the file exists, including when it holds a deliberately empty list.
+echo "[bootstrap] info-radar goals file"
+python -m next_signal.workflows.info_radar_analysis.provision
 
 if [ -n "${GBRAIN_DATABASE_URL:-}" ]; then
   echo "[bootstrap] gbrain database + init (Postgres engine)"

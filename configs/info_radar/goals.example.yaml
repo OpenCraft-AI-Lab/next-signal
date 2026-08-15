@@ -1,20 +1,26 @@
-# info-radar analysis goals.
+# info-radar analysis goals — the shipped EXAMPLE, not the file that runs.
 #
-# Copy this file to `goals.yaml` in the same directory and edit it to describe
-# what you actually want to learn from your feeds. The two-tier analysis
-# workflow (next_signal/workflows/info_radar_analysis/) ALL revolves around these
-# goals: tier-1 drops items that have no plausible bearing on any goal, and
-# tier-2 writes the impact analysis grounded in them.
+# The runtime goals file lives in user state (`~/.next-signal/goals.yaml`, or
+# `/state/goals.yaml` in a container) so the dashboard and the scheduler share
+# one copy and a rebuild cannot discard it. Container bootstrap copies this file
+# there on a fresh install; the dashboard's /goals page is the place to edit it
+# afterwards. This file is never written to.
+#
+# Edit the goals to describe what you actually want to learn from your feeds. The
+# two-tier analysis workflow (next_signal/workflows/info_radar_analysis/) ALL
+# revolves around them: tier-1 drops items with no plausible bearing on any goal,
+# and tier-2 writes the impact analysis grounded in them.
 #
 # Schema (strict — unknown keys fail the loader fast):
 #   goals:
-#     - name: <kebab-case unique id>
+#     - name: <unique id>
 #       description: <one-sentence purpose, used in agent prompts>
 #       topics: [<broad area>, ...]        # what kinds of things matter
 #       keywords: [<exact word>, ...]      # high-precision tokens
 #
-# At least one goal is required. A missing/empty goals.yaml aborts the run
-# with RuntimeError — there is no implicit default goal.
+# At least one goal is required to RUN. Clearing every goal is allowed and is
+# preserved across restarts, but analysis then aborts with RuntimeError — there
+# is no implicit default goal.
 
 goals:
   - name: ai_research_tracking

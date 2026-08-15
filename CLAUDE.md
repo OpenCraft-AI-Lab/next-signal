@@ -107,7 +107,7 @@ proposal / design / tasks），再实现；完成后 `/opsx:archive` 把 delta �
 
 CLI 子命令：
 - `next-signal list` — 列 agents / workflows
-- `next-signal doctor` — 自检 .env / Postgres / OMLX / 当前 embedder（打印向量空间身份 + 凭据在不在，不发请求）/ 注册的 tools / GBrain health / folocli auth / info-radar goals.yaml
+- `next-signal doctor` — 自检 .env / Postgres / OMLX / 当前 embedder（打印向量空间身份 + 凭据在不在，不发请求）/ 注册的 tools / GBrain health / folocli auth / info-radar 运行时 goals 文件
 - `next-signal run-agent <name> "<prompt>"` — 一次性调某个 agent
 - `next-signal schedule` — 前台跑墙钟调度器（compose 里 `scheduler` 服务的命令）。每 30s 重读
   `~/.next-signal/schedule.json`，到点跑 `info_radar_pull` → `info_radar_analysis`。
@@ -295,7 +295,12 @@ profile / 默认行为放这。
 - collector (`next_signal/collectors/info_radar/`) 只写 `radar_items`；analysis 层
   (`next_signal/workflows/info_radar_analysis/`) 是**唯一**写 `radar_items.seen_at` 的代码路径，
   `seen_at` 让任意 cadence 重跑都幂等（`radar_analyses` 也 `UNIQUE(radar_item_id)`）
-- `configs/info_radar/goals.yaml` 必填，缺失 / 非法 → loud `RuntimeError`
+- 运行时 goals 文件在 `~/.next-signal/goals.yaml`（容器里 `/state/goals.yaml`），**不在**
+  `configs/` 下——`configs/` 烤进镜像，dashboard 写的那份 scheduler 看不见。缺失 / 空列表 /
+  非法都 → loud `RuntimeError`，且三种消息各不相同。`load_goals()` 是纯读，绝不创建或修复
+  文件；填充它是 `container_bootstrap.sh` 和 `/goals` 页面「从示例开始」按钮的职责，守卫
+  条件是**文件是否存在**、不是目标条数（否则清空目标会在下次 `up` 时被示例覆盖）。
+  `configs/info_radar/goals.example.yaml` 是种子来源，只读
 - 三个 analysis agent 走 `local_structured` profile（`extra: {db: false, shared_context: false}`，
   `max_tokens: 4096`）——**不要放宽 max_tokens**：xgrammar 约束解码偶尔生成到 cap 才停，
   宽 cap 会把单次失败拖成 10+ 分钟挂死

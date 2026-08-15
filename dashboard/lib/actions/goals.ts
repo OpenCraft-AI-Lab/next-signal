@@ -6,6 +6,7 @@ import {
   type GoalConfig,
   type GoalsKind,
   goalsPathFor,
+  readExampleGoals,
   readGoals,
   writeGoalsAtomic,
 } from "@/lib/goals";
@@ -68,6 +69,38 @@ export async function addGoal(
     await writeGoalsAtomic([...goals, goal], goalsPathFor());
     revalidatePath("/goals");
     return { ok: true, message: t.goals.messages.added(goal.name) };
+  } catch (error) {
+    return { ok: false, message: errorMessage(error) };
+  }
+}
+
+/**
+ * Copy the shipped example goals into the runtime goals file.
+ *
+ * The only write the page performs that is not an edit to a specific goal, and
+ * it is always driven by an explicit click — rendering `/goals` never writes.
+ * Refuses to run when goals already exist, so it can restore a cleared list but
+ * can never overwrite configured goals: merging is not offered because example
+ * names can collide with the operator's and duplicates are rejected.
+ */
+export async function seedGoalsFromExample(
+  _kind: GoalsKind,
+  localeValue?: Locale,
+): Promise<ActionResult> {
+  const t = getDictionary(normalizeLocale(localeValue));
+  try {
+    const existing = await readGoals(goalsPathFor());
+    if (existing.ok && existing.goals.length > 0) {
+      return { ok: false, message: t.goals.messages.seedRefused };
+    }
+    if (!existing.ok && !existing.missing) throw new Error(existing.message);
+
+    const example = await readExampleGoals();
+    if (!example.ok) throw new Error(example.message);
+
+    await writeGoalsAtomic(example.goals, goalsPathFor());
+    revalidatePath("/goals");
+    return { ok: true, message: t.goals.messages.seeded(example.goals.length) };
   } catch (error) {
     return { ok: false, message: errorMessage(error) };
   }

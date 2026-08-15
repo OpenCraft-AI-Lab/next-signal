@@ -34,21 +34,35 @@ def _check_folocli() -> tuple[str, bool, str]:
 
 
 def _check_goals_yaml() -> tuple[str, bool, str]:
-    """Verify ``configs/info_radar/goals.yaml`` loads. No LLM call."""
+    """Verify the runtime goals file loads. No LLM call.
+
+    Three failures, three messages. "Not set up yet", "you cleared them", and
+    "the file is broken" want different reactions from the operator, and an
+    empty list is now a state they can deliberately save — so it must not read
+    as corruption.
+    """
+    import yaml
+
     from next_signal.workflows.info_radar_analysis.goals import goals_path, load_goals
 
+    label = "info-radar goals"
     path = goals_path()
     if not path.exists():
-        return (
-            "info-radar goals.yaml",
-            False,
-            f"missing at {path}; copy goals.example.yaml to goals.yaml",
-        )
+        return (label, False, f"no goals file at {path}")
     try:
         goals = load_goals(path)
     except Exception as e:  # noqa: BLE001
-        return ("info-radar goals.yaml", False, str(e))
-    return ("info-radar goals.yaml", True, f"{len(goals)} goal(s)")
+        # Distinguish a deliberately emptied list from a parse/validation error
+        # without duplicating the loader's schema rules here.
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            emptied = isinstance(raw, dict) and raw.get("goals") == []
+        except Exception:  # noqa: BLE001
+            emptied = False
+        if emptied:
+            return (label, False, f"no goals configured at {path}; add one on /goals")
+        return (label, False, str(e))
+    return (label, True, f"{len(goals)} goal(s) at {path}")
 
 
 def _check_embedder() -> tuple[str, bool, str]:
@@ -475,7 +489,7 @@ def doctor() -> None:
     # 6b. folocli auth (info-radar collector)
     checks.append(_check_folocli())
 
-    # 6c. info-radar analysis goals.yaml present?
+    # 6c. info-radar analysis goals present and non-empty?
     checks.append(_check_goals_yaml())
 
     # Print results.
