@@ -12,17 +12,19 @@ from collections.abc import Callable
 import json
 import os
 from pathlib import Path
-import pty
 import re
 import select
 import signal
 import subprocess
 import sys
-import termios
 import threading
 import time
 from typing import IO, Any, Literal, TypedDict, cast
 from urllib.parse import urlsplit
+
+# `pty` and `termios` are imported where they are used: they are POSIX-only, and a
+# module-level import made this whole module unimportable on Windows rather than
+# failing only the login path that genuinely needs a PTY.
 
 from next_signal.integrations.coding_agents.discovery import resolve_executable
 from next_signal.integrations.coding_agents.types import ProviderName
@@ -247,6 +249,8 @@ def _terminate_process_group(process: subprocess.Popen[bytes]) -> None:
 
 
 def _configure_no_echo(slave_fd: int) -> None:
+    import termios
+
     attrs = termios.tcgetattr(slave_fd)
     attrs[3] &= ~termios.ECHO
     termios.tcsetattr(slave_fd, termios.TCSANOW, attrs)
@@ -261,7 +265,12 @@ def run_login_session(
     max_output_chars: int = DEFAULT_MAX_OUTPUT_CHARS,
     cancelled: threading.Event | None = None,
 ) -> AuthSessionResult:
-    """Run one provider login in a PTY and emit bounded normalized JSON objects."""
+    """Run one provider login in a PTY and emit bounded normalized JSON objects.
+
+    POSIX-only: raises ``ImportError`` on platforms without ``pty``.
+    """
+    import pty
+
     selected = _provider(provider)
     cancel_event = cancelled or threading.Event()
     process: subprocess.Popen[bytes] | None = None

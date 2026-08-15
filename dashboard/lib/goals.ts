@@ -2,9 +2,9 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import YAML from "yaml";
 
-import { REPO_ROOT } from "@/lib/paths";
+import { REPO_ROOT, stateRoot } from "@/lib/paths";
 
-export const GOALS_PATH = path.join(REPO_ROOT, "configs", "info_radar", "goals.yaml");
+/** The shipped example. Repo content, read-only, never written to. */
 export const GOALS_EXAMPLE_PATH = path.join(
   REPO_ROOT,
   "configs",
@@ -15,8 +15,15 @@ export const GOALS_EXAMPLE_PATH = path.join(
 /** Which goals file a view/action targets. Only info-radar filtering exists here. */
 export type GoalsKind = "radar";
 
+/**
+ * The runtime goals file — user data on the shared state volume, mirroring
+ * `next_signal.core.paths.GOALS_FILE`. Deliberately not under `configs/`: that
+ * directory is baked into the image, so a write there lands in one container's
+ * writable layer and is invisible to the scheduler. Resolved at call time, like
+ * every other state path in `lib/paths.ts`.
+ */
 export function goalsPathFor(): string {
-  return GOALS_PATH;
+  return path.join(stateRoot(), "goals.yaml");
 }
 
 export function goalsExampleFor(): string {
@@ -51,9 +58,15 @@ function validateStringList(value: unknown, label: string): string[] {
   return [...value];
 }
 
+/**
+ * An empty list is valid here on purpose: clearing the seeded examples is a
+ * legitimate step toward configuring your own goals. The run-time guarantee
+ * that analysis refuses to run without goals is enforced by the Python loader,
+ * not by rejecting the write.
+ */
 export function validateGoals(value: unknown, source = "goals"): GoalConfig[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`${source}: \`goals:\` must be a non-empty list`);
+  if (!Array.isArray(value)) {
+    throw new Error(`${source}: \`goals:\` must be a list`);
   }
 
   const seen = new Set<string>();
@@ -95,7 +108,7 @@ export function parseGoalsYaml(raw: string, source = "goals.yaml"): GoalConfig[]
   return validateGoals(top.goals, source);
 }
 
-export async function readGoals(goalsPath = GOALS_PATH): Promise<GoalsReadResult> {
+export async function readGoals(goalsPath = goalsPathFor()): Promise<GoalsReadResult> {
   try {
     const raw = await readFile(goalsPath, "utf8");
     return { ok: true, path: goalsPath, goals: parseGoalsYaml(raw, goalsPath) };
@@ -105,7 +118,7 @@ export async function readGoals(goalsPath = GOALS_PATH): Promise<GoalsReadResult
         ok: false,
         path: goalsPath,
         missing: true,
-        message: `goals.yaml missing at ${goalsPath}; copy goals.example.yaml to goals.yaml`,
+        message: `no goals file at ${goalsPath}`,
       };
     }
     return {
@@ -117,6 +130,11 @@ export async function readGoals(goalsPath = GOALS_PATH): Promise<GoalsReadResult
   }
 }
 
+/** Read the shipped example goals. Read-only: this never writes anything. */
+export async function readExampleGoals(): Promise<GoalsReadResult> {
+  return readGoals(GOALS_EXAMPLE_PATH);
+}
+
 export function renderGoalsYaml(goals: unknown): string {
   const validGoals = validateGoals(goals);
   return YAML.stringify({ goals: validGoals }, { lineWidth: 100 });
@@ -124,9 +142,11 @@ export function renderGoalsYaml(goals: unknown): string {
 
 export async function writeGoalsAtomic(
   goals: unknown,
-  goalsPath = GOALS_PATH,
+  goalsPath = goalsPathFor(),
 ): Promise<GoalConfig[]> {
   const validGoals = validateGoals(goals);
+  // Temp file sits beside the target, so the rename is atomic and never crosses
+  // a filesystem boundary between the state volume and the image layer.
   const tmp = `${goalsPath}.${process.pid}.${Date.now()}.tmp`;
   await mkdir(path.dirname(goalsPath), { recursive: true });
   await writeFile(tmp, renderGoalsYaml(validGoals), "utf8");

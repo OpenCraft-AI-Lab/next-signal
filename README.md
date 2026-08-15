@@ -195,12 +195,12 @@ the standard, the decision attached to each item, and the tests used to tune it.
 
 ### 1. The standard is a file you own
 
-`configs/info_radar/goals.yaml` is an editorial policy, not a row of topic
-sliders. It supports anti-goals and hard vetoes, lives in version control, and is
-editable from the dashboard:
+`~/.next-signal/goals.yaml` is an editorial policy, not a row of topic sliders.
+It supports anti-goals and hard vetoes, is a plain YAML file you own — seeded
+from a versioned example, then yours — and is editable from the dashboard:
 
 ```yaml
-- name: science_breakthrough
+- name: science-breakthrough
   description: |
     Track major scientific and medical breakthroughs outside AI. …
     Hard veto list: any one of these means it is not a breakthrough,
@@ -313,17 +313,21 @@ the scheduler. The helper CLIs are already in the image.
 git clone https://github.com/OpenCraft-AI-Lab/next-signal.git
 cd next-signal
 cp .env.example .env
-$EDITOR .env                 # set WIKI_DIR and WIKI_RAW_DIR
 docker compose up --build
 ```
 
 Then open <http://localhost:3000> and finish setup on the settings page.
 
-Only two values are required before the stack starts: `WIKI_DIR` and
-`WIKI_RAW_DIR`, absolute host paths for the clean markdown library and the raw
-archive. Everything else has a default or belongs to a source adapter you have
+Nothing needs editing before the stack starts. The clean markdown library and
+the raw archive default to `state/wiki` and `state/wiki-raw` inside the repo;
+set `WIKI_DIR` and `WIKI_RAW_DIR` in `.env` to point at your own Obsidian vault
+instead. Everything else has a default or belongs to a source adapter you have
 not enabled yet; the full list with comments is in
 [`.env.example`](./.env.example).
+
+Verified on Docker Desktop for macOS and Windows. Native Linux Docker Engine
+works, but creates those default directories as root — `sudo chown -R $USER
+state/` once, or point `WIKI_DIR` at a directory you already own.
 
 **Then pick where the models run.** This choice lives in the dashboard rather
 than in `.env`, and it applies to the next job without a restart:

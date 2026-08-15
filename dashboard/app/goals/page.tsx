@@ -1,15 +1,32 @@
 import { GoalsTabs, type GoalsTabData } from "@/components/goals/goals-tabs";
-import { goalsExampleFor, goalsPathFor, readGoals } from "@/lib/goals";
+import {
+  goalsExampleFor,
+  goalsPathFor,
+  readExampleGoals,
+  readGoals,
+} from "@/lib/goals";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
+/** Reads only — rendering never provisions. Unreadable examples degrade to none. */
 async function readRadarGoals(): Promise<GoalsTabData> {
-  const result = await readGoals(goalsPathFor());
+  const [result, example] = await Promise.all([
+    readGoals(goalsPathFor()),
+    readExampleGoals(),
+  ]);
   const examplePath = goalsExampleFor();
+  const exampleGoals = example.ok ? example.goals : [];
   if (result.ok) {
-    return { ok: true, missing: false, message: "", goals: result.goals, examplePath };
+    return {
+      ok: true,
+      missing: false,
+      message: "",
+      goals: result.goals,
+      examplePath,
+      exampleGoals,
+    };
   }
   return {
     ok: false,
@@ -17,6 +34,7 @@ async function readRadarGoals(): Promise<GoalsTabData> {
     message: result.message,
     goals: [],
     examplePath,
+    exampleGoals,
   };
 }
 

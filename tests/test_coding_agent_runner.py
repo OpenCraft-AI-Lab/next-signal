@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -73,6 +74,12 @@ def _codex_preferences() -> CodingAgentPreferences:
 
 
 def _write_fixture(path: Path, provider: str, behavior: str = "success") -> Path:
+    # These are real-subprocess tests: the fixture is a shebang script the runner
+    # execs. Windows cannot exec one (WinError 193), so every test that builds a
+    # fixture skips there rather than failing. Guarding the helper keeps future
+    # tests covered without another decorator.
+    if sys.platform == "win32":
+        pytest.skip("POSIX-only: execs a #!/usr/bin/env python3 fixture")
     source = f"""#!/usr/bin/env python3
 import json
 import os

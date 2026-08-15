@@ -16,6 +16,10 @@ PROMPTS_DIR = PROJECT_ROOT / "prompts"
 STATE_ROOT = Path(os.environ.get("NEXT_SIGNAL_STATE_DIR", Path.home() / ".next-signal"))
 
 KNOWLEDGE_DIR = STATE_ROOT / "knowledge"
+# info-radar goal descriptors. User data, not deployment content: the dashboard
+# writes it and the scheduler reads it, so it must live on the shared state
+# volume rather than under image-baked `configs/`.
+GOALS_FILE = STATE_ROOT / "goals.yaml"
 AGENT_TMP_DIR = Path(os.environ.get("NEXT_SIGNAL_AGENT_TMP_DIR", STATE_ROOT / "agent-tmp"))
 LOGS_DIR = Path.home() / "Library" / "Logs" / "next-signal"
 

@@ -174,11 +174,12 @@ id 会被丢弃；一条主线如果没有任何引用存活下来，会被整�
 
 ### 1. 判断标准写在你自己的文件里
 
-`configs/info_radar/goals.yaml` 是一份编辑策略，不是一排话题滑块。它支持反目标和硬性
-否决规则，可以纳入版本控制，也可以在网页控制台里直接修改：
+`~/.next-signal/goals.yaml` 是一份编辑策略，不是一排话题滑块。它支持反目标和硬性
+否决规则，是一份属于你自己的纯 YAML 文件——从版本化的示例填充而来，之后归你，也可以
+在网页控制台里直接修改：
 
 ```yaml
-- name: science_breakthrough
+- name: science-breakthrough
   description: |
     追踪 AI 之外的重大科学与医学突破。……
     一票否决清单：任何一条成立就不是突破，无论这个发现听起来多重要。
@@ -279,15 +280,19 @@ Docker Compose 会一次带起 Postgres 与 pgvector、数据库结构、网页�
 git clone https://github.com/OpenCraft-AI-Lab/next-signal.git
 cd next-signal
 cp .env.example .env
-$EDITOR .env                 # 填 WIKI_DIR 和 WIKI_RAW_DIR
 docker compose up --build
 ```
 
 然后打开 <http://localhost:3000>，剩下的配置在设置页完成。
 
-启动前必填的只有两项：`WIKI_DIR` 和 `WIKI_RAW_DIR`，分别是清洗后 Markdown 知识库和
-原始内容归档的绝对宿主机路径。其余要么有默认值，要么属于你还没启用的信息源适配器；
+启动前不需要改任何东西。清洗后的 Markdown 知识库和原始内容归档默认落在仓库里的
+`state/wiki` 和 `state/wiki-raw`；想指向你自己的 Obsidian 仓库，就在 `.env` 里设
+`WIKI_DIR` 和 `WIKI_RAW_DIR`。其余要么有默认值，要么属于你还没启用的信息源适配器；
 完整列表和说明见 [`.env.example`](./.env.example)。
+
+已验证的平台是 macOS 和 Windows 上的 Docker Desktop。原生 Linux 的 Docker Engine
+也能跑，但会把这两个默认目录建成 root 所有——跑一次 `sudo chown -R $USER state/`，
+或者把 `WIKI_DIR` 指向一个你已经拥有的目录。
 
 **然后选择模型跑在哪里。** 这个选择在网页控制台里做，不在 `.env`，而且下一个 job
 不用重启就会生效：

@@ -41,7 +41,9 @@ repo-local `.env` 关键值：
 - `OMLX_BASE_URL` / `OMLX_API_KEY`
 - 各云模型 / API key（按需）
 - `GBRAIN_BIN`（`gbrain` 不在 `PATH` 时；dashboard 与后端同一套解析）
-- `WIKI_DIR` / `WIKI_RAW_DIR`（**必填**，无代码默认；缺失时 knowledge pipeline 与 dashboard wiki 视图 fail loud）
+- `WIKI_DIR` / `WIKI_RAW_DIR`（**代码层面必填**，无默认；缺失时 knowledge pipeline 与
+  dashboard wiki 视图 fail loud。跑 Docker Compose 时可以留空：Compose 会挂载
+  `./state/wiki` 和 `./state/wiki-raw` 并自己设定容器内的值，所以代码读到的地方永远有值）
 - `NEXT_SIGNAL_STATE_DIR` / `NEXT_SIGNAL_AGENT_TMP_DIR`（可选，测试或换路径）
 
 内容语言——radar 分析和 wiki frontmatter 用什么语言写——**不是** env var，而是 `global`
@@ -150,7 +152,19 @@ Postgres role。有三件事仓库里没有任何脚本能替你做：
 - 用户 state（`~/.next-signal/`）：`knowledge_ingest_manifest.json`、`language.json`
   （内容语言偏好）、`engine.json`（production LLM 选择）、`embedding.json`
   （dedup embedder 选择）、`coding-agents.json`（显式 Codex / Claude CLI 设置）、
-  `agent-tmp/`。
+  `goals.yaml`（info-radar 目标描述）、`agent-tmp/`。
+
+  `goals.yaml` 放这里而不是 `configs/` 下，是因为 dashboard 写它、scheduler 读它：
+  `configs/` 烤进镜像，写在那里只会落到某一个容器的可写层，另一个容器看不见，下次
+  rebuild 还会丢。容器 bootstrap 在全新安装时把
+  `configs/info_radar/goals.example.yaml` 复制过来。文件已存在就是 no-op，**包括**
+  里面是故意清空的 `goals:` 列表，所以清空目标这件事能扛过重启。
+
+  **不会**从旧的 `configs/info_radar/goals.yaml` 自动迁移——那个文件已被删除，而且
+  `configs/` 烤进镜像、没有任何 bind mount，这一步根本不可能跑起来。**从还带着那个
+  文件的版本升级？** 先把它拷到 `~/.next-signal/goals.yaml`（容器里用
+  `docker compose cp` 拷到 `/state/goals.yaml`）再升级，或者升级后从 git 历史里找回来；
+  否则第一次 bootstrap 会直接播种示例目标。
 - 知识库：`~/Projects/digitalpaca-wiki/`（clean）、`~/Projects/digitalpaca-wiki-raw/`（raw）
   ——路径由 `WIKI_DIR` / `WIKI_RAW_DIR` 指定，不是硬编码默认值。
 - agno 自管表（sessions / memory / knowledge / traces）：本地 Postgres + pgvector。
@@ -174,8 +188,9 @@ docker compose exec dashboard next-signal doctor     # 容器里
 Postgres 可达、
 configured agents、registered tools、GBrain CLI/service（`gbrain doctor --fast`）、
 folocli auth（`folocli whoami` — `FOLO_TOKEN` 或 `~/.folo/config.json` 任一可用即可）、
-info-radar `configs/info_radar/goals.yaml` 存在且可解析（缺则 `next-signal info-radar analyze`
-会 loud RuntimeError）。
+info-radar 运行时 goals 文件存在、可解析、且至少有一个目标。goals 这一项把三种失败
+分开报——完全没有文件、`goals:` 配成空列表、解析出错——因为处理方式不同；三种情况下
+`next-signal info-radar analyze` 都会 loud RuntimeError。
 代码层面不区分"必需"和"可选"检查——任一项失败（包括上面标为可选的 folocli auth）
 doctor 都退出非零；上面的必需/可选划分只是"这台机器不打算用这个功能就可以忽略对应的✗"。
 
@@ -279,8 +294,8 @@ uv run next-signal info-radar analyze [--limit N] [--source NAME]
                                                       # 跑两层 analysis pipeline，写 radar_analyses
                                                       # 由 CLI、dashboard 或调度器触发
                                                       # `seen_at` 保证任意频率重跑 idempotent
-                                                      # 前置：configs/info_radar/goals.yaml 必须存在
-                                                      # (cp configs/info_radar/goals.example.yaml configs/info_radar/goals.yaml 后手改)
+                                                      # 前置：运行时 goals 文件至少要有 1 个目标
+                                                      # (~/.next-signal/goals.yaml，bootstrap 填好；在 /goals 页面编辑)
 uv run next-signal info-radar subscriptions --json           # 读取 Folo 订阅，输出 dashboard 稳定 JSON 行
                                                       # 合并 `unread list` 拿每个 feed 的未读数
 uv run next-signal info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]

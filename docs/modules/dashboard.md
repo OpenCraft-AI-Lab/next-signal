@@ -20,7 +20,7 @@ feature either reads Postgres directly or spawns a one-shot `next-signal` CLI ch
 |---|---|---|
 | `/radar` | info-radar reader: today's tracker, filtering and sorting, Pull + Analyze (with live progress), range Recap panel, per-item Ingest to wiki | [info_filter.md](./info_filter.md), dashboard/README |
 | `/knowledge` | spaced-repetition review section (due cards + Seen / Refresh), wiki tree + file management, ANN search, preview, Re-index, URL ingest form + live progress panel | [knowledge.md](./knowledge.md) |
-| `/goals` | edits `configs/info_radar/goals.yaml` (mirrors the Python loader contract, atomic write) | dashboard/README |
+| `/goals` | edits `~/.next-signal/goals.yaml` — user state, shared with the scheduler (mirrors the Python loader contract, atomic write) | dashboard/README |
 | `/subscriptions` | read-only Folo subscription inventory | dashboard/README |
 
 ## Code structure

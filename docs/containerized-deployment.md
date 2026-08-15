@@ -147,8 +147,8 @@ directory, not the repository or the read-only `.env` mount.
 |---|---|
 | Docker Desktop / colima | The container runtime itself |
 | `.env` | Mounted read-only into `app`; kept out of the image because it holds live secrets |
-| `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | Knowledge content; bind-mounted so host and container agree. Paths must match `WIKI_DIR` / `WIKI_RAW_DIR` *inside* the container |
-| `~/.next-signal/` state | knowledge_ingest_manifest.json, agent-tmp/, and the settings the dashboard writes — `language.json`, `engine.json`, `coding-agents.json`, `schedule.json`, `embedding.json`. A named volume (or bind mount) so it survives rebuilds. These five are the reason the state root cannot be baked into the image: the dashboard writes them at runtime, every reader picks them up at call time without a restart, and they are hand-editable when a panel is not reachable |
+| `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | Knowledge content; bind-mounted so host and container agree. The host sources come from `WIKI_DIR` / `WIKI_RAW_DIR`, defaulting to `./state/wiki` and `./state/wiki-raw` when unset, so the stack starts against an unedited `.env`. Inside the container the paths are always `/wiki` and `/wiki-raw` |
+| `~/.next-signal/` state | knowledge_ingest_manifest.json, agent-tmp/, `goals.yaml`, and the settings the dashboard writes — `language.json`, `engine.json`, `coding-agents.json`, `schedule.json`, `embedding.json`. A named volume (or bind mount) so it survives rebuilds. These are the reason the state root cannot be baked into the image: the dashboard writes them at runtime, every reader picks them up at call time without a restart, and they are hand-editable when a panel is not reachable. `goals.yaml` is here for a sharper reason still — `dashboard` and `scheduler` are separate containers off one image, so a write under `/app/configs` would be visible to neither the other service nor the next build |
 | Published ports | `localhost:3000` is how you reach the container |
 | **OMLX / MLX model server** *(optional)* | **Cannot be containerized** (needs Metal GPU). Required for info-radar `analyze` **embeddings** unless a hosted embedder is selected in Settings. Cloud chat models do not need it. If used, the container reaches it at `host.docker.internal:<port>` |
 
@@ -276,8 +276,18 @@ auto-restart, persist data in volumes.**
 
 The repo ships `Dockerfile`, `docker-compose.yml`, and `.dockerignore` at its
 root. Prerequisites: Docker Engine + Compose v2, and a `.env` (copy from
-`.env.example`) with at least a cloud LLM key and `WIKI_DIR` /
-`WIKI_RAW_DIR` set to the host paths of your wiki repos.
+`.env.example`) with at least a cloud LLM key. `WIKI_DIR` / `WIKI_RAW_DIR` are
+optional — leave them blank and Compose mounts `./state/wiki` and
+`./state/wiki-raw`; set them to point at your own wiki repos instead.
+
+> **Supported platform: Docker Desktop on macOS and Windows.** Its file-sharing
+> layer maps ownership, so the default wiki directories Docker creates are usable
+> from both the container and the host. Native Linux Docker Engine runs the daemon
+> as root and creates them `root:root` — the stack works, but editing your own
+> wiki from the host needs `sudo chown -R $USER state/` once, or `WIKI_DIR`
+> pointed at a directory you already own. This is documented rather than
+> automated: every fix costs either a `.env` variable or committed placeholder
+> directories, and the containerized deployment does not target Linux today.
 
 > **Standing the stack up vs. verifying a change against it.** This section is
 > about the former. If you are checking whether an edit works — which loop to run
@@ -295,9 +305,9 @@ root. Prerequisites: Docker Engine + Compose v2, and a `.env` (copy from
 ### Quickstart
 
 1. Install/start Docker Engine + Compose v2 (Docker Desktop or colima).
-2. `cp .env.example .env`, then edit it: set at least one cloud LLM key
-   (DeepSeek/Anthropic/OpenAI) and `WIKI_DIR` / `WIKI_RAW_DIR` to the
-   host paths of your wiki repos.
+2. `cp .env.example .env`, then set at least one cloud LLM key
+   (DeepSeek/Anthropic/OpenAI). Leave `WIKI_DIR` / `WIKI_RAW_DIR` blank to use
+   the repo-relative defaults, or point them at your own wiki repos.
 3. Build and start the stack:
    ```bash
    docker compose up --build

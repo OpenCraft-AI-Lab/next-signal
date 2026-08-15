@@ -4,7 +4,9 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  FileText,
   Plus,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -14,7 +16,12 @@ import { toast } from "sonner";
 
 import { useI18n } from "@/components/i18n-provider";
 import { Button } from "@/components/ui/button";
-import { addGoal, deleteGoal, saveGoal } from "@/lib/actions/goals";
+import {
+  addGoal,
+  deleteGoal,
+  saveGoal,
+  seedGoalsFromExample,
+} from "@/lib/actions/goals";
 import type { GoalConfig, GoalsKind } from "@/lib/goals";
 
 type DraftGoal = {
@@ -281,19 +288,121 @@ function GoalCard({
   );
 }
 
+/**
+ * The shipped example goals, read-only.
+ *
+ * Available in every state, not just when the list is empty: wanting to consult
+ * the examples while your own goals are configured should not require deleting
+ * them first. Merging them in is deliberately not offered — example names can
+ * collide with configured names, and duplicates are rejected.
+ */
+function ExampleGoals({
+  goals,
+  path,
+}: {
+  goals: GoalConfig[];
+  path: string;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  if (goals.length === 0) return null;
+
+  return (
+    <div className="card" style={{ overflow: "hidden", marginTop: 4 }}>
+      <div className="goalhead">
+        <button
+          className="goalexp"
+          type="button"
+          onClick={() => setOpen(!open)}
+        >
+          {open ? (
+            <ChevronDown size={14} className="muted-2" />
+          ) : (
+            <ChevronRight size={14} className="muted-2" />
+          )}
+          <span className="row gap-6" style={{ alignItems: "center" }}>
+            <FileText size={13} className="muted-2" />
+            {t.goals.viewExamples}
+          </span>
+        </button>
+        <span className="elip muted" style={{ flex: 1, fontSize: 13 }}>
+          {t.goals.viewExamplesHint}
+        </span>
+        <span className="badge mono" style={{ marginLeft: 2 }}>
+          {path}
+        </span>
+      </div>
+      <div className={`collapsible ${open ? "open" : ""}`}>
+        <div className="inner">
+          <div className="goalbody col gap-8">
+            {goals.map((goal) => (
+              <div key={goal.name}>
+                <div className="row gap-8" style={{ alignItems: "center" }}>
+                  <span className="goalname mono">{goal.name}</span>
+                  <span className="badge">
+                    {t.goals.topicKeywordCount(
+                      goal.topics.length,
+                      goal.keywords.length,
+                    )}
+                  </span>
+                </div>
+                <p className="muted" style={{ margin: "4px 0 6px" }}>
+                  {goal.description}
+                </p>
+                <div className="row gap-6 wrap">
+                  {goal.topics.map((item) => (
+                    <span key={item} className="chip tag">
+                      {item}
+                    </span>
+                  ))}
+                  {goal.keywords.map((item) => (
+                    <span key={item} className="chip">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function GoalsEditor({
   kind,
   initialGoals,
+  exampleGoals,
+  examplePath,
 }: {
   kind: GoalsKind;
   initialGoals: GoalConfig[];
+  exampleGoals: GoalConfig[];
+  examplePath: string;
 }) {
   const { locale, t } = useI18n();
   const router = useRouter();
   const [goals, setGoals] = useState(initialGoals);
   const [draft, setDraft] = useState<DraftGoal>(EMPTY_DRAFT);
-  const [adding, setAdding] = useState(initialGoals.length === 0);
+  // Starts closed even with no goals: an empty list is now a real, savable
+  // state, so the page explains it and offers a choice rather than assuming the
+  // operator wants to type a goal right now.
+  const [adding, setAdding] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const seed = () => {
+    startTransition(async () => {
+      const result = await seedGoalsFromExample(kind, locale);
+      if (result.ok) {
+        toast.success(result.message);
+        setGoals(exampleGoals);
+        router.refresh();
+      } else {
+        toast.error(result.message);
+      }
+    });
+  };
 
   const onSaved = (next?: GoalConfig, deletedName?: string) => {
     if (deletedName) {
@@ -361,7 +470,35 @@ export function GoalsEditor({
           </div>
         </div>
       )}
-      {!adding && (
+      {!adding && goals.length === 0 && (
+        <div className="filter-empty" style={{ textAlign: "left" }}>
+          <strong style={{ color: "var(--text)" }}>{t.goals.emptyTitle}</strong>
+          <p style={{ margin: "6px 0 12px", lineHeight: 1.6 }}>
+            {t.goals.emptyBody}
+          </p>
+          <div className="row gap-8 wrap">
+            <Button
+              variant="primary"
+              type="button"
+              onClick={() => setAdding(true)}
+              disabled={pending}
+            >
+              <Plus size={14} /> {t.goals.addGoal}
+            </Button>
+            {exampleGoals.length > 0 && (
+              <Button
+                variant="ghost"
+                type="button"
+                onClick={seed}
+                disabled={pending}
+              >
+                <Sparkles size={14} /> {t.goals.startFromExample}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+      {!adding && goals.length > 0 && (
         <Button
           variant="primary"
           type="button"
@@ -374,6 +511,7 @@ export function GoalsEditor({
       {goals.map((goal) => (
         <GoalCard key={goal.name} kind={kind} goal={goal} onSaved={onSaved} />
       ))}
+      <ExampleGoals goals={exampleGoals} path={examplePath} />
     </div>
   );
 }

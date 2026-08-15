@@ -103,7 +103,11 @@ RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
 # Source + production build.
 COPY dashboard/ ./
 RUN pnpm build
-# Result: /app/dashboard with .next/ + node_modules/.
+# Drop devDependencies now that the build is done — same move as the opencli
+# stage. `next start` serves the prebuilt .next/ and needs runtime deps only,
+# so the test runner (tsx), linters, and type tooling never reach the image.
+RUN pnpm prune --prod
+# Result: /app/dashboard with .next/ + runtime-only node_modules/.
 
 # ---------------------------------------------------------------------------
 # Stage 6 — runtime. Python is primary; Node is layered in for the dashboard,

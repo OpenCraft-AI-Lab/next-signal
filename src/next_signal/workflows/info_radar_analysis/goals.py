@@ -1,8 +1,12 @@
-"""Load + validate ``configs/info_radar/goals.yaml``.
+"""Load + validate the runtime goals file in user state.
 
-A missing or empty file aborts with ``RuntimeError`` — the analysis workflow
-does not silently default a goal, because all tier-1 / tier-2 prompts are
-written assuming a real declared goal exists.
+Reading is a pure read: it never creates, repairs, or seeds the file. Populating it
+belongs to :mod:`next_signal.workflows.info_radar_analysis.provision` and to the
+dashboard's "Start from example" control.
+
+A missing file and an empty ``goals:`` list both abort with ``RuntimeError`` under
+distinct messages — "not set up yet" versus "you cleared them". There is no
+implicit default goal; every tier-1 / tier-2 prompt assumes a real declared one.
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ from typing import Any
 
 import yaml
 
-from next_signal.core.paths import CONFIGS_DIR
+from next_signal.core import paths
 
 
 @dataclass(frozen=True)
@@ -25,11 +29,19 @@ class Goal:
 
 
 def goals_path() -> Path:
-    return CONFIGS_DIR / "info_radar" / "goals.yaml"
+    """The runtime goals file. Read through ``paths`` so tests can patch it."""
+    return paths.GOALS_FILE
+
+
+def goals_example_path() -> Path:
+    """The shipped example, used as the seed source. Never written to."""
+    return paths.CONFIGS_DIR / "info_radar" / "goals.example.yaml"
 
 
 def load_goals(path: Path | None = None) -> list[Goal]:
     """Parse the YAML and return a list of validated goals.
+
+    Never writes: a missing file is reported, not created.
 
     Fails fast on:
       * missing file
@@ -40,8 +52,8 @@ def load_goals(path: Path | None = None) -> list[Goal]:
     path = path or goals_path()
     if not path.exists():
         raise RuntimeError(
-            f"info-radar goals config not found at {path}; "
-            "copy goals.example.yaml to goals.yaml and edit."
+            f"info-radar goals file not found at {path}; "
+            "configure goals on the dashboard's /goals page"
         )
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(raw, dict):
@@ -53,8 +65,16 @@ def load_goals(path: Path | None = None) -> list[Goal]:
         raise RuntimeError(f"{path}: unknown top-level keys {sorted(extra_top)}")
 
     raw_goals = raw.get("goals")
-    if not isinstance(raw_goals, list) or not raw_goals:
-        raise RuntimeError(f"{path}: `goals:` must be a non-empty list")
+    if not isinstance(raw_goals, list):
+        raise RuntimeError(f"{path}: `goals:` must be a list")
+    # Distinct from the malformed case above and from a missing file: an empty
+    # list is a state the operator can deliberately save from /goals, so the
+    # message says so rather than implying the file is broken.
+    if not raw_goals:
+        raise RuntimeError(
+            f"{path}: no goals configured (`goals:` is empty); "
+            "add one on the dashboard's /goals page"
+        )
 
     goals: list[Goal] = []
     seen: set[str] = set()
@@ -116,4 +136,10 @@ def render_goals_block(goals: list[Goal]) -> str:
     return "\n".join(lines).strip()
 
 
-__all__ = ["Goal", "load_goals", "goals_path", "render_goals_block"]
+__all__ = [
+    "Goal",
+    "load_goals",
+    "goals_path",
+    "goals_example_path",
+    "render_goals_block",
+]

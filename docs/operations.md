@@ -46,8 +46,11 @@ Key values in the repo-local `.env`:
 - Cloud model / API keys, as needed
 - `GBRAIN_BIN` (when `gbrain` is not on `PATH`; the dashboard and backend resolve
   it the same way)
-- `WIKI_DIR` / `WIKI_RAW_DIR` (**required**, no code default — when
-  missing, the knowledge pipeline and the dashboard wiki view fail loud)
+- `WIKI_DIR` / `WIKI_RAW_DIR` (**required by the code**, no default — when missing,
+  the knowledge pipeline and the dashboard wiki view fail loud. Under Docker
+  Compose you can leave them blank: Compose mounts `./state/wiki` and
+  `./state/wiki-raw` and sets the in-container values itself, so the variables
+  are always present where the code reads them)
 - `NEXT_SIGNAL_STATE_DIR` / `NEXT_SIGNAL_AGENT_TMP_DIR` (optional, for tests or alternate paths)
 
 The content language — what radar analyses and wiki frontmatter are written in —
@@ -174,7 +177,23 @@ a `paca` Postgres role. Three steps are not covered by any script in the repo:
 - User state (`~/.next-signal/`): `knowledge_ingest_manifest.json`, `language.json`
   (the content-language preference), `engine.json` (production LLM selection),
   `embedding.json` (dedup embedder selection), `coding-agents.json` (explicit
-  Codex and Claude CLI settings), `agent-tmp/`.
+  Codex and Claude CLI settings), `goals.yaml` (info-radar goal descriptors),
+  `agent-tmp/`.
+
+  `goals.yaml` lives here rather than under `configs/` because the dashboard
+  writes it and the scheduler reads it: `configs/` is baked into the image, so a
+  write there would land in one container's writable layer, stay invisible to the
+  other, and be discarded by the next rebuild. Container bootstrap copies
+  `configs/info_radar/goals.example.yaml` here on a fresh install. It is a no-op
+  once the file exists, including when the file holds a deliberately empty
+  `goals:` list, so clearing your goals survives a restart.
+
+  There is no automatic migration from the older `configs/info_radar/goals.yaml`,
+  which is deleted: `configs/` is image-baked and bind-mounted by nothing, so such
+  a step could never run. **Upgrading from a revision that still had that file?**
+  Copy it to `~/.next-signal/goals.yaml` — or `docker compose cp` it to
+  `/state/goals.yaml` — before you upgrade, or recover it from git history
+  afterwards. Otherwise the first bootstrap seeds the examples instead.
 - Knowledge base: `~/Projects/digitalpaca-wiki/` (clean) and
   `~/Projects/digitalpaca-wiki-raw/` (raw) — these paths come from
   `WIKI_DIR` / `WIKI_RAW_DIR`, they are not hardcoded defaults.
@@ -204,8 +223,10 @@ reported as a failed check rather than crashing doctor),
 Postgres reachability, configured agents, registered tools, the
 GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`folocli whoami` —
 either `FOLO_TOKEN` or `~/.folo/config.json` is enough), and that info-radar's
-`configs/info_radar/goals.yaml` exists and parses (without it,
-`next-signal info-radar analyze` raises a loud `RuntimeError`).
+runtime goals file exists, parses, and declares at least one goal. The goals
+check reports three failures distinctly — no file at all, a configured-but-empty
+`goals:` list, and a parse error — because they call for different fixes; in
+every case `next-signal info-radar analyze` raises a loud `RuntimeError`.
 
 The code does **not** distinguish "required" from "optional" checks — **any**
 failure exits non-zero, including the folocli auth listed as optional above. The
@@ -337,8 +358,8 @@ uv run next-signal info-radar analyze [--limit N] [--source NAME]
                                                       # run the two-tier analysis pipeline → radar_analyses
                                                       # triggered from the CLI, the dashboard, or the scheduler
                                                       # `seen_at` keeps reruns idempotent at any cadence
-                                                      # prerequisite: configs/info_radar/goals.yaml must exist
-                                                      # (cp configs/info_radar/goals.example.yaml configs/info_radar/goals.yaml, then edit)
+                                                      # prerequisite: the runtime goals file must declare >=1 goal
+                                                      # (~/.next-signal/goals.yaml, seeded by bootstrap; edit on /goals)
 uv run next-signal info-radar subscriptions --json           # read Folo subscriptions as stable JSON lines
                                                       # merges `unread list` for per-feed unread counts
 uv run next-signal info-radar recap --since D --until D [--min-score N] [--novel-only] [--regenerate]

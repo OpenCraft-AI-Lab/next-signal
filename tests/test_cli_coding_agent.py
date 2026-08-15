@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 
 import pytest
 from typer.testing import CliRunner
@@ -57,6 +58,10 @@ profiles:
 
 
 def _write_cli(path: Path, provider: str, *, fail: bool = False) -> Path:
+    # See test_coding_agent_runner._write_fixture: Windows cannot exec a shebang
+    # script, so fixture-backed tests skip rather than fail there.
+    if sys.platform == "win32":
+        pytest.skip("POSIX-only: execs a #!/usr/bin/env python3 fixture")
     source = f"""#!/usr/bin/env python3
 import json
 import sys

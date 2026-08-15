@@ -12,6 +12,8 @@ export type GoalsTabData = {
   message: string;
   goals: GoalConfig[];
   examplePath: string;
+  /** Shipped reference goals, shown read-only. Empty if unreadable. */
+  exampleGoals: GoalConfig[];
 };
 
 export function GoalsTabs({ radar }: { radar: GoalsTabData }) {
@@ -43,7 +45,12 @@ export function GoalsTabs({ radar }: { radar: GoalsTabData }) {
         </div>
       )}
 
-      <GoalsEditor kind="radar" initialGoals={radar.goals} />
+      <GoalsEditor
+        kind="radar"
+        initialGoals={radar.goals}
+        exampleGoals={radar.exampleGoals}
+        examplePath={radar.examplePath}
+      />
     </>
   );
 }
