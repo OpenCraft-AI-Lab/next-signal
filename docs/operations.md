@@ -183,11 +183,17 @@ a `paca` Postgres role. Three steps are not covered by any script in the repo:
   `goals.yaml` lives here rather than under `configs/` because the dashboard
   writes it and the scheduler reads it: `configs/` is baked into the image, so a
   write there would land in one container's writable layer, stay invisible to the
-  other, and be discarded by the next rebuild. Container bootstrap seeds the file
-  on a fresh install — migrating an older `configs/info_radar/goals.yaml` if one
-  exists, otherwise copying `configs/info_radar/goals.example.yaml`. It is a
-  no-op once the file exists, including when the file holds a deliberately empty
+  other, and be discarded by the next rebuild. Container bootstrap copies
+  `configs/info_radar/goals.example.yaml` here on a fresh install. It is a no-op
+  once the file exists, including when the file holds a deliberately empty
   `goals:` list, so clearing your goals survives a restart.
+
+  There is no automatic migration from the older `configs/info_radar/goals.yaml`,
+  which is deleted: `configs/` is image-baked and bind-mounted by nothing, so such
+  a step could never run. **Upgrading from a revision that still had that file?**
+  Copy it to `~/.next-signal/goals.yaml` — or `docker compose cp` it to
+  `/state/goals.yaml` — before you upgrade, or recover it from git history
+  afterwards. Otherwise the first bootstrap seeds the examples instead.
 - Knowledge base: `~/Projects/digitalpaca-wiki/` (clean) and
   `~/Projects/digitalpaca-wiki-raw/` (raw) — these paths come from
   `WIKI_DIR` / `WIKI_RAW_DIR`, they are not hardcoded defaults.

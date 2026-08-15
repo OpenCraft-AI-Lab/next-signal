@@ -50,22 +50,24 @@ fix is a default, not a UI.
   no hardcoded default; that stays true, because the compose `environment:` block
   still sets `WIKI_DIR=/wiki` inside every container. Only the *host mount source*
   gains a default, consumed by Docker and never by Python or Node.
-- **Existing deployments migrate once.** A `configs/info_radar/goals.yaml` at the
-  old path is copied into state when state has no goals file, so an upgrade never
-  resets a curated list to the examples. **BREAKING** only for goal edits that
-  existed solely inside a container's writable layer — those were already lost on
-  every rebuild and are not recoverable.
 - **The tracked `configs/info_radar/goals.yaml` is deleted.** Once goals are user
   state, a committed copy is stale by construction: the dashboard writes
   `/state/goals.yaml` and the repo file freezes at whatever it last said, while
   still looking authoritative to anyone who opens it — including the
   `radar-prompt-tuning` skill's reader. It was also the last file publishing the
-  maintainer's own interests from a public repository. The migration path in
-  `provision.py` stays for deployments upgrading across this change and is a
-  candidate for removal in a later cleanup; `goals.example.yaml` is unaffected.
-  **BREAKING** for any deployment that has not yet run bootstrap on this change:
-  with the repo file gone, provisioning seeds the example instead of migrating,
-  so upgrade the stack before pulling a revision that lacks it.
+  maintainer's own interests from a public repository. `goals.example.yaml` is
+  unaffected.
+- **No automatic migration, because none can run.** Provisioning seeds from
+  `goals.example.yaml` and nothing else. A migrate-from-the-old-path branch would
+  read `/app/configs/info_radar/goals.yaml`, which this same change deletes and
+  which no compose service bind-mounts — so it could never fire on any image built
+  from this revision, and shipping it would be dead code dressed as a guarantee.
+  **BREAKING** for an existing deployment with a curated repo-path goals file:
+  copy it to `~/.next-signal/goals.yaml` (`/state/goals.yaml` in the container)
+  **before** upgrading, or recover it from git history afterwards — otherwise the
+  first bootstrap on the new revision seeds the examples instead. Also **BREAKING**
+  for goal edits that existed solely inside a container's writable layer; those
+  were already lost on every rebuild and are not recoverable.
 
 Deliberately out of scope: `sources.yaml`, which stays in the repo because it is
 an argv descriptor — a literal command line plus a parser name that must exist in
@@ -101,22 +103,28 @@ no new capability surface.
 **Modified code**
 
 - `src/next_signal/workflows/info_radar_analysis/goals.py` — state-relative
-  `goals_path()`, atomic seed-if-absent, empty-list error message
+  `goals_path()`, the example path, empty-list error message; still a pure read
 - `src/next_signal/core/paths.py` — the state-relative goals path
 - `dashboard/lib/goals.ts` — `GOALS_PATH` via `stateRoot()`; example path stays
-  repo-relative; matching seed-if-absent
-- `dashboard/lib/actions/goals.ts` — the empty-list rejection goes
+  repo-relative
+- `dashboard/lib/actions/goals.ts` — the empty-list rejection goes; the
+  **Start from example** write arrives
 - `dashboard/components/goals/goals-editor.tsx` — deleting the last goal allowed,
-  with an explicit empty state
+  with an explicit empty state and a read-only examples disclosure
 - `dashboard/lib/i18n/dictionaries.ts` — both locales
 - `docker-compose.yml` — `:-` defaults on both wiki sources in both anchors
-- `scripts/container_bootstrap.sh` — one-time migration from the old repo path
+- `scripts/container_bootstrap.sh` — one provisioning step after the DB schema
 - `src/next_signal/interfaces/cli.py` — the doctor goals check
+
+**Added**
+
+- `src/next_signal/workflows/info_radar_analysis/provision.py` — seed-if-absent,
+  invoked from bootstrap only; never from a read path
 
 **Deleted**
 
 - `configs/info_radar/goals.yaml` — tracked user data superseded by the state
-  file; read by nothing after migration
+  file; read by nothing once the readers point at `STATE_ROOT`
 
 **Unchanged on purpose**: `configs/info_radar/goals.example.yaml`,
 `configs/info_radar/sources.yaml`, `collectors/info_radar/loader.py`, and every

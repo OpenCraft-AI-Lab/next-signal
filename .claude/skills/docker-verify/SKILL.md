@@ -27,8 +27,8 @@ there. Before trusting any result, know which loop you owe.
 
 | You edited | Loop | Cost |
 |---|---|---|
-| wiki content, `/state` | nothing — already live | 0s |
-| `tests/`, `docs/`, `openspec/` | nothing — dockerignored, never in the image | 0s |
+| wiki content, `/state` (incl. `goals.yaml`) | nothing — already live | 0s |
+| `tests/`, `docs/`, `openspec/`, any `*.test.ts` | nothing — dockerignored, never in the image | 0s |
 | `src/`, `configs/`, `prompts/`, `scripts/` | `docker compose build <svc>` + `up -d <svc>` | ~5–20s |
 | `dashboard/` | `docker compose build <svc>` + `up -d <svc>` | minutes (`pnpm build`) |
 | `.env` | `docker compose up -d --force-recreate <svc>` | ~5s |
@@ -45,9 +45,11 @@ re-runs.
   Host and container see the same bytes immediately. No rebuild, no recreate.
 - **Image-baked** — `/app`: `src/`, `configs/`, `prompts/`, `scripts/`,
   `dashboard/`. Requires build + recreate.
-- **Excluded** — `tests/`, `docs/`, `openspec/` are in `.dockerignore`. They
-  never enter the build context, so editing them cannot invalidate the cache and
-  cannot be verified in a container.
+- **Excluded** — `tests/`, `docs/`, `openspec/`, and `**/*.test.ts` /
+  `**/*.test.mjs` are in `.dockerignore`. They never enter the build context, so
+  editing them cannot invalidate the cache and cannot be verified in a container.
+  The last two matter because the dashboard's tests sit beside the source they
+  exercise, so `tests/` alone does not cover them.
 
 Confirm the live set any time you doubt it:
 
@@ -128,7 +130,9 @@ Use `run --rm` when the target service is not running, when you do not want to
 touch the serving container, or for the one-shot `bootstrap` service. `run` does
 not publish ports, so it will not collide with the running dashboard.
 
-`bootstrap` is a one-shot that exits 0 after schema setup. `exec` against it
+`bootstrap` is a one-shot that exits 0 after setup: the main DB schema, the
+runtime goals file on `/state` (seeded from `goals.example.yaml` only when
+absent), and gbrain's database. None of it spends model tokens. `exec` against it
 fails:
 
 ```
@@ -307,13 +311,19 @@ For a long analyze run, poll `GET /api/radar/run` rather than tailing.
 
 ## Tests do not run in the container
 
-There is no `tests/` directory and no runner in the image (`.dockerignore`
-excludes the suite; `uv sync --no-dev` omits pytest). `pytest` inside the
-container fails with `Failed to spawn: pytest`.
+Neither suite nor runner reaches the image, on either side:
 
-**Unit tests run on the host** — `uv run pytest -q`. Containers are for runtime
-and end-to-end verification only. Do not try to reconcile these; it is the
-intended split.
+- **Python** — `.dockerignore` excludes `tests/`, `uv sync --no-dev` omits pytest.
+  `pytest` inside the container fails with `Failed to spawn: pytest`.
+- **Dashboard** — `.dockerignore` excludes `**/*.test.ts` (they live beside the
+  source, so `tests/` does not cover them), and `pnpm prune --prod` after
+  `pnpm build` drops `tsx` along with the linters and type tooling. `typescript`
+  itself is a runtime dependency on purpose: Next reads `next.config.ts` at
+  startup and re-installs it on every boot otherwise.
+
+**Unit tests run on the host** — `uv run pytest -q`, and `pnpm test` in
+`dashboard/`. Containers are for runtime and end-to-end verification only. Do not
+try to reconcile these; it is the intended split.
 
 ---
 

@@ -6,7 +6,7 @@ import { test } from "node:test";
 
 import { stateRoot } from "./paths";
 import {
-  GOALS_PATH,
+  goalsPathFor,
   parseGoalsYaml,
   readGoals,
   renderGoalsYaml,
@@ -119,8 +119,20 @@ test("writeGoalsAtomic persists an emptied goals list", async () => {
   if (result.ok) assert.deepEqual(result.goals, []);
 });
 
-test("GOALS_PATH resolves under the state root, not the repo", () => {
-  assert.equal(path.basename(GOALS_PATH), "goals.yaml");
-  assert.equal(path.dirname(GOALS_PATH), stateRoot());
-  assert.ok(!GOALS_PATH.includes(`${path.sep}configs${path.sep}`));
+test("goalsPathFor resolves under the state root, not the repo", () => {
+  const resolved = goalsPathFor();
+  assert.equal(path.basename(resolved), "goals.yaml");
+  assert.equal(path.dirname(resolved), stateRoot());
+  assert.ok(!resolved.includes(`${path.sep}configs${path.sep}`));
+});
+
+test("goalsPathFor follows NEXT_SIGNAL_STATE_DIR at call time", () => {
+  const before = process.env.NEXT_SIGNAL_STATE_DIR;
+  process.env.NEXT_SIGNAL_STATE_DIR = path.join(os.tmpdir(), "ns-state-probe");
+  try {
+    assert.equal(path.dirname(goalsPathFor()), process.env.NEXT_SIGNAL_STATE_DIR);
+  } finally {
+    if (before === undefined) delete process.env.NEXT_SIGNAL_STATE_DIR;
+    else process.env.NEXT_SIGNAL_STATE_DIR = before;
+  }
 });

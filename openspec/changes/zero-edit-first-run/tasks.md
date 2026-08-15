@@ -13,12 +13,12 @@
 ## 3. Provisioning at bootstrap
 
 - [x] 3.1 Provision the runtime goals file from `scripts/container_bootstrap.sh`, which already runs one-time setup before `dashboard` and `scheduler` start. Do not provision from any read path.
-- [x] 3.2 Order migration before seeding: if `configs/info_radar/goals.yaml` exists and the state file does not, copy that file into state; copy `goals.example.yaml` only when neither exists. A curated goals list must never be replaced by the examples.
+- [x] 3.2 Seed from `configs/info_radar/goals.example.yaml` and nothing else. Do **not** implement a migrate-from-`configs/info_radar/goals.yaml` branch: this change deletes that file and no compose service bind-mounts `configs/`, so the branch could never fire on an image built from this revision (D7). Operators upgrading with a curated list copy it into state by hand, per the migration plan.
 - [x] 3.3 **Guard on the state file's existence, never on its goal count.** A count-based guard would restore the example goals on the next `docker compose up` after an operator deliberately cleared them. This is the detail most likely to be implemented wrongly.
 - [x] 3.4 Write atomically — temporary file inside the state directory, then move into place — so a partially written file is never observable, and repeated `docker compose up` runs are idempotent.
 - [x] 3.5 Keep `load_goals()` a pure read: it must not create, modify, or repair the file. A missing file raises `RuntimeError` naming the resolved state path.
 - [x] 3.6 Verify `goals.example.yaml` passes `load_goals()` unmodified — it must remain a valid runtime document, not a commented-out template.
-- [x] 3.7 Leave the old `configs/info_radar/goals.yaml` in place after migration; do not delete a tracked file the operator may have edited.
+- [x] 3.7 Delete the tracked `configs/info_radar/goals.yaml`. A committed copy of a file the dashboard now writes elsewhere is stale by construction and still reads as authoritative; it was also the last file publishing the maintainer's own interests from a public repo. Leave `goals.example.yaml` untouched.
 
 ## 4. Empty-list semantics
 
@@ -47,7 +47,7 @@
 - [x] 7.1 Python: loading resolves the state path; a missing file raises `RuntimeError` **and creates nothing**; an empty `goals:` list raises with a distinct message; duplicate names and unknown keys still raise.
 - [x] 7.2 Provisioning is idempotent — a second run does not overwrite an existing file, whatever it contains.
 - [x] 7.3 Provisioning does not repopulate an emptied list: with a state file holding an empty `goals:` list, a further run leaves it empty. This is the regression test for task 3.3.
-- [x] 7.4 Migration precedence — with an old repo-path file present and no state file, the repo file's content lands in state and the example does not.
+- [x] 7.4 Provisioning fails loudly when the example source is missing, rather than creating an empty or partial goals file.
 - [x] 7.5 Dashboard: `goals.test.ts` covers state-path resolution, that rendering writes nothing, that **Start from example** writes the examples, and that saving a zero-length list now succeeds.
 - [x] 7.6 Use `tmp_path` with a patched `STATE_ROOT` rather than mocking the filesystem, per the project's fixture-over-mock rule.
 

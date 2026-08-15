@@ -13,7 +13,7 @@
 #
 # Schema (strict — unknown keys fail the loader fast):
 #   goals:
-#     - name: <unique id>
+#     - name: <kebab-case unique id>
 #       description: <one-sentence purpose, used in agent prompts>
 #       topics: [<broad area>, ...]        # what kinds of things matter
 #       keywords: [<exact word>, ...]      # high-precision tokens
@@ -23,7 +23,7 @@
 # is no implicit default goal.
 
 goals:
-  - name: ai_research_tracking
+  - name: ai-research-tracking
     description: "Stay current on AI research with practical engineering impact."
     topics:
       - "LLM inference optimization"

@@ -10,14 +10,7 @@ import { getLocale } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Reads only. Provisioning the runtime goals file belongs to container bootstrap
- * and to the explicit "Start from example" control — never to a page render.
- *
- * The example goals are read here so the reference disclosure can be shown in
- * every state without a round trip; a failure to read them is not fatal, since
- * they are reference material rather than the page's subject.
- */
+/** Reads only — rendering never provisions. Unreadable examples degrade to none. */
 async function readRadarGoals(): Promise<GoalsTabData> {
   const [result, example] = await Promise.all([
     readGoals(goalsPathFor()),

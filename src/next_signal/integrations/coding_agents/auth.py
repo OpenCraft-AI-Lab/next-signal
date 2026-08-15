@@ -22,12 +22,9 @@ import time
 from typing import IO, Any, Literal, TypedDict, cast
 from urllib.parse import urlsplit
 
-# `pty` and `termios` are POSIX-only and are imported where they are used, not
-# here. Provider login genuinely needs a PTY, so that path stays POSIX-only —
-# but importing this module must not. `auth_argv`, `check_auth_status`,
-# `logout`, and `extract_login_urls` are all portable, and a module-level
-# import made the whole test suite uncollectable on Windows rather than
-# failing only the one path that cannot work there.
+# `pty` and `termios` are imported where they are used: they are POSIX-only, and a
+# module-level import made this whole module unimportable on Windows rather than
+# failing only the login path that genuinely needs a PTY.
 
 from next_signal.integrations.coding_agents.discovery import resolve_executable
 from next_signal.integrations.coding_agents.types import ProviderName

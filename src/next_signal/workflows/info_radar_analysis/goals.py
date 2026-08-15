@@ -1,14 +1,12 @@
 """Load + validate the runtime goals file in user state.
 
-Reading is a pure read: it never creates, repairs, or seeds the file. Populating
-it is a setup step owned by :mod:`next_signal.workflows.info_radar_analysis.provision`
-(run from ``scripts/container_bootstrap.sh``) and by the dashboard's explicit
-"Start from example" control.
+Reading is a pure read: it never creates, repairs, or seeds the file. Populating it
+belongs to :mod:`next_signal.workflows.info_radar_analysis.provision` and to the
+dashboard's "Start from example" control.
 
-A missing file and an empty ``goals:`` list both abort with ``RuntimeError``, and
-carry distinct messages — one means "not set up yet", the other means "you cleared
-them". The analysis workflow never silently defaults a goal, because all tier-1 /
-tier-2 prompts are written assuming a real declared goal exists.
+A missing file and an empty ``goals:`` list both abort with ``RuntimeError`` under
+distinct messages — "not set up yet" versus "you cleared them". There is no
+implicit default goal; every tier-1 / tier-2 prompt assumes a real declared one.
 """
 
 from __future__ import annotations

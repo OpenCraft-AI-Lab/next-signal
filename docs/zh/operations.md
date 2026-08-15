@@ -156,10 +156,15 @@ Postgres role。有三件事仓库里没有任何脚本能替你做：
 
   `goals.yaml` 放这里而不是 `configs/` 下，是因为 dashboard 写它、scheduler 读它：
   `configs/` 烤进镜像，写在那里只会落到某一个容器的可写层，另一个容器看不见，下次
-  rebuild 还会丢。容器 bootstrap 在全新安装时把它填好——有旧的
-  `configs/info_radar/goals.yaml` 就迁移过来，否则复制
-  `configs/info_radar/goals.example.yaml`。文件已存在就是 no-op，**包括**里面是
-  故意清空的 `goals:` 列表，所以清空目标这件事能扛过重启。
+  rebuild 还会丢。容器 bootstrap 在全新安装时把
+  `configs/info_radar/goals.example.yaml` 复制过来。文件已存在就是 no-op，**包括**
+  里面是故意清空的 `goals:` 列表，所以清空目标这件事能扛过重启。
+
+  **不会**从旧的 `configs/info_radar/goals.yaml` 自动迁移——那个文件已被删除，而且
+  `configs/` 烤进镜像、没有任何 bind mount，这一步根本不可能跑起来。**从还带着那个
+  文件的版本升级？** 先把它拷到 `~/.next-signal/goals.yaml`（容器里用
+  `docker compose cp` 拷到 `/state/goals.yaml`）再升级，或者升级后从 git 历史里找回来；
+  否则第一次 bootstrap 会直接播种示例目标。
 - 知识库：`~/Projects/digitalpaca-wiki/`（clean）、`~/Projects/digitalpaca-wiki-raw/`（raw）
   ——路径由 `WIKI_DIR` / `WIKI_RAW_DIR` 指定，不是硬编码默认值。
 - agno 自管表（sessions / memory / knowledge / traces）：本地 Postgres + pgvector。

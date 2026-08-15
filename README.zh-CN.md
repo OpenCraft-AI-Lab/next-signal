@@ -179,7 +179,7 @@ id 会被丢弃；一条主线如果没有任何引用存活下来，会被整�
 在网页控制台里直接修改：
 
 ```yaml
-- name: science_breakthrough
+- name: science-breakthrough
   description: |
     追踪 AI 之外的重大科学与医学突破。……
     一票否决清单：任何一条成立就不是突破，无论这个发现听起来多重要。

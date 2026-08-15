@@ -36,10 +36,9 @@ def _check_folocli() -> tuple[str, bool, str]:
 def _check_goals_yaml() -> tuple[str, bool, str]:
     """Verify the runtime goals file loads. No LLM call.
 
-    Three failures, three messages. "Not set up yet", "you cleared them", and
-    "the file is broken" want different reactions from the operator, and an
-    empty list is now a state they can deliberately save — so it must not read
-    as corruption.
+    Three failures, three messages: "not set up yet", "you cleared them", and "the
+    file is broken" call for different reactions, and the middle one is a state the
+    operator can deliberately save — so it must not read as corruption.
     """
     import yaml
 
@@ -53,10 +52,11 @@ def _check_goals_yaml() -> tuple[str, bool, str]:
         goals = load_goals(path)
     except Exception as e:  # noqa: BLE001
         # Distinguish a deliberately emptied list from a parse/validation error
-        # without duplicating the loader's schema rules here.
+        # without duplicating the loader's schema rules here. A hand-edited file
+        # left as a bare `goals:` is null, not `[]`, and means the same thing.
         try:
             raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            emptied = isinstance(raw, dict) and raw.get("goals") == []
+            emptied = isinstance(raw, dict) and "goals" in raw and raw["goals"] in (None, [])
         except Exception:  # noqa: BLE001
             emptied = False
         if emptied:

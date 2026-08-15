@@ -175,15 +175,26 @@ Pre-existing conditions this change does not alter: bind mounts through the Dock
 Desktop VM are slow for many small files; macOS is case-insensitive while the
 container is not; Windows `MAX_PATH` can bite on deep taxonomy plus long titles.
 
-### D7. Migrate an existing repo-path goals file exactly once
+### D7. Delete the tracked repo-path goals file, and do not migrate from it
 
-If `configs/info_radar/goals.yaml` exists and the state file does not, copy it into
-state before the seed would fire. **Order matters: migrate, then seed**, so a
-curated list is never overwritten by the examples. The state file's existence is
-the guard, which keeps the operation idempotent across repeated
-`docker compose up` runs. Migration runs in the same place as seeding (D2) and
-under the same guard, so the precedence is decided once rather than in two
-codebases.
+`configs/info_radar/goals.yaml` is deleted. A committed copy of a file the
+dashboard now writes elsewhere is stale the moment anyone saves, while still
+reading as authoritative — and it was the last file publishing the maintainer's
+own interests from a public repository.
+
+**No migrate-then-seed step is implemented, because it could never run.** The
+obvious version — "if the old repo file exists and the state file does not, copy
+it in first" — reads `/app/configs/info_radar/goals.yaml`. `configs/` is baked
+into the image and no compose service bind-mounts it, so on any image built from
+this revision that path is absent *by construction*: the same change deleted it.
+The branch would be unreachable code carrying the authority of a guarantee, which
+is worse than no branch at all. Provisioning therefore has exactly one source,
+`goals.example.yaml`, and one guard, the state file's existence (D2).
+
+*Consequence accepted, and the reason this is called out in the migration plan:*
+an operator upgrading with a curated repo-path goals file gets the examples
+seeded, not their list. The honest remedy is a documented one-line copy before
+upgrading, not a code path that cannot fire.
 
 *Deliberately not attempted:* recovering goal edits that only ever existed inside
 a container's writable layer. They were already lost on each rebuild, and guessing
@@ -215,20 +226,25 @@ which layer to read would be worse than saying so plainly.
   scheduler treats an absent `schedule.json` as disabled, so a fresh install cannot
   spend tokens scoring against the examples until the operator turns the schedule
   on.
-- **Native Linux root-owned bind sources** → an unusable default wiki directory.
-  Mitigation: create both directories with correct ownership during bootstrap
-  (D6).
+- **An upgrader's curated repo-path goals file is replaced by the examples** →
+  they never asked for somebody else's interests. Mitigation: a documented copy
+  step before upgrading (Migration Plan) and the old content's presence in git
+  history. Not mitigated in code, deliberately — see D7.
 
 ## Migration Plan
 
-1. Ship the readers pointing at `STATE_ROOT`, with migrate-then-seed ordering
-   (D7). No operator action required.
-2. On the first `docker compose up` after upgrade, bootstrap populates state: an
-   existing `configs/info_radar/goals.yaml` is copied in; otherwise the example is
-   seeded. Host-native installs populate state when the operator opens `/goals`,
-   or receive a loud, actionable error from the loader before then.
-3. The old repo file is left in place, not deleted — it is harmless, and removing a
-   tracked file the operator may have edited is not this change's business.
+1. **Before upgrading**, an operator with a curated `configs/info_radar/goals.yaml`
+   copies it to `~/.next-signal/goals.yaml` — or, in a running stack,
+   `docker compose cp` it to `/state/goals.yaml`. This is the only step that needs
+   doing by hand, and it exists because the file is deleted rather than migrated
+   (D7). Skipping it is recoverable: the old content is in git history.
+2. Ship the readers pointing at `STATE_ROOT`. The tracked repo-path file is
+   deleted in the same revision.
+3. On the first `docker compose up` after upgrade, bootstrap seeds
+   `goals.example.yaml` into state if and only if no state file exists — so a
+   goals file copied in at step 1 is left alone. Host-native installs populate
+   state when the operator opens `/goals`, or receive a loud, actionable error
+   from the loader before then.
 4. Compose defaults take effect on the next `docker compose up`. An operator with
    `WIKI_DIR` already set in `.env` sees no change at all.
 

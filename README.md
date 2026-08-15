@@ -200,7 +200,7 @@ It supports anti-goals and hard vetoes, is a plain YAML file you own — seeded
 from a versioned example, then yours — and is editable from the dashboard:
 
 ```yaml
-- name: science_breakthrough
+- name: science-breakthrough
   description: |
     Track major scientific and medical breakthroughs outside AI. …
     Hard veto list: any one of these means it is not a breakthrough,

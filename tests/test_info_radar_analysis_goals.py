@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import pytest
 
@@ -99,6 +100,14 @@ def test_goals_example_is_a_valid_runtime_document() -> None:
     # rather than being a commented-out template.
     goals = load_goals(goals_example_path())
     assert goals, "goals.example.yaml must declare at least one goal"
+
+
+def test_goals_example_names_pass_the_dashboard_naming_rule() -> None:
+    # The loader accepts any non-empty name, but `/goals` only lets the operator
+    # ADD kebab-case ones. A seeded name the add form would reject is a trap.
+    pattern = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+    offenders = [g.name for g in load_goals(goals_example_path()) if not pattern.match(g.name)]
+    assert not offenders, f"example goal names must be kebab-case: {offenders}"
 
 
 def test_load_goals_duplicate_names_raise(tmp_path: Path) -> None:

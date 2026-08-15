@@ -6,10 +6,14 @@ The runtime goals file SHALL be populated by an explicit setup step, never as a
 side effect of loading it. `scripts/container_bootstrap.sh` SHALL populate it when
 it is absent, before the `dashboard` and `scheduler` services start.
 
-Population SHALL prefer an existing `configs/info_radar/goals.yaml` when one is
-present — migrating a curated list exactly once — and SHALL otherwise copy
-`configs/info_radar/goals.example.yaml`. `goals.example.yaml` SHALL remain a valid
-runtime document and SHALL NOT be modified.
+`configs/info_radar/goals.example.yaml` SHALL be the only population source. It
+SHALL remain a valid runtime document and SHALL NOT be modified. Provisioning
+SHALL NOT read `configs/info_radar/goals.yaml`: that tracked file is deleted by
+this change and `configs/` is image-baked with no bind mount, so such a branch
+could never execute.
+
+When the example source is absent, provisioning SHALL fail loudly rather than
+create an empty or partial runtime goals file.
 
 The guard SHALL be the runtime goals file's **existence**, never its goal count,
 so that a deliberately emptied goals list is not repopulated on a subsequent
@@ -21,16 +25,16 @@ learns that no goals exist.
 
 #### Scenario: fresh install is seeded from the example
 
-- **WHEN** bootstrap runs, no runtime goals file exists in state, and no
-  `configs/info_radar/goals.yaml` is present
+- **WHEN** bootstrap runs and no runtime goals file exists in state
 - **THEN** `configs/info_radar/goals.example.yaml` is copied into state and loads
   successfully
 
-#### Scenario: existing repo-path goals file migrates once
+#### Scenario: a missing example source fails loudly
 
 - **WHEN** bootstrap runs, no runtime goals file exists in state, and
-  `configs/info_radar/goals.yaml` is present
-- **THEN** that file's content is copied into state and the example is not used
+  `configs/info_radar/goals.example.yaml` is absent
+- **THEN** provisioning raises rather than creating a file, and bootstrap exits
+  non-zero
 
 #### Scenario: provisioning never overwrites an existing file
 
@@ -51,9 +55,9 @@ learns that no goals exist.
 `next_signal/workflows/info_radar_analysis/` SHALL load goal descriptors from the
 runtime goals file in user state, resolved as `STATE_ROOT / "goals.yaml"`
 (`/state/goals.yaml` inside a container, `~/.next-signal/goals.yaml`
-host-native). It SHALL NOT read `configs/info_radar/goals.yaml`, which is
-image-baked deployment content and is not shared between the `dashboard` and
-`scheduler` containers.
+host-native). It SHALL NOT read `configs/info_radar/goals.yaml` — a tracked file
+this change deletes, under a directory that is image-baked deployment content and
+is not shared between the `dashboard` and `scheduler` containers.
 
 The file MUST contain a top-level `goals:` list. Each entry MUST declare `name`
 (unique, kebab-case), `description`, `topics` (list of strings), and `keywords`
