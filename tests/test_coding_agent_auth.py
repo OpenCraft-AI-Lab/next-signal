@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 from pathlib import Path
+import sys
 import threading
 import time
 
@@ -24,6 +25,12 @@ cli_runner = CliRunner()
 
 
 def _write_auth_cli(path: Path, provider: str) -> Path:
+    # See test_coding_agent_runner._write_fixture: Windows cannot exec a shebang
+    # script, so fixture-backed tests skip rather than fail there. The login
+    # tests additionally need a PTY, which is POSIX-only for the same reason
+    # `auth.py` imports `pty` lazily.
+    if sys.platform == "win32":
+        pytest.skip("POSIX-only: execs a #!/usr/bin/env python3 fixture")
     marker = path.with_suffix(".logged-in")
     source = f"""#!/usr/bin/env python3
 import json
@@ -222,6 +229,10 @@ def test_login_cancellation_terminates_provider_process(
     assert result["cancelled"] is True
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX-only: run_login_session needs a PTY, and the fixture is a shebang script",
+)
 def test_login_output_is_bounded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     executable = tmp_path / "codex"
     executable.write_text(

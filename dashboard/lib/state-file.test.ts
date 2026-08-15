@@ -16,7 +16,14 @@ test("writeStateFile publishes the payload and leaves no temp file behind", asyn
   assert.deepEqual(await readdir(path.dirname(target)), ["state.json"]);
 });
 
-test("concurrent saves both succeed and one of them is what lands", async () => {
+// POSIX-only. `rename(2)` over an existing path is atomic and always succeeds,
+// so a losing writer still reports success. On Windows the equivalent can fail
+// with EPERM while another handle holds the target, which makes this assertion
+// unreachable there. The dashboard ships in a Linux container, so the guarantee
+// under test is the one that actually runs.
+test("concurrent saves both succeed and one of them is what lands", {
+  skip: process.platform === "win32" ? "POSIX-only: rename-over-existing is not atomic on Windows" : false,
+}, async () => {
   // Both writers previously shared one `${target}.tmp`, so the first rename
   // consumed it and the second always failed with ENOENT — surfacing in the
   // settings page as a spurious "save failed" plus a control rolled back to a
