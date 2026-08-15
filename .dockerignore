@@ -29,3 +29,9 @@ tests/
 docs/
 openspec/
 **/.DS_Store
+
+# Dashboard unit tests. `tests/` above only covers the Python suite; these live
+# beside the source they exercise, so they need their own pattern to keep the
+# runtime image free of a test suite (see core-container-verification).
+**/*.test.ts
+**/*.test.mjs
