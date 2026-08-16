@@ -12,7 +12,7 @@
 - pnpm（没有的话 `npm install -g pnpm`；推荐 pnpm 11+）
 - `uv` 在 `PATH` 上（server action 调 `next-signal ...` 用）
 - `gbrain` 在 `PATH` 上（knowledge 搜索的 server action 用）
-- `npx` / Folo 认证供 `/subscriptions` 用（`FOLO_TOKEN` 或 `~/.folo/config.json`）
+- `npx` 和一个 Folo token 供 `/subscriptions` 用（设置 → 凭据）
 
 ## 运行
 
@@ -62,7 +62,7 @@ spawn 一次性 `next-signal` CLI 子进程 —— 没有任何一个走 AgentOS
 | `DATABASE_URL`             | （Postgres URL）          | `dashboard-radar`（直接读 DB）                                     |
 | `NEXT_SIGNAL_DATABASE_URL` | `DATABASE_URL`            | 可选的 dashboard 专用 Postgres URL                                 |
 | `INFO_RADAR_TIMEZONE`      | `America/Los_Angeles`     | `/radar` 按日历天分组 + recap 区间                                 |
-| `FOLO_TOKEN`               | （Folo CLI session 文件） | `/subscriptions`，经 `next-signal info-radar subscriptions --json` |
+| _(`FOLO_TOKEN`)_           | 不是环境变量              | 在设置 → 凭据里填；`/subscriptions` 用                             |
 | `FOLO_CLI_ARGV`            | `npx --yes folocli@0.0.5` | 可选，覆盖 Folo CLI 启动方式                                       |
 
 ## 视觉设计系统

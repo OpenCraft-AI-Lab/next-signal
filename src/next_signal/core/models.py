@@ -1,9 +1,15 @@
 """Model factory: turns a profile name from ``configs/models.yaml`` into an
 agno Model instance.
 
+Every credential named below comes from the credential store
+(``next_signal.core.secrets``), never from the environment. Cloud constructors
+are handed their key explicitly and raise first when it is missing: agno's model
+classes fall back to reading their own provider env var when constructed without
+one, which would resolve a credential from a source this system does not read.
+
 Supported providers:
-  * ``omlx``     — local mlx-lm OpenAI-compatible server, endpoint configured
-                   via ``OMLX_BASE_URL`` + ``OMLX_API_KEY`` in ``.env``.
+  * ``omlx``     — local mlx-lm OpenAI-compatible server; ``OMLX_BASE_URL`` in
+                   ``.env``, optional ``OMLX_API_KEY`` in the credential store.
   * ``claude``   — Anthropic, requires ``ANTHROPIC_API_KEY``.
   * ``openai``   — OpenAI cloud, requires ``OPENAI_API_KEY``.
   * ``gemini``   — Google, requires ``GOOGLE_API_KEY``.
@@ -40,6 +46,7 @@ from next_signal.core.embedding_preferences import (
 from next_signal.core.engine_preferences import EnginePreferences
 from next_signal.core.logging import get_logger
 from next_signal.core.omlx import resolve_omlx_endpoint
+from next_signal.core.secrets import require_secret
 
 log = get_logger(__name__)
 
@@ -251,6 +258,7 @@ def _build_claude(p: ModelProfile) -> Model:
 
     return Claude(
         id=p.model_id,
+        api_key=require_secret("ANTHROPIC_API_KEY"),
         temperature=p.temperature,
         max_tokens=p.max_tokens,
     )
@@ -261,6 +269,7 @@ def _build_openai(p: ModelProfile) -> Model:
 
     return OpenAIChat(
         id=p.model_id,
+        api_key=require_secret("OPENAI_API_KEY"),
         temperature=p.temperature,
         top_p=p.top_p,
         max_tokens=p.max_tokens,
@@ -272,6 +281,7 @@ def _build_gemini(p: ModelProfile) -> Model:
 
     return Gemini(
         id=p.model_id,
+        api_key=require_secret("GOOGLE_API_KEY"),
         temperature=p.temperature,
         top_p=p.top_p,
         max_output_tokens=p.max_tokens,
@@ -281,11 +291,7 @@ def _build_gemini(p: ModelProfile) -> Model:
 def _build_deepseek(p: ModelProfile) -> Model:
     from agno.models.openai.like import OpenAILike
 
-    api_key = os.environ.get("DEEPSEEK_API_KEY")
-    if not api_key:
-        raise RuntimeError(
-            "DEEPSEEK_API_KEY not set. Add it to .env to use the deepseek provider."
-        )
+    api_key = require_secret("DEEPSEEK_API_KEY")
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     extra_body: dict[str, Any] = dict(p.extra.get("extra_body", {}))
 
@@ -324,9 +330,9 @@ def reset_cache() -> None:
 # Unlike LLM profiles, an embedder is not addressed by name: the live selection
 # is whatever ``~/.next-signal/embedding.json`` says at the moment an item
 # starts, and ``configs/models.yaml::embedders`` only supplies each provider's
-# baseline. ``get_embedder()`` reads that state and the process environment
-# exactly once and freezes the answer into a ``ResolvedEmbedder``, so a settings
-# write landing mid-request cannot relabel a vector that is already in flight —
+# baseline. ``get_embedder()`` reads that state and the credential store exactly
+# once and freezes the answer into a ``ResolvedEmbedder``, so a settings write
+# landing mid-request cannot relabel a vector that is already in flight —
 # the consumer stores ``snapshot.identity``, never a fresh read.
 
 EMBEDDING_DIMENSIONS = 1024
@@ -376,13 +382,13 @@ def get_embedder() -> ResolvedEmbedder:
     elif provider == "openai":
         model_id = prefs.openai.model
         url = f"{OPENAI_API_ROOT}/embeddings"
-        api_key = _required_credential("OPENAI_API_KEY")
+        api_key = require_secret("OPENAI_API_KEY")
         dimensions = EMBEDDING_DIMENSIONS
     else:
         compatible = prefs.openai_compatible
         model_id = compatible.model
         url = f"{compatible.base_url}/embeddings"
-        api_key = _required_credential(compatible.api_key_env)
+        api_key = require_secret(compatible.api_key_env)
         dimensions = EMBEDDING_DIMENSIONS
 
     def embed(text: str) -> list[float]:
@@ -401,18 +407,6 @@ def get_embedder() -> ResolvedEmbedder:
         identity=embedder_identity(prefs),
         embed=embed,
     )
-
-
-def _required_credential(name: str) -> str:
-    """Read a required key from *this* process's environment, at call time."""
-    value = os.environ.get(name, "").strip()
-    if not value:
-        raise RuntimeError(
-            f"{name} is not set in this process. Add it to .env, then restart the "
-            "host process or recreate the Compose service — an already-running "
-            "process does not pick up file edits."
-        )
-    return value
 
 
 def _post_embedding(

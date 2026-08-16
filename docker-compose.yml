@@ -28,9 +28,12 @@ x-app: &app
       CODEX_CLI_VERSION: ${CODEX_CLI_VERSION:-0.145.0}
       CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.220}
   image: next-signal:latest
-  # Cloud API keys come from .env (secrets stay OUT of the image).
+  # Optional: every value Compose reads from it has a default, and no credential
+  # comes from here at all — provider keys live in /state/secrets.json, written
+  # by the dashboard and read at call time. So a fresh clone with no .env starts.
   env_file:
-    - .env
+    - path: .env
+      required: false
   environment:
     # These override whatever .env holds so the container is self-consistent:
     # point at the postgres SERVICE, and use in-container paths.

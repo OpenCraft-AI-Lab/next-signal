@@ -130,7 +130,7 @@ production CLI stage 比直接仓库任务更严格：provider 工具/自定义�
 | 组件 | 为什么留在宿主机 |
 |---|---|
 | Docker Desktop / colima | 容器运行时本身 |
-| `.env` | 只读挂载进 `app`；不放进镜像因为里面是真实密钥 |
+| `.env` | 可选（`required: false`）；只读挂载进 `app`。里面没有凭据，只有部署配置 |
 | `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | 知识内容；bind-mount 让宿主机和容器保持一致。宿主机侧路径来自 `WIKI_DIR` / `WIKI_RAW_DIR`，不设时默认 `./state/wiki` 和 `./state/wiki-raw`，所以不改 `.env` 也能启动。容器内部则永远是 `/wiki` 和 `/wiki-raw` |
 | `~/.next-signal/` state | knowledge_ingest_manifest.json、agent-tmp/、`goals.yaml`，以及 dashboard 写的那几个设置——`language.json`、`engine.json`、`coding-agents.json`、`schedule.json`、`embedding.json`。用具名卷（或 bind mount）以便重建镜像后仍然保留。这些文件正是 state root 不能烤进镜像的原因：dashboard 在运行时写它们，所有读者都在 call time 读、不用重启就生效，面板不可达时还能手改。`goals.yaml` 的理由更硬——`dashboard` 和 `scheduler` 是同一镜像起的两个容器，写在 `/app/configs` 下对方看不见，下次 build 也会丢 |
 | 发布的端口 | `localhost:3000` 是你访问容器的方式 |
@@ -249,9 +249,10 @@ docker compose up -d --force-recreate dashboard scheduler
 ## 7. 用 Docker 跑起来
 
 仓库根目录已经带了 `Dockerfile`、`docker-compose.yml` 和 `.dockerignore`。
-前置条件：Docker Engine + Compose v2，以及一个 `.env`（从 `.env.example` 拷），
-里面至少要有一个云 LLM key。`WIKI_DIR` / `WIKI_RAW_DIR` 是可选的——留空则 Compose
-挂载 `./state/wiki` 和 `./state/wiki-raw`；想用自己的 wiki 仓库就填上路径。
+前置条件：Docker Engine + Compose v2。**不需要 `.env` 文件**——Compose 读的每个值都有
+默认值，provider 凭据也改在 dashboard 里填、不放文件。`WIKI_DIR` / `WIKI_RAW_DIR` 是
+可选的——不设则 Compose 挂载 `./state/wiki` 和 `./state/wiki-raw`；想用自己的 wiki
+仓库就填上路径。
 
 > **支持的平台是 macOS 和 Windows 上的 Docker Desktop。** 它的文件共享层会映射
 > 属主，所以 Docker 建出来的默认 wiki 目录在容器里和宿主机上都能用。原生 Linux 的
@@ -274,9 +275,9 @@ docker compose up -d --force-recreate dashboard scheduler
 ### 快速开始
 
 1. 安装并启动 Docker Engine + Compose v2（Docker Desktop 或 colima）。
-2. `cp .env.example .env`，然后至少设一个云 LLM key
-   （DeepSeek/Anthropic/OpenAI）。`WIKI_DIR` / `WIKI_RAW_DIR` 留空就用仓库内的
-   默认目录，或者填成你自己 wiki 仓库的宿主机路径。
+2. 不用配任何东西。只有想改默认值（wiki 路径、Postgres 账号、CLI 版本）时才需要
+   `cp .env.example .env`——没有这个文件栈也能起。API key **不在**这里设，第 5 步
+   在界面里填。
 3. 构建并启动整个栈：
    ```bash
    docker compose up --build
@@ -296,7 +297,8 @@ docker compose up -d --force-recreate dashboard scheduler
   版本都是构建参数（`GBRAIN_REF`、`OPENCLI_REF`、`CODEX_CLI_VERSION`、
   `CLAUDE_CODE_VERSION`）。
 - **持久化：** 具名卷 `pgdata`（Postgres —— 包括 `gbrain` 数据库）、`pstate`
-  （`~/.next-signal` state + gbrain 的 `config.json`）、`codex_auth`（`/root/.codex`）
+  （`~/.next-signal` state，含存放全部 provider 凭据的 `secrets.json`，+ gbrain 的
+  `config.json`）、`codex_auth`（`/root/.codex`）
   和 `claude_auth`（`/root/.claude`）。`docker compose down` 会保留它们；`down -v`
   会把四个都清空。
 
@@ -347,8 +349,8 @@ docker compose exec dashboard next-signal coding-agent auth-status claude
 
    - 通过 `OMLX_BASE_URL=http://host.docker.internal:<port>/v1` 暴露一个宿主机/远程
      OMLX 端点；或者
-   - 打开 **设置 → 向量嵌入**，选 OpenAI（需要 `OPENAI_API_KEY`）或者你自己的
-     OpenAI 兼容端点。
+   - 打开 **设置 → 向量嵌入**，选 OpenAI（需要在**设置 → 凭据**里填 `OPENAI_API_KEY`）
+     或者你自己的 OpenAI 兼容端点。
 
    选云端 embedder 有两个后果，值得刻意决定一下。每条留下来的条目，它的分析摘要都会
    **发给那个服务商**——而 OMLX 同时承担两半时这些文本根本不出本机——并且每个条目都
@@ -356,14 +358,14 @@ docker compose exec dashboard next-signal coding-agent auth-status claude
    悄悄换一个就等于换了向量空间，会把当前 provider 的 dedup 记忆搁置掉，所以失败保持
    loud，条目按 novel 处理。
 
-   凭据来自进程环境，不在状态文件里。改 `.env` **不会**影响已经在跑的容器：先重建服务
-   （`docker compose up -d --force-recreate dashboard scheduler`）再指望新值存在。
+   凭据来自共享 state 卷上的凭据库，call time 才读——所以在**设置 → 凭据**里存的 key
+   下一条 item 就在所有服务里生效，不用重启，也不用 `--force-recreate`。
    `docker compose exec dashboard next-signal doctor` 会报告解析出来的 embedder 身份以及
-   它的变量在不在，全程不发模型请求。
+   它的凭据在不在，全程不发模型请求。
 2. **`next-signal doctor` 只要有任何一项失败就退出非零** —— 纯云环境下把 OMLX / Anthropic
    的 ✗ 当作预期，别让它阻断启动。
-3. **密钥不进镜像。** `.env` 目前存的是真实 key；运行时挂载，绝不 `COPY` 进某一层，
-   也绝不推送出去。
+3. **密钥不进镜像。** 凭据存在具名卷上的 `/state/secrets.json`，权限 `0600`——不进任何
+   镜像层，也不在 `.env` 里。
 4. **各页面的依赖不同：** `/goals` 和 `/design` 只需要 Postgres/文件系统；`/radar`
    需要 `info-radar pull` 填充过的 Postgres；`/knowledge` 需要 gbrain CLI；
    `/subscriptions` 需要 Folo 认证。

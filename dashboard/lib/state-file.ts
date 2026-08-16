@@ -19,9 +19,18 @@ import path from "node:path";
 export async function writeStateFile(
   target: string,
   payload: string,
+  options?: {
+    /**
+     * POSIX file mode for the created file, e.g. `0o600` for a file holding
+     * credentials. Applied at creation rather than after, so the content is
+     * never briefly readable at the default `0o644`. Windows maps modes onto
+     * ACLs only nominally; the guarantee is scoped to the Linux container.
+     */
+    mode?: number;
+  },
 ): Promise<void> {
   await mkdir(path.dirname(target), { recursive: true });
   const tmp = `${target}.${process.pid}.${randomUUID()}.tmp`;
-  await writeFile(tmp, payload, "utf-8");
+  await writeFile(tmp, payload, { encoding: "utf-8", mode: options?.mode });
   await rename(tmp, target);
 }

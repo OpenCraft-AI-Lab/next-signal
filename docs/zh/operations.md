@@ -33,13 +33,45 @@ Claude Code CLI（显式委托仓库任务）。
 Dashboard 是单独的 Next.js 进程，不要求 `next-signal serve` 同时运行；它的 server action
 会直接启动一次性 `next-signal` CLI 子进程，数据页直接读 Postgres。
 
+## 凭据
+
+所有 provider 的 API key 和 token 都在 dashboard 设置页（**设置 → 凭据**）里填，
+存在同一个文件 `~/.next-signal/secrets.json`（容器里 `/state/secrets.json`）：扁平的
+`NAME → value` 对象，原子写入，权限 `0600`。
+
+七个凭据：`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GOOGLE_API_KEY`、
+`DEEPSEEK_API_KEY`、`OMLX_API_KEY`、`GITHUB_TOKEN`、`FOLO_TOKEN`。用
+OpenAI-compatible 嵌入端点时，还会存 `api_key_env` 指定的那个名字。
+
+三条要点：
+
+- **保存即刻全局生效。** 凭据在 call time 从共享 state 卷读取，所以浏览器里存的 key
+  下一个 scheduler job 就在用——不用重启，也不用 `docker compose up --force-recreate`。
+- **任何地方都不从环境变量读凭据。** 没有回落，也没有导入。留在 `.env` 里的 key 是死的，
+  在环境里设了也不算数。
+- **值不会再出来。** 页面只报告每个凭据配没配；值本身、以及它的任何片段，都不会回到
+  浏览器，也不会写进日志。
+
+明确选择明文存储：威胁模型和它替代的 `.env` 一样——宿主用户可读的未加密文件——
+Docker named volume 也不是保险箱。所有 secret 收在一个模块里，将来要换成真正的
+secret manager 只动一个文件。
+
+### 怎么拿 Folo token
+
+Folo 不发 API key：它的 token 是 session 值，没有任何页面能生成一个。**设置 → 凭据 →
+登录 Folo** 会新开标签页打开 Folo，在 dashboard 自己的 callback 路由上接住返回的一次性
+token，换成 session token 存起来。手动粘贴也行，登录失败时就走这条。
+
+`folocli` 自己的 `~/.folo/config.json` session **不再**被读取。它在容器里根本产生不出来
+——没有卷挂着它，而且 `folocli login` 要靠绑在容器内的 loopback callback 完成，宿主浏览器
+够不着——而且认它就等于一个凭据有两个真相来源。
+
 ## 环境变量
 
-repo-local `.env` 关键值：
+凭据不放这里。repo-local `.env` 关键值：
 
 - `DATABASE_URL`
-- `OMLX_BASE_URL` / `OMLX_API_KEY`
-- 各云模型 / API key（按需）
+- `OMLX_BASE_URL`（OMLX 的 key 是凭据，见上）
 - `GBRAIN_BIN`（`gbrain` 不在 `PATH` 时；dashboard 与后端同一套解析）
 - `WIKI_DIR` / `WIKI_RAW_DIR`（**代码层面必填**，无默认；缺失时 knowledge pipeline 与
   dashboard wiki 视图 fail loud。跑 Docker Compose 时可以留空：Compose 会挂载
@@ -56,14 +88,18 @@ nav 上的语言选择器是另一个独立设置，只改 dashboard 自己的�
 
 | 集成 | Env Var |
 |---|---|
-| LLM: Anthropic / OpenAI / Google / DeepSeek | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` / `DEEPSEEK_API_KEY`（+ 可选 `DEEPSEEK_BASE_URL`，默认 `https://api.deepseek.com`） |
-| Folo (info-radar) | `FOLO_TOKEN`（可选；不设则用 `~/.folo/config.json`） + 可选 `FOLO_CLI_ARGV` 覆盖默认 `npx --yes folocli@<v>` |
+| LLM: Anthropic / OpenAI / Google / DeepSeek | **设置 → 凭据**（可选的 `DEEPSEEK_BASE_URL` 仍在 `.env`，默认 `https://api.deepseek.com`） |
+| Folo (info-radar) | **设置 → 凭据**——必填；点「登录 Folo」或手动粘贴。`~/.folo/config.json` 不再读取。可选的 `FOLO_CLI_ARGV` 仍在 `.env` |
 | GBrain / OpenCLI (knowledge) | `GBRAIN_BIN`（`gbrain` 不在 PATH 时） / `OPENCLI_BIN`（WeChat 下载，main.js 路径或 wrapper） |
 | Coding agents | `CODEX_BIN` / `CLAUDE_BIN`（可选的可执行文件覆盖；已保存的 CLI 登录仍由 provider 管理） |
-| GitHub (knowledge 收藏) | `GITHUB_TOKEN`（可选；缺省匿名 60 req/h） |
+| GitHub (knowledge 收藏) | **设置 → 凭据**（可选；缺省匿名 60 req/h） |
 | Embedder (info-radar analysis dedup) | 取决于**设置 → 向量嵌入**里选的 provider，见下 |
 
-每个云集成在 call time 才检查 key，缺 key 只让对应工具失败，不阻断启动。
+每个云集成在 call time 从凭据库读自己的凭据，缺凭据只让对应工具失败，不阻断启动；
+dashboard 里存的凭据下一次调用就生效，所有进程都一样，不用重启，也不用
+`docker compose up --force-recreate`。
+
+**任何地方都不从环境变量读凭据。** 没有回落也没有导入：留在 `.env` 里的 key 是死的。
 
 ### 选择 embedder
 
@@ -72,20 +108,19 @@ dedup gate 的 embedder 与 LLM 引擎分开选，在 `/settings` 上，存进
 
 | Provider | 配置 | 说明 |
 |---|---|---|
-| `omlx`（默认） | `OMLX_BASE_URL` 可达；`configs/models.yaml::embedders.local.model_id` 默认 `Qwen3-Embedding-0.6B-8bit`，需要 OMLX server 加载该模型 | `OMLX_API_KEY` 仍是可选的。数据不出本机 |
-| `openai` | `OPENAI_API_KEY`；模型取自 `embedders.openai`（默认 `text-embedding-3-small`） | 按条目计费；摘要会离开本机 |
-| `openai_compatible` | 一个 API **根地址**（例如 `https://host.example/v1`——`/embeddings` 由程序拼），一个模型，存放密钥的环境变量**名字**，以及一个向量空间 id | 没有出厂默认值；四项都保存后才能选中 |
+| `omlx`（默认） | `OMLX_BASE_URL` 可达；`configs/models.yaml::embedders.local.model_id` 默认 `Qwen3-Embedding-0.6B-8bit`，需要 OMLX server 加载该模型 | `OMLX_API_KEY` 仍是可选的（设置 → 凭据）。数据不出本机 |
+| `openai` | **设置 → 凭据**里的 `OPENAI_API_KEY`；模型取自 `embedders.openai`（默认 `text-embedding-3-small`） | 按条目计费；摘要会离开本机 |
+| `openai_compatible` | 一个 API **根地址**（例如 `https://host.example/v1`——`/embeddings` 由程序拼），一个模型，凭据的**名字**，以及一个向量空间 id | 没有出厂默认值；四项都保存后才能选中 |
 
 换之前有三条值得先想清楚：
 
 - **每个 embedder 都必须返回正好 1024 个有限数值。** 云端路径会带 `dimensions: 1024`；
   其他情况在调用时直接抛，不会被塑形。所以 `text-embedding-ada-002` 之类做不到 1024
   的定宽模型无法使用。
-- **状态文件从不存密钥。** `openai_compatible` 存的是 `api_key_env`——变量的*名字*——
-  取值时从流水线进程的环境读。URL 里带凭据（userinfo、query、fragment）会被直接拒绝。
-- **改 `.env` 不会热加载。** 改状态文件下一个 item 就生效、不用重启；但凭据只存在于
-  设置之后才启动的进程里：重启宿主进程，或
-  `docker compose up -d --force-recreate dashboard scheduler`。
+- **状态文件从不存密钥。** `openai_compatible` 存的是 `api_key_env`——凭据的*名字*——
+  取值时从凭据库读。URL 里带凭据（userinfo、query、fragment）会被直接拒绝。
+- **这里没有任何东西需要重启。** 状态文件和凭据库都在 item 解析 embedder 时才读，
+  所以改哪一个都是下一个 item 生效——不用重启宿主进程，也不用 `--force-recreate`。
 
 `space_id` 是你自己给通用端点产出的向量起的标签。权重、分词器、pooling、量化或维度行为
 变了就换一个；同一个服务换个 URL **不需要**换。它和模型名分开，是因为两个端点可以打着
@@ -181,13 +216,15 @@ uv run next-signal doctor                            # host-native
 docker compose exec dashboard next-signal doctor     # 容器里
 ```
 
-检查：`DATABASE_URL`、`ANTHROPIC_API_KEY`、`DEEPSEEK_API_KEY`、`OMLX_BASE_URL`、
+检查：`DATABASE_URL`、`OMLX_BASE_URL`、**凭据库里** `ANTHROPIC_API_KEY` 和
+`DEEPSEEK_API_KEY` 在不在、
 解析后的内容语言（报出 `global` policy 的值、来自偏好文件还是硬编码默认值，偏好文件
 损坏或值不认识则标红）、解析后的 embedder（打印当前向量空间身份，以及它需要的配置在不在
 ——全程不发嵌入请求，`embedding.json` 不可用时报成失败项而不是把 doctor 弄挂）、
 Postgres 可达、
 configured agents、registered tools、GBrain CLI/service（`gbrain doctor --fast`）、
-folocli auth（`folocli whoami` — `FOLO_TOKEN` 或 `~/.folo/config.json` 任一可用即可）、
+folocli auth（先看凭据库里有没有 `FOLO_TOKEN`，再跑 `folocli whoami`；folocli 自己
+缓存的 session 不再算数）、
 info-radar 运行时 goals 文件存在、可解析、且至少有一个目标。goals 这一项把三种失败
 分开报——完全没有文件、`goals:` 配成空列表、解析出错——因为处理方式不同；三种情况下
 `next-signal info-radar analyze` 都会 loud RuntimeError。
@@ -195,7 +232,9 @@ info-radar 运行时 goals 文件存在、可解析、且至少有一个目标�
 doctor 都退出非零；上面的必需/可选划分只是"这台机器不打算用这个功能就可以忽略对应的✗"。
 
 `DEEPSEEK_API_KEY` 缺失算非零项 —— `local*` 的默认 fallback profile 用 DeepSeek（OMLX 不可达时回落）；
-`ANTHROPIC_API_KEY` 缺失也算非零项，供 `claude_*` profile 使用。若刻意只跑本地，要明白这些云 fallback 会失败。
+`ANTHROPIC_API_KEY` 缺失也算非零项，供 `claude_*` profile 使用。两者都从凭据库读，
+设在环境变量里不算数；凭据项只报告在不在，绝不打印值。若刻意只跑本地，要明白这些云
+fallback 会失败。
 
 纯云容器里 OMLX（以及没配的 Anthropic）显示 ✗ 是预期的——确认 Postgres / agents / tools
 是 ✔ 即可，其余当参考信息。
@@ -365,8 +404,11 @@ docker compose logs -f scheduler
 ## 故障排查
 
 - **`DATABASE_URL not set`** → 复制 `.env.example` 到 `.env` 并填好。
+- **`<NAME> is not configured`** → 凭据库里没有这个凭据，去**设置 → 凭据**填；
+  填在 `.env` 里没有用。
 - **Postgres unreachable** → 启动 Postgres.app 或 Homebrew service，重跑 `next-signal doctor`。
-- **OMLX profile 回落到 DeepSeek** → 查 `OMLX_BASE_URL` / `OMLX_API_KEY` / 端点 `/v1/models`；
+- **OMLX profile 回落到 DeepSeek** → 查 `.env` 的 `OMLX_BASE_URL`、设置 → 凭据里可选的
+  `OMLX_API_KEY`、以及端点 `/v1/models`；
   OMLX 恢复后长驻进程要调 `next_signal.core.models.reset_cache()`。
 - **GBrain 搜索 / re-index 失败** → 跑 `next-signal doctor` 和 `gbrain doctor --fast`；
   embed 失败时 ingest 应在写完 wiki artifact 后 loud fail，manifest 不前进，

@@ -7,6 +7,8 @@ import subprocess
 
 import pytest
 
+from next_signal.core.secrets import save_secret
+
 from next_signal.integrations import gbrain
 from next_signal.integrations.knowledge import bilibili
 from next_signal.integrations.knowledge import github as github_adapter
@@ -167,8 +169,7 @@ def test_github_parse_repo_url_rejects(url: str) -> None:
         github_adapter._parse_repo_url(url)
 
 
-def test_github_headers_omit_auth_when_token_missing(monkeypatch) -> None:
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+def test_github_headers_omit_auth_when_token_missing() -> None:
     headers = github_adapter._headers()
     assert "Authorization" not in headers
     assert headers["Accept"] == "application/vnd.github+json"
@@ -176,7 +177,7 @@ def test_github_headers_omit_auth_when_token_missing(monkeypatch) -> None:
 
 
 def test_github_headers_include_auth_when_token_set(monkeypatch) -> None:
-    monkeypatch.setenv("GITHUB_TOKEN", "tkn_abc")
+    save_secret("GITHUB_TOKEN", "tkn_abc")
     monkeypatch.setattr(github_adapter, "_AUTH_DISABLED_THIS_SESSION", False)
     headers = github_adapter._headers()
     assert headers["Authorization"] == "Bearer tkn_abc"
@@ -185,7 +186,7 @@ def test_github_headers_include_auth_when_token_set(monkeypatch) -> None:
 def test_github_401_falls_back_to_anonymous(monkeypatch) -> None:
     """A configured-but-invalid token returns 401 once; we degrade to anonymous
     for the rest of the session so public-repo bookmarking still works."""
-    monkeypatch.setenv("GITHUB_TOKEN", "expired_tkn")
+    save_secret("GITHUB_TOKEN", "expired_tkn")
     monkeypatch.setattr(github_adapter, "_AUTH_DISABLED_THIS_SESSION", False)
 
     calls: list[dict] = []

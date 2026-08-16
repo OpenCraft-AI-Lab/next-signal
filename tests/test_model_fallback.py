@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from next_signal.core.secrets import save_secret
+
 from next_signal.core import models as models_mod
 from next_signal.core.config import ModelProfile
 
@@ -102,8 +104,7 @@ def test_recovery_needs_reset_cache_before_omlx_is_retried(monkeypatch) -> None:
     assert models_mod.get_model("local").provider == "omlx"
 
 
-def test_build_deepseek_requires_api_key(monkeypatch) -> None:
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+def test_build_deepseek_requires_api_key() -> None:
     with pytest.raises(RuntimeError, match="DEEPSEEK_API_KEY"):
         models_mod._build_deepseek(
             ModelProfile(provider="deepseek", model_id="deepseek-v4-flash")
@@ -111,7 +112,7 @@ def test_build_deepseek_requires_api_key(monkeypatch) -> None:
 
 
 def test_build_deepseek_uses_json_object_mode(monkeypatch) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    save_secret("DEEPSEEK_API_KEY", "sk-test")
     monkeypatch.delenv("DEEPSEEK_BASE_URL", raising=False)
     model = models_mod._build_deepseek(
         ModelProfile(provider="deepseek", model_id="deepseek-v4-flash")
@@ -125,7 +126,7 @@ def test_build_deepseek_uses_json_object_mode(monkeypatch) -> None:
 
 
 def test_build_deepseek_honors_base_url_override(monkeypatch) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    save_secret("DEEPSEEK_API_KEY", "sk-test")
     monkeypatch.setenv("DEEPSEEK_BASE_URL", "https://proxy.example.com")
     model = models_mod._build_deepseek(
         ModelProfile(provider="deepseek", model_id="deepseek-v4-flash")
@@ -134,7 +135,7 @@ def test_build_deepseek_honors_base_url_override(monkeypatch) -> None:
 
 
 def test_build_deepseek_defaults_reasoning_effort_unset(monkeypatch) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    save_secret("DEEPSEEK_API_KEY", "sk-test")
     model = models_mod._build_deepseek(
         ModelProfile(provider="deepseek", model_id="deepseek-v4-flash")
     )
@@ -143,7 +144,7 @@ def test_build_deepseek_defaults_reasoning_effort_unset(monkeypatch) -> None:
 
 
 def test_build_deepseek_honors_reasoning_effort_extra(monkeypatch) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    save_secret("DEEPSEEK_API_KEY", "sk-test")
     model = models_mod._build_deepseek(
         ModelProfile(
             provider="deepseek",
@@ -155,7 +156,7 @@ def test_build_deepseek_honors_reasoning_effort_extra(monkeypatch) -> None:
 
 
 def test_build_deepseek_honors_extra_body_thinking_disabled(monkeypatch) -> None:
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test")
+    save_secret("DEEPSEEK_API_KEY", "sk-test")
     model = models_mod._build_deepseek(
         ModelProfile(
             provider="deepseek",

@@ -15,7 +15,8 @@ and embeddings of both product modules ([knowledge](./knowledge.md) and
 - `src/next_signal/core/models.py` — static/live-stage model construction + embedder
 - `src/next_signal/core/engine_preferences.py` — strict per-job engine state
 - `src/next_signal/core/embedding_preferences.py` — strict per-item embedding state
-- `src/next_signal/core/omlx.py` — the only OMLX environment resolver
+- `src/next_signal/core/omlx.py` — the only OMLX endpoint resolver
+- `src/next_signal/core/secrets.py` — the credential store and `child_env`
 - `src/next_signal/agents/stage.py` — provider-neutral production stages and job affinity
 - `src/next_signal/core/config.py` — every YAML loader (strict pydantic; unknown keys
   fail loud)
@@ -55,15 +56,16 @@ Business stages never construct provider models directly.
   back you must call `next_signal.core.models.reset_cache()` before local is retried** —
   this matters most for long-running processes like `next-signal serve`.
 - `next_signal.core.omlx.resolve_omlx_endpoint()` is the only reader of
-  `OMLX_BASE_URL` / `OMLX_API_KEY`; ordinary callers use the strict public
-  `next_signal.core.models.omlx_endpoint()` wrapper. Never duplicate env access.
+  `OMLX_BASE_URL` (environment) and `OMLX_API_KEY` (credential store); ordinary
+  callers use the strict public `next_signal.core.models.omlx_endpoint()`
+  wrapper. Never duplicate that access.
 - Qwen3 specifics are pinned in `_build_omlx`: thinking disabled, sampling
   parameters, and structured output through the standard OpenAI
   `response_format` json_schema (xgrammar constrained decoding on the OMLX side).
   agno's native structured outputs stay off.
 - DeepSeek goes through `_build_deepseek`: OpenAI-compatible
-  (`DEEPSEEK_API_KEY` plus optional `DEEPSEEK_BASE_URL`, default
-  `https://api.deepseek.com`), but it supports only `response_format`
+  (`DEEPSEEK_API_KEY` from the credential store, plus optional
+  `DEEPSEEK_BASE_URL` in the environment, default `https://api.deepseek.com`), but it supports only `response_format`
   json_object, not json_schema — so the schema is passed through the prompt and
   `run_structured` parses, validates, and repairs the result.
 - **DeepSeek thinking mode defaults to on (effort "high")** as of the
@@ -97,11 +99,10 @@ Business stages never construct provider models directly.
 
   **State and secrets are split.** The state file holds the selection, models,
   API root, and vector-space id; it never holds a key. `openai` reads
-  `OPENAI_API_KEY` and the generic provider reads the variable *named* in
-  `api_key_env`, both from `os.environ` when the snapshot is built. So a state
-  edit steers the next item with no restart, while a `.env` edit does not reach
-  an already-running process — restart the host process or recreate the Compose
-  service. There is no embedder fallback: unlike two LLMs, two embedders are not
+  `OPENAI_API_KEY` and the generic provider reads the credential *named* in
+  `api_key_env`, both from the credential store when the snapshot is built.
+  Both the state file and the store are read at snapshot time, so an edit to
+  either steers the next item with no restart and no `--force-recreate`. There is no embedder fallback: unlike two LLMs, two embedders are not
   substitutable, so a failure raises and the dedup gate treats the item as novel.
 
 ## Concurrency
@@ -238,8 +239,21 @@ generalizes:
 
 - `core` imports nothing from a layer above it (tools / integrations / workflows
   / agents).
-- Env is always read at call time, never at import time — a missing key must not
-  block startup.
+- Env is always read at call time, never at import time — a missing value must
+  not block startup.
+- **No credential is ever read from the environment.** Every provider key and
+  token comes from `core/secrets.py`, which reads
+  `$NEXT_SIGNAL_STATE_DIR/secrets.json` at the point of use. There is no
+  fallback and no import path, so the rule is checkable: a credential name
+  appearing next to `os.environ` anywhere in `src/` is a defect.
+- **Credentials reach a subprocess only per spawn.** `secrets.child_env(names)`
+  builds one child's environment, stripping every known credential first and
+  putting back only the named ones. Nothing writes to `os.environ`: the
+  dashboard spawns CLI children with its whole environment, so materializing
+  credentials there would hand every secret to every child — including the
+  coding-agent CLIs, which run with `inherit_env: []` on purpose.
+- **A credential value never leaves the server.** Not to a browser, not to a
+  log, not into an exception message.
 - Failures are loud: missing config or a broken endpoint raises `RuntimeError`
   rather than silently defaulting.
 - Telemetry is fully off: `AgentOS(telemetry=False)`, and a directly constructed

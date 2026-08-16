@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from next_signal.core.config import list_agents, list_teams, list_workflows
 from next_signal.core.logging import configure as configure_logging
 from next_signal.core.paths import PROJECT_ROOT
+from next_signal.core.secrets import get_secret
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 knowledge_app = typer.Typer(help="Manage knowledge adapters and GBrain.")
@@ -26,7 +27,11 @@ app.add_typer(coding_agent_app, name="coding-agent")
 
 
 def _check_folocli() -> tuple[str, bool, str]:
-    """Verify folocli auth (FOLO_TOKEN env OR cached session) for `next-signal doctor`."""
+    """Verify folocli auth for `next-signal doctor`.
+
+    ``FOLO_TOKEN`` from the credential store is the only accepted source; a
+    cached folocli session no longer counts as authenticated.
+    """
     from next_signal.integrations.info_radar.folo import whoami
 
     ok, msg = whoami()
@@ -98,13 +103,12 @@ def _check_embedder() -> tuple[str, bool, str]:
     else:
         variable = prefs.openai_compatible.api_key_env
         where = prefs.openai_compatible.base_url
-    if not os.environ.get(variable, "").strip():
+    if not get_secret(variable):
         return (
             "embedder",
             False,
-            f"{identity} — {variable} not set in this process; add it to .env, then "
-            "restart the host process or recreate the Compose service (a running "
-            "process does not pick up file edits)",
+            f"{identity} — {variable} is not configured; set it on the dashboard "
+            "settings page (Settings → Credentials)",
         )
     return ("embedder", True, f"{identity} at {where} ({variable} set)")
 
@@ -378,27 +382,20 @@ def doctor() -> None:
     """Check that the environment is set up enough to run the system."""
     checks: list[tuple[str, bool, str]] = []
 
-    # 1. .env essentials
+    # 1. .env essentials (system connection config only — credentials are below)
     db = os.environ.get("DATABASE_URL")
     checks.append(("DATABASE_URL", bool(db), db or "not set"))
-    checks.append(
-        (
-            "ANTHROPIC_API_KEY",
-            bool(os.environ.get("ANTHROPIC_API_KEY")),
-            "set"
-            if os.environ.get("ANTHROPIC_API_KEY")
-            else "not set (claude_* profiles will fail)",
-        )
-    )
-    checks.append(
-        (
-            "DEEPSEEK_API_KEY",
-            bool(os.environ.get("DEEPSEEK_API_KEY")),
-            "set"
-            if os.environ.get("DEEPSEEK_API_KEY")
-            else "not set (local* fallback to deepseek will fail)",
-        )
-    )
+
+    # 1b. Credentials, from the store. Presence only — a value is never printed.
+    # Only the two the default configuration depends on are hard checks; the
+    # rest are covered by the feature checks that actually need them (embedder,
+    # folocli) or are optional by contract (GITHUB_TOKEN, OMLX_API_KEY).
+    for name, consequence in (
+        ("ANTHROPIC_API_KEY", "claude_* profiles will fail"),
+        ("DEEPSEEK_API_KEY", "local* fallback to deepseek will fail"),
+    ):
+        present = bool(get_secret(name))
+        checks.append((name, present, "set" if present else f"not configured ({consequence})"))
 
     # 2. OMLX endpoint (centralized in next_signal.core.models.omlx_endpoint)
     from next_signal.core.models import omlx_endpoint

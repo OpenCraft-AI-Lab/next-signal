@@ -14,7 +14,8 @@ per-provider 并发。改任何业务模块之前先懂这一层——两个产�
 - `src/next_signal/core/models.py` —— 静态/live-stage 模型构建 + embedder
 - `src/next_signal/core/engine_preferences.py` —— strict per-job 引擎状态
 - `src/next_signal/core/embedding_preferences.py` —— strict per-item 嵌入状态
-- `src/next_signal/core/omlx.py` —— 唯一 OMLX 环境解析器
+- `src/next_signal/core/omlx.py` —— 唯一 OMLX 端点解析器
+- `src/next_signal/core/secrets.py` —— 凭据库与 `child_env`
 - `src/next_signal/agents/stage.py` —— provider-neutral production stage + job affinity
 - `src/next_signal/core/config.py` —— 全部 YAML loader（strict pydantic，未知 key loud fail）
 - `src/next_signal/core/db.py` —— `database_url()` + agno 自管表的 `get_db()` 单例
@@ -45,14 +46,14 @@ production workflow 调 `run_stage`：每个 job 读取一次 `engine.json`，AP
   `fallback_profile`；`KeyError` / `ValueError`（程序员错误）不回落、直接抛。
   结果是 lru-cached 的——**OMLX 恢复后必须 `next_signal.core.models.reset_cache()` 才会重试本地**，
   长驻进程（`next-signal serve`）尤其注意。
-- `next_signal.core.omlx.resolve_omlx_endpoint()` 是唯一读取 `OMLX_BASE_URL` /
-  `OMLX_API_KEY` 的位置；普通调用走 strict public wrapper
-  `next_signal.core.models.omlx_endpoint()`。其他地方不要直接读 env 或复制逻辑。
+- `next_signal.core.omlx.resolve_omlx_endpoint()` 是唯一读取 `OMLX_BASE_URL`（环境）
+  和 `OMLX_API_KEY`（凭据库）的位置；普通调用走 strict public wrapper
+  `next_signal.core.models.omlx_endpoint()`。其他地方不要复制这套逻辑。
 - Qwen3 细节固化在 `_build_omlx`：关 thinking、sampling 参数、结构化输出走 OpenAI 标准
   `response_format` json_schema（OMLX 侧 xgrammar 约束解码），agno 的 native structured
   outputs 保持关闭。
-- DeepSeek 走 `_build_deepseek`：OpenAI 兼容（`DEEPSEEK_API_KEY` + 可选 `DEEPSEEK_BASE_URL`，
-  默认 `https://api.deepseek.com`），但只支持 `response_format` json_object、不支持 json_schema，
+- DeepSeek 走 `_build_deepseek`：OpenAI 兼容（`DEEPSEEK_API_KEY` 来自凭据库，可选的
+  `DEEPSEEK_BASE_URL` 仍在环境变量里，默认 `https://api.deepseek.com`），但只支持 `response_format` json_object、不支持 json_schema，
   所以 schema 经 prompt 传递、由 `run_structured` 解析/校验/修复。
 - **DeepSeek thinking mode 默认开启（effort "high"）**——deepseek-v4-flash/-pro 的 API 行为，
   reasoning token 按普通 output token 计费，不设置就默默变慢变贵。按 profile 用
@@ -77,8 +78,8 @@ production workflow 调 `run_stage`：每个 job 读取一次 `engine.json`，AP
 
   **状态和密钥是分开的。** 状态文件存的是选择、模型、API 根地址和向量空间 id，从不存
   密钥。`openai` 读 `OPENAI_API_KEY`，通用 provider 读 `api_key_env` 里*写着名字*的那个
-  变量，都在构建快照时从 `os.environ` 读。所以改状态文件下一个 item 就生效、不用重启，
-  而改 `.env` 传不到已经在跑的进程里——要重启宿主进程或重建 Compose 服务。embedder 没有
+  凭据，都在构建快照时从凭据库读。状态文件和凭据库都是构建快照时才读，所以改哪一个都是
+  下一个 item 生效——不用重启，也不用 `--force-recreate`。embedder 没有
   回落：两个 LLM 可以互相替代，两个 embedder 不行，所以失败直接抛，由 dedup gate 把该
   条目按 novel 处理。
 
@@ -181,7 +182,15 @@ agent 自己的 instructions 在最前，shared 块作为限定条件跟在后�
 ## 不变量
 
 - `core` 不 import 任何上层（tools / integrations / workflows / agents）。
-- env 一律 call time 读，不在 import time——缺 key 不能阻断启动。
+- env 一律 call time 读，不在 import time——缺值不能阻断启动。
+- **任何地方都不从环境变量读凭据。** provider 的 key 和 token 一律走
+  `core/secrets.py`，用到时才读 `$NEXT_SIGNAL_STATE_DIR/secrets.json`。没有回落也没有
+  导入路径，所以这条规则是可检查的：`src/` 里凭据名字出现在 `os.environ` 旁边就是缺陷。
+- **凭据只按 spawn 传给子进程。** `secrets.child_env(names)` 给某一个子进程构造环境，
+  先把所有已知凭据剥掉，再只放回点名的那些。任何地方都不写 `os.environ`：dashboard 是
+  带着自己整个环境去 spawn CLI 子进程的，在那里注入凭据等于把每个 secret 发给每个子
+  进程——包括故意配了 `inherit_env: []` 的 coding-agent CLI。
+- **凭据的值不出服务端。** 不进浏览器，不进日志，也不进异常消息。
 - 失败要 loud：配置缺失 / 端点配置坏 → `RuntimeError`，不静默 default。
 - telemetry 全关：`AgentOS(telemetry=False)`，直接构造 `Agent` 也要 `telemetry=False`。
 

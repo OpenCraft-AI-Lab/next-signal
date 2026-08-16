@@ -1,8 +1,16 @@
-"""Centralized OMLX endpoint resolution."""
+"""Centralized OMLX endpoint resolution.
+
+The endpoint's two halves have different sources by rule: ``base_url`` is
+deployment configuration and stays in the environment, while the API key is a
+credential and comes from the credential store. Both are resolved here so the
+endpoint is still assembled in exactly one place.
+"""
 
 from __future__ import annotations
 
 import os
+
+from next_signal.core.secrets import get_secret
 
 
 def resolve_omlx_endpoint(
@@ -24,10 +32,11 @@ def resolve_omlx_endpoint(
             selected = default_base_url.strip()
     if not selected:
         raise RuntimeError(
-            "OMLX_BASE_URL not set. Either set OMLX_BASE_URL (and OMLX_API_KEY) "
-            "in .env, or use a non-omlx model profile."
+            "OMLX_BASE_URL not set. Either set OMLX_BASE_URL in .env, or use a "
+            "non-omlx model profile."
         )
+    # Optional: a local OMLX server usually has no key at all.
     return {
         "base_url": selected,
-        "api_key": os.environ.get("OMLX_API_KEY", ""),
+        "api_key": get_secret("OMLX_API_KEY"),
     }

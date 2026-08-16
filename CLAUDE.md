@@ -200,6 +200,22 @@ Python 代码只定义"形状"——通用的 loader/builder。
 
 **不要**：在 Python 里 hardcode model ID、instructions、tool 列表。
 
+### 凭据（系统级铁律）
+
+所有 provider 的 API key / token 走 `next_signal.core.secrets`，存在
+`$NEXT_SIGNAL_STATE_DIR/secrets.json`（容器里 `/state/secrets.json`），**任何地方都不从
+环境变量读凭据**——没有回落，没有导入路径。`.env` 只留系统连接配置。
+
+- 用 `get_secret(name)` / `require_secret(name)`；后者的报错点名凭据并指向设置页
+- 子进程要凭据（folocli）→ `child_env(["NAME"])` **按 spawn 构造**，绝不写 `os.environ`
+  （dashboard 带整个环境 spawn CLI 子进程，全局注入等于把每个 secret 发给每个子进程，
+  包括故意 `inherit_env: []` 的 coding-agent）
+- agno 的 model 类构造时会自己 `getenv` 兜底——所以必须显式传 `api_key=`，并在构造**之前**
+  就为缺失凭据抛错，否则等于偷偷从环境里解析
+- 凭据的值不进浏览器、不进日志、不进异常消息；只回 presence 布尔
+- 检查方式：`grep -rn "<凭据名>" src/` 只应命中 store 读取、`CREDENTIAL_NAMES` 和
+  `child_env` 调用点
+
 Production agent 也必须走这套流程。不要在 tool / workflow 函数里临时 `Agent(...)` 然后把
 instructions、model profile 写死。需要一个 LLM 子任务（例如 frontmatter enrichment）时：
 

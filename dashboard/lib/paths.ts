@@ -82,3 +82,16 @@ export function engineStateFile(): string {
 export function embeddingStateFile(): string {
   return path.join(stateRoot(), "embedding.json");
 }
+
+/**
+ * Every provider credential, in one file — see `lib/secrets.ts` and
+ * `next_signal.core.secrets`. Written by the settings page and read at call time
+ * by every pipeline process, which is what lets a credential saved in the
+ * browser reach the running scheduler without recreating it.
+ *
+ * Unlike every other state file here, this one holds secret values: it is
+ * written `0600`, never read back to the browser, and never logged.
+ */
+export function secretsStateFile(): string {
+  return path.join(stateRoot(), "secrets.json");
+}

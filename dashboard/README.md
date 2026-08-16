@@ -13,7 +13,7 @@ no auth, no mobile. Cross-module conventions live in
 - pnpm (install via `npm install -g pnpm` if missing — pnpm 11+ recommended)
 - `uv` on `PATH` (used by server actions to invoke `next-signal ...`)
 - `gbrain` on `PATH` (used by the knowledge search server action)
-- `npx` / Folo auth for `/subscriptions` (`FOLO_TOKEN` or `~/.folo/config.json`)
+- `npx` and a Folo token for `/subscriptions` (Settings → Credentials)
 
 ## Run
 
@@ -66,7 +66,7 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 | `DATABASE_URL`             | (Postgres URL)            | `dashboard-radar` (direct DB reads)                                |
 | `NEXT_SIGNAL_DATABASE_URL` | `DATABASE_URL`            | Optional dashboard-specific Postgres URL                           |
 | `INFO_RADAR_TIMEZONE`      | `America/Los_Angeles`     | Calendar-day grouping and recap ranges for `/radar`                |
-| `FOLO_TOKEN`               | (Folo CLI session file)   | `/subscriptions` via `next-signal info-radar subscriptions --json` |
+| _(`FOLO_TOKEN`)_           | not an env var            | Set in Settings → Credentials; used by `/subscriptions`             |
 | `FOLO_CLI_ARGV`            | `npx --yes folocli@0.0.5` | Optional override for the Folo CLI launcher                        |
 
 ## Visual design system
