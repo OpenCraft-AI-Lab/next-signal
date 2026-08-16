@@ -234,8 +234,10 @@ docker compose up -d --force-recreate dashboard scheduler
 ### 入口脚本（每次启动，幂等）
 
 9. 跑 `scripts/container_bootstrap.sh` —— next-signal 主库 schema（pgvector 扩展 + 业务表，
-   经 `bootstrap_db.py`），然后创建 `gbrain` 数据库并跑 `gbrain init`（Postgres
-   引擎）。全部幂等。
+   经 `bootstrap_db.py`），然后创建 `gbrain` 数据库。它**不会**自己初始化 gbrain：
+   embedding model 会永久决定 gbrain 的 schema，bootstrap 跑的时候还不可能存在任何
+   凭据，而且这个选择该由 operator 来做 —— 见 §8。已初始化过的 brain 仍会在每次
+   启动时跑迁移（`gbrain init --migrate-only`）。全部幂等。
 10. 可选地把 `next-signal doctor` 作为非致命日志跑一次（纯云环境下 OMLX / Anthropic 会显示
     ✗ —— 这是预期的；确认 Postgres / agents / tools 是 ✔ 即可）。
 11. 启动长驻进程：`next-signal dashboard --start`（:3000）。
@@ -287,7 +289,10 @@ docker compose up -d --force-recreate dashboard scheduler
 6. 对要使用的 provider，各执行一次 **设置 → Codex CLI / Claude Code CLI → 连接**；
    在官方页面完成登录，Claude 要求时把授权码粘贴回 Dashboard。显式保存该 CLI 的模型和
    强度（Codex 还要保存速度），再选择 production 引擎。
-7. `docker compose down` 停止（保留所有具名卷）；只有明确要清空数据库、应用 state
+7. Knowledge search 还差一步：gbrain 起来时是未初始化的（见 §8），选一个 embedding
+   provider，然后跑
+   `docker compose exec dashboard next-signal knowledge gbrain-init --embedding-model <provider>:<model>`。
+8. `docker compose down` 停止（保留所有具名卷）；只有明确要清空数据库、应用 state
    和两个 CLI 登录时才加 `-v`。
 
 - **服务：** `postgres`（pgvector）、`bootstrap`（一次性 schema）、`dashboard`
@@ -405,6 +410,24 @@ docker compose exec dashboard next-signal coding-agent auth-status claude
    `GBRAIN_DATABASE_URL`，优先级更高。但任何**不带**这个变量的 gbrain 调用都会用
    一个已经不存在的 role 去认证。要么保证这个变量始终注入，要么删掉那个
    `config.json` 再跑一次 `bootstrap` 服务，把缓存刷新一次。
+7. **全新 volume 上 gbrain 刻意保持未初始化。** bootstrap 不会跑 `gbrain init`：
+   embedding model 会永久决定 gbrain 的 Postgres schema，bootstrap 跑的时候还不
+   可能存在任何凭据，而且用 `--no-embedding` 初始化过的 brain 事后无法升级 ——
+   `gbrain config set embedding_model` 在这个引擎上是文档写明的空操作。
+   `next-signal doctor` 会把 gbrain 报告为未初始化，并指出 knowledge search
+   不可用；这在全新的栈上是预期状态，不是故障。自己选一个 provider，初始化一次：
+
+   ```bash
+   docker compose exec dashboard next-signal knowledge gbrain-init \
+     --embedding-model openai:text-embedding-3-large
+   ```
+
+   云端 provider（`openai:`、`voyage:`、`google:`）需要先在**设置 → 凭据**里存好
+   对应的凭据。本地 runner（`ollama:`、`lmstudio:`、`llama-server:`）不需要任何
+   凭据 —— `gbrain-init` 在空凭据库下也能成功 —— 但这套部署目前还没有办法指定它的
+   具体地址，所以本地 runner 会落到 gbrain 自己的默认端点，在容器里未必能连上。
+   模型的选择是永久的：对一个已初始化的 brain 再跑一次 `gbrain-init` 会拒绝，
+   而不是悄悄重新配置或销毁它。
 
 ---
 

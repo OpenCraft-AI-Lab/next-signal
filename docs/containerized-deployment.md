@@ -261,7 +261,11 @@ volumes, not the image.
 
 9. Run `scripts/container_bootstrap.sh` — next-signal's main-DB schema (pgvector
    extension + business tables via `bootstrap_db.py`), then create the `gbrain`
-   database and run `gbrain init` (Postgres engine). All idempotent.
+   database. It does **not** initialise GBrain itself: the embedding model sizes
+   GBrain's schema permanently, bootstrap runs before any credential can exist,
+   and the choice is the operator's to make — see §8. An already-initialised
+   brain still gets its migrations (`gbrain init --migrate-only`) on every boot.
+   All idempotent.
 10. Optionally run `next-signal doctor` as a non-fatal log (OMLX / Anthropic will show ✗
     under cloud-only — expected; confirm Postgres / agents / tools are ✔).
 11. Launch the long-running process: `next-signal dashboard --start` (:3000).
@@ -321,7 +325,10 @@ them to point at your own wiki repos instead.
    provider you intend to use; complete the official browser login and paste
    Claude's authorization code back when requested. Explicitly save that CLI's
    model and effort (plus Codex speed), then select the production engine.
-7. `docker compose down` to stop (keeps every named volume). Add `-v` only if
+7. Knowledge search needs one more step: GBrain comes up uninitialised (§8), so
+   choose an embedding provider and run `docker compose exec dashboard
+   next-signal knowledge gbrain-init --embedding-model <provider>:<model>`.
+8. `docker compose down` to stop (keeps every named volume). Add `-v` only if
    you intentionally want to wipe database, app state, and both CLI logins.
 
 - **Services:** `postgres` (pgvector), `bootstrap` (one-shot schema), `dashboard`
@@ -461,6 +468,28 @@ switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--por
    variable will authenticate as a role that no longer exists. Either keep the
    variable set, or refresh the cache once by deleting that `config.json` and
    re-running the `bootstrap` service.
+7. **GBrain comes up uninitialised on a first-time volume, by design.** Bootstrap
+   deliberately does not run `gbrain init`: the embedding model sizes GBrain's
+   Postgres schema permanently, bootstrap runs before any credential can exist,
+   and a brain initialised without one (`--no-embedding`) cannot be upgraded in
+   place — `gbrain config set embedding_model` is a documented no-op on this
+   engine. `next-signal doctor` reports GBrain as not initialised and names
+   knowledge search as unavailable; this is expected on a fresh stack, not a
+   failure. Initialise it once, choosing whichever provider you want:
+
+   ```bash
+   docker compose exec dashboard next-signal knowledge gbrain-init \
+     --embedding-model openai:text-embedding-3-large
+   ```
+
+   Cloud providers (`openai:`, `voyage:`, `google:`) need that provider's
+   credential saved first in **Settings → Credentials**. Local runners
+   (`ollama:`, `lmstudio:`, `llama-server:`) need none — `gbrain-init` succeeds
+   against an empty credential store — but this deployment does not yet have a
+   way to point them at a specific address, so a local runner falls back to
+   GBrain's own default endpoint, which may not resolve inside the container.
+   The model choice is permanent: a second `gbrain-init` against an initialised
+   brain refuses rather than silently reconfiguring or destroying it.
 
 ---
 

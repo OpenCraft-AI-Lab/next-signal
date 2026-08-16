@@ -39,10 +39,14 @@ Dashboard 是单独的 Next.js 进程，不要求 `next-signal serve` 同时运�
 存在同一个文件 `~/.next-signal/secrets.json`（容器里 `/state/secrets.json`）：扁平的
 `NAME → value` 对象，原子写入，权限 `0600`。
 
-八个凭据：`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GOOGLE_API_KEY`、
-`DEEPSEEK_API_KEY`、`OMLX_API_KEY`、`EMBEDDING_API_KEY`、`GITHUB_TOKEN`、
-`FOLO_TOKEN`。这个集合是封闭的——系统会用到的每个凭据在那一页上都有对应的输入框，
-`EMBEDDING_API_KEY` 就是 OpenAI-compatible 嵌入端点用的那个。
+十个凭据：`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GOOGLE_API_KEY`、
+`DEEPSEEK_API_KEY`、`OMLX_API_KEY`、`EMBEDDING_API_KEY`、`VOYAGE_API_KEY`、
+`GOOGLE_GENERATIVE_AI_API_KEY`、`GITHUB_TOKEN`、`FOLO_TOKEN`。这个集合是
+封闭的——系统会用到的每个凭据在那一页上都有对应的输入框。`EMBEDDING_API_KEY`
+是 OpenAI-compatible 嵌入端点（radar 的 dedup embedder）用的那个；
+`VOYAGE_API_KEY` 和 `GOOGLE_GENERATIVE_AI_API_KEY` 是 GBrain 自己在
+`next-signal knowledge gbrain-init` 选中对应 provider 时读取的，见
+[containerized-deployment.md §8](./containerized-deployment.md#8-纯云容器特有的注意事项)。
 
 三条要点：
 
@@ -234,7 +238,7 @@ docker compose exec dashboard next-signal doctor     # 容器里
 一个都没选时报出未选中、去重已关闭——全程不发嵌入请求，`embedding.json` 不可用时报成
 失败项而不是把 doctor 弄挂）、
 Postgres 可达、
-configured agents、registered tools、GBrain CLI/service（`gbrain doctor --fast`）、
+configured agents、registered tools、GBrain 是否就绪、
 folocli auth（先看凭据库里有没有 `FOLO_TOKEN`，再跑 `folocli whoami`；folocli 自己
 缓存的 session 不再算数）、
 info-radar 运行时 goals 文件存在、可解析、且至少有一个目标。goals 这一项把三种失败
@@ -247,6 +251,12 @@ doctor 都退出非零；上面的必需/可选划分只是"这台机器不打�
 `ANTHROPIC_API_KEY` 缺失也算非零项，供 `claude_*` profile 使用。两者都从凭据库读，
 设在环境变量里不算数；凭据项只报告在不在，绝不打印值。若刻意只跑本地，要明白这些云
 fallback 会失败。
+
+GBrain 就绪状态分三档，不是简单的通过/失败：**未初始化**（全新栈的预期状态——
+bootstrap 刻意让它保持这样；检查项会指名 `next-signal knowledge gbrain-init`）、
+**已初始化但对应 provider 的凭据缺失**（brain 已经选好了模型，但缺凭据没法 embed）、
+以及**就绪**。这一项由 doctor 自己判定，而不是信任 `gbrain doctor --fast`——后者即使
+根本没有 brain 也会报健康、退出 0。
 
 纯云容器里 OMLX（以及没配的 Anthropic）显示 ✗ 是预期的——确认 Postgres / agents / tools
 是 ✔ 即可，其余当参考信息。
@@ -335,6 +345,10 @@ uv run next-signal dashboard --start                         # 启动已 build �
 uv run next-signal knowledge ingest <url|staged-file>        # ingest 到知识库
 #   --category <taxonomy-path>   指定落点，跳过自动分类
 #   --progress                   每步输出一行 JSON 事件（dashboard 入库进度面板用）
+uv run next-signal knowledge gbrain-init --embedding-model <provider>:<model>
+                                                      # 一次性 GBrain 初始化；模型选择是永久的
+                                                      # (openai: voyage: google: 需要对应 provider 的凭据；
+                                                      #  ollama: lmstudio: llama-server: 不需要凭据)
 uv run next-signal knowledge gbrain-search "query"           # 搜索本地 GBrain
 uv run next-signal knowledge gbrain-ingest <file|dir>        # 导入 markdown 到 GBrain
 uv run next-signal knowledge review                          # 对照 wiki 与 knowledge_reviews
@@ -424,9 +438,14 @@ docker compose logs -f scheduler
   重试本地；例外是 AgentOS——它在启动时一次性构建 interactive agent，换端点后要重启该进程。
 - **雷达反复推同一件事** → 没选 embedder，去重是关着的。去**设置 → 向量嵌入**选一个；
   `next-signal doctor` 会把这个报成 embedder 检查失败。
-- **GBrain 搜索 / re-index 失败** → 跑 `next-signal doctor` 和 `gbrain doctor --fast`；
-  embed 失败时 ingest 应在写完 wiki artifact 后 loud fail，manifest 不前进，
-  修好后重跑 `next-signal run-workflow knowledge_ingest`。
+- **GBrain 搜索 / re-index 失败** → 先跑 `next-signal doctor`：全新的栈上预期会报
+  GBrain 未初始化，这种情况下跑
+  `next-signal knowledge gbrain-init --embedding-model <provider>:<model>`
+  （见 [containerized-deployment.md
+  §8](./containerized-deployment.md#8-纯云容器特有的注意事项)）。
+  如果报就绪但调用仍然失败，再查 `gbrain doctor --fast`。embed 失败时 ingest
+  应在写完 wiki artifact 后 loud fail，manifest 不前进，修好后重跑
+  `next-signal run-workflow knowledge_ingest`。
 - **Dashboard 起不来** → 先确认 `pnpm` 在 PATH；用 `uv run next-signal dashboard --build`
   看 Next.js 编译错误。Dashboard 不需要 `next-signal serve`，但 `/radar` 需要 Postgres，
   `/knowledge` 需要 GBrain CLI，`/subscriptions` 需要 Folo auth。

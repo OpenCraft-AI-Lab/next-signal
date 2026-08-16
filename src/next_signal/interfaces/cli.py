@@ -119,7 +119,12 @@ def _check_embedder() -> tuple[str, bool, str]:
 
 
 def _check_gbrain() -> tuple[str, bool, str]:
-    from next_signal.integrations.gbrain import gbrain_env
+    from next_signal.integrations.gbrain import (
+        brain_initialised,
+        configured_embedding_model,
+        credential_for_model,
+        gbrain_env,
+    )
 
     gbrain_bin = os.environ.get("GBRAIN_BIN", "").strip() or shutil.which("gbrain")
     if not gbrain_bin:
@@ -128,6 +133,30 @@ def _check_gbrain() -> tuple[str, bool, str]:
             False,
             "gbrain CLI not found; install/link gbrain or set GBRAIN_BIN",
         )
+
+    # Initialisation is checked here rather than delegated to `gbrain doctor`,
+    # which scores a brain that does not exist as healthy and exits 0. An
+    # indeterminate state falls through to the health check rather than
+    # reporting a failure we cannot substantiate.
+    if brain_initialised() is False:
+        return (
+            "GBrain",
+            False,
+            "not initialised — knowledge search is unavailable; run "
+            "`next-signal knowledge gbrain-init --embedding-model <provider>:<model>`",
+        )
+
+    model = configured_embedding_model()
+    credential = credential_for_model(model) if model else None
+    if credential and not get_secret(credential):
+        return (
+            "GBrain",
+            False,
+            f"initialised with {model} but {credential} is not configured — knowledge "
+            "search is unavailable; set it on the dashboard settings page "
+            "(Settings → Credentials)",
+        )
+
     try:
         result = subprocess.run(
             [gbrain_bin, "doctor", "--fast"],
@@ -529,6 +558,87 @@ def knowledge_gbrain_ingest(
     from next_signal.tools.gbrain import gbrain_ingest
 
     typer.echo(json.dumps(gbrain_ingest.entrypoint(path), ensure_ascii=False, indent=2))
+
+
+@knowledge_app.command("gbrain-init")
+def knowledge_gbrain_init(
+    embedding_model: str = typer.Option(
+        ...,
+        "--embedding-model",
+        help="Embedding provider and model as `<provider>:<model>`, e.g. openai:text-embedding-3-large.",
+    ),
+    embedding_dimensions: int | None = typer.Option(
+        None,
+        "--embedding-dimensions",
+        help="Override the dimension GBrain derives from the model. Sized into the schema permanently.",
+    ),
+) -> None:
+    """Initialize GBrain with a chosen embedding model.
+
+    Runs once. The model sizes GBrain's Postgres schema, so it cannot be changed
+    afterwards without a destructive migration — hence no force flag, and hence
+    container bootstrap leaving this to an operator who can choose.
+    """
+    from next_signal.core.secrets import require_secret
+    from next_signal.integrations.gbrain import (
+        EMBEDDING_PROVIDERS,
+        _gbrain_bin,
+        brain_initialised,
+        configured_embedding_model,
+        credential_for_model,
+        gbrain_env,
+        provider_of,
+    )
+
+    provider = provider_of(embedding_model)
+    if provider not in EMBEDDING_PROVIDERS:
+        raise RuntimeError(
+            f"unknown embedding provider {provider!r}; "
+            f"expected `<provider>:<model>` with one of: {', '.join(EMBEDDING_PROVIDERS)}"
+        )
+
+    state = brain_initialised()
+    if state is True:
+        existing = configured_embedding_model() or "an unrecorded model"
+        raise RuntimeError(
+            f"GBrain is already initialised with {existing}. The embedding model sizes "
+            "the schema, so it cannot be changed in place and there is no force flag. "
+            "Changing it means migrating or rebuilding the brain — see GBrain's own "
+            "embedding-migration docs."
+        )
+    if state is None:
+        raise RuntimeError(
+            "cannot determine whether GBrain is initialised; refusing to initialise "
+            "over a brain that may exist. Check $GBRAIN_HOME/.gbrain/config.json."
+        )
+
+    # Fail before spawning rather than letting gbrain build a brain it cannot
+    # embed with: it writes the model and warns, which leaves a permanent schema
+    # behind a missing key. A local provider needs none and skips this.
+    credential = credential_for_model(embedding_model)
+    if credential:
+        require_secret(credential)
+
+    args = ["init", "--non-interactive", "--embedding-model", embedding_model]
+    if embedding_dimensions is not None:
+        args += ["--embedding-dimensions", str(embedding_dimensions)]
+
+    result = subprocess.run(
+        [_gbrain_bin(), *args],
+        check=False,
+        capture_output=True,
+        env=gbrain_env(embedding_model=embedding_model),
+        text=True,
+        timeout=300,
+    )
+    if result.stdout.strip():
+        typer.echo(result.stdout.strip())
+    if result.stderr.strip():
+        typer.echo(result.stderr.strip(), err=True)
+    if result.returncode != 0:
+        raise typer.Exit(code=result.returncode)
+
+    typer.echo(f"GBrain initialised with {embedding_model}.")
 
 
 @knowledge_app.command("init-test-gbrain")

@@ -73,7 +73,15 @@ Agents in any module can reference these tools by name.
   when set, it is read at call time and added as a Bearer header.
 - **GBrain** — the long-term knowledge-base peer service. Ingest goes through the
   cross-cutting GBrain bridge (`next_signal/integrations/gbrain.py`); it is not owned by
-  this module.
+  this module. Container bootstrap deliberately does not initialise it — the
+  embedding model sizes GBrain's Postgres schema permanently, so the choice is
+  an explicit one-time operator step, `next-signal knowledge gbrain-init
+  --embedding-model <provider>:<model>` (see
+  [containerized-deployment.md §8](../containerized-deployment.md#8-caveats-specific-to-a-cloud-only-container)).
+  `search_knowledge` raises rather than returning an empty list when GBrain is
+  not initialised, because GBrain's own `search`/`query` print "No results." and
+  exit 0 in that state — indistinguishable from a knowledge base that genuinely
+  holds nothing on the topic.
 - **Obsidian Git plugin** — wiki repo ↔ GitHub sync runs as a plugin inside the
   vault, not in the next-signal process. See "Wiki ↔ GitHub sync" below.
 
@@ -91,6 +99,7 @@ Agents in any module can reference these tools by name.
 uv run next-signal knowledge ingest <url|staged-file>
 uv run next-signal knowledge ingest <url> --category knowledge/ai-ml   # pick the destination folder (skips auto-classification)
 uv run next-signal knowledge ingest <url> --progress                   # one JSON event per pipeline step, plus a final result JSON line
+uv run next-signal knowledge gbrain-init --embedding-model <provider>:<model>  # one-time; see External systems below
 uv run next-signal knowledge gbrain-search "query"
 uv run next-signal run-workflow knowledge_ingest            # re-ingest changed files + refresh every Related block
 uv run next-signal knowledge review                         # reconcile the wiki against knowledge_reviews (enroll new / unenroll gone)
@@ -290,6 +299,11 @@ in its source languages until each source is ingested again.
   files stay on disk and the workflow fails loud. The run is not marked
   successful; once GBrain is fixed, direct ingest or the weekly sync backfills the
   index.
+- GBrain's embedding model is locked once `gbrain-init` runs: it sizes the
+  Postgres schema, so a second `gbrain-init` refuses rather than reconfiguring
+  or destroying the brain. There is no dashboard control for it and no
+  automatic initialisation once a credential is saved — it is always an
+  explicit CLI step.
 - The re-ingest manifest advances only after a successful index — otherwise later
   runs skip the file and KB search goes stale.
 - Direct ingest and re-ingest must derive the same GBrain-safe slug from the

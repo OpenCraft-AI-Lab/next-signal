@@ -8,7 +8,24 @@ from typing import Any
 from agno.tools import tool
 
 from next_signal.integrations._helpers import truncate
-from next_signal.integrations.gbrain import gbrain_query, gbrain_search
+from next_signal.integrations.gbrain import (
+    NOT_INITIALISED_HINT,
+    brain_initialised,
+    gbrain_query,
+    gbrain_search,
+)
+
+
+def _require_brain() -> None:
+    """Refuse to search a GBrain that does not exist.
+
+    `gbrain query` and `gbrain search` both print "No results." and exit 0 when
+    no brain has been initialised, which is indistinguishable from a knowledge
+    base that holds nothing on the topic. Only a definite "not initialised"
+    blocks: an indeterminate state proceeds and lets the search speak.
+    """
+    if brain_initialised() is False:
+        raise RuntimeError(NOT_INITIALISED_HINT)
 
 
 def _coerce_score(value: Any) -> float | None:
@@ -73,10 +90,13 @@ def _parse_search_stdout(stdout: str) -> list[dict[str, Any]]:
 @tool(show_result=False)
 def search_knowledge(query: str, topic: str | None = None) -> list[dict[str, Any]]:
     """Search saved wiki knowledge through GBrain."""
+    _require_brain()
     q = f"{topic} {query}".strip() if topic else query
     response = gbrain_search(q, limit=8)
     if not response.get("ok"):
-        raise RuntimeError(response.get("error") or response.get("stderr") or "gbrain search failed")
+        raise RuntimeError(
+            response.get("error") or response.get("stderr") or "gbrain search failed"
+        )
     return _parse_search_stdout(str(response.get("stdout", "")))
 
 
@@ -87,6 +107,7 @@ def query_knowledge(query: str, *, limit: int = 8) -> list[dict[str, Any]]:
     phrases that pure keyword ``search`` misses entirely. Agents wanting hybrid
     recall already have the ``gbrain_query`` tool.
     """
+    _require_brain()
     response = gbrain_query(query, limit=limit)
     if not response.get("ok"):
         raise RuntimeError(response.get("error") or response.get("stderr") or "gbrain query failed")

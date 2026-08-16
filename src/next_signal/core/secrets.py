@@ -36,13 +36,21 @@ SECRETS_FILE = STATE_ROOT / "secrets.json"
 # would be one no operator could enter. `EMBEDDING_API_KEY` replaces no
 # environment variable — it is the fixed name for whatever OpenAI-compatible
 # embedding endpoint an operator configures.
+#
+# `VOYAGE_API_KEY` and `GOOGLE_GENERATIVE_AI_API_KEY` exist for GBrain's
+# embedding providers, which are chosen at `gbrain-init` and read these exact
+# names from their own environment. `GOOGLE_GENERATIVE_AI_API_KEY` is separate
+# from `GOOGLE_API_KEY` rather than aliased to it because the two are read by
+# different programs and need not be the same key.
 CREDENTIAL_NAMES: tuple[str, ...] = (
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
     "GOOGLE_API_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY",
     "DEEPSEEK_API_KEY",
     "OMLX_API_KEY",
     "EMBEDDING_API_KEY",
+    "VOYAGE_API_KEY",
     "GITHUB_TOKEN",
     "FOLO_TOKEN",
 )

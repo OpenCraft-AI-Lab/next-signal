@@ -60,7 +60,14 @@ KB **检索**是横向基础设施（不在本模块）：`search_knowledge` 在
   按 does/value/maturity/ecosystem 四角度写 summary。`GITHUB_TOKEN` 可选，缺省走匿名
   （60/h rate limit，个人偶尔收藏够用）；token 设了在 call time 读自动加 Bearer 头。
 - **GBrain** —— 长期知识库 peer service。入库走横向 GBrain bridge
-  （`next_signal/integrations/gbrain.py`），不是本模块独占。
+  （`next_signal/integrations/gbrain.py`），不是本模块独占。容器 bootstrap 刻意不
+  初始化它——embedding model 会永久决定 GBrain 的 Postgres schema，所以这个选择是
+  operator 的一次性显式步骤：`next-signal knowledge gbrain-init --embedding-model
+  <provider>:<model>`（见
+  [containerized-deployment.md §8](../containerized-deployment.md#8-纯云容器特有的注意事项)）。
+  GBrain 未初始化时 `search_knowledge` 会抛错而不是返回空列表，因为 GBrain 自己的
+  `search`/`query` 在那个状态下会打印 "No results." 并退出 0——跟知识库里确实
+  什么都没有区分不开。
 - **Obsidian Git plugin** —— wiki repo ↔ GitHub 同步走 vault 内的 plugin，
   不在 next-signal 进程里。详见下面 "Wiki ↔ GitHub 同步" 一节。
 
@@ -78,6 +85,7 @@ KB **检索**是横向基础设施（不在本模块）：`search_knowledge` 在
 uv run next-signal knowledge ingest <url|staged-file>
 uv run next-signal knowledge ingest <url> --category knowledge/ai-ml   # 指定落点文件夹（跳过自动分类）
 uv run next-signal knowledge ingest <url> --progress                   # 每个 pipeline step 一行 JSON 事件 + 末行结果 JSON
+uv run next-signal knowledge gbrain-init --embedding-model <provider>:<model>  # 一次性；见下面「接的外部」
 uv run next-signal knowledge gbrain-search "query"
 uv run next-signal run-workflow knowledge_ingest            # re-ingest 变更文件 + 刷新所有 Related 区块
 uv run next-signal knowledge review                         # 对照 wiki 与 knowledge_reviews（入列新的 / 移除已删的）
@@ -220,6 +228,9 @@ agent 不在这条路径上。唯一会写 `title` 的是一次全新的 `next-s
   frontmatter）。`doc_path`（wiki 相对路径）是身份，靠对账而非外键与文件系统保持一致。
 - GBrain ingest 失败不能丢 artifact：clean wiki / raw 文件保留在磁盘，workflow loud fail。
   不把这次运行标成成功；修好 GBrain 后靠 direct ingest / weekly sync 补索引。
+- GBrain 的 embedding model 在 `gbrain-init` 跑过之后就锁定：它决定 Postgres schema
+  的大小，所以第二次 `gbrain-init` 会拒绝，而不是重新配置或销毁这个 brain。没有
+  dashboard 控件，也没有"存了凭据就自动初始化"——永远是显式的 CLI 步骤。
 - re-ingest manifest 只在成功索引后才前进，否则后续不重试、KB search 会 stale。
 - 直接 ingest 和 re-ingest 必须从 wiki-relative path 推出同一个 GBrain-safe slug；
   非 ASCII 路径要补稳定 hash 后缀避免 GBrain page 撞车。

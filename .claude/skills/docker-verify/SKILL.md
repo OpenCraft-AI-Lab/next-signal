@@ -132,8 +132,12 @@ not publish ports, so it will not collide with the running dashboard.
 
 `bootstrap` is a one-shot that exits 0 after setup: the main DB schema, the
 runtime goals file on `/state` (seeded from `goals.example.yaml` only when
-absent), and gbrain's database. None of it spends model tokens. `exec` against it
-fails:
+absent), and gbrain's *database* — not gbrain itself. Bootstrap deliberately
+does not run `gbrain init` on a first-time volume (the embedding model sizes
+the schema permanently and no credential can exist yet), so a freshly bootstrap
+stack has an empty gbrain database and `next-signal knowledge gbrain-init
+--embedding-model <provider>:<model>` is a separate, explicit step. None of it
+spends model tokens. `exec` against `bootstrap` fails:
 
 ```
 service "bootstrap" is not running
@@ -268,10 +272,17 @@ path listed as free, update this table in the same change.
 ### `next-signal doctor` exits 1 by design
 
 Under the cloud-only container profile, the local chat endpoint, the unselected
-embedder, and any unset model key report ✗ and force a non-zero exit — that is
-the normal state of a stack nobody has configured yet. **Read the check lines,
-not the exit code.** The stack is healthy when `DATABASE_URL`, `Postgres`,
-`configured agents`, and `registered tools` all show ✔.
+embedder, an uninitialised GBrain, and any unset model key report ✗ and force a
+non-zero exit — that is the normal state of a stack nobody has configured yet.
+**Read the check lines, not the exit code.** The stack is healthy when
+`DATABASE_URL`, `Postgres`, `configured agents`, and `registered tools` all
+show ✔.
+
+The GBrain line reads `not initialised — knowledge search is unavailable; run
+next-signal knowledge gbrain-init --embedding-model <provider>:<model>` on a
+fresh volume. This does not mean `gbrain doctor --fast` is broken or missing —
+`next-signal doctor` deliberately does not trust it here, because it reports a
+healthy brain and exits 0 even when none exists.
 
 ### `sh -lc` erases `next-signal` from PATH
 

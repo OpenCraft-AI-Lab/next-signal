@@ -44,11 +44,15 @@ Every provider API key and token is entered on the dashboard settings page
 `~/.next-signal/secrets.json` (`/state/secrets.json` in a container): a flat
 `NAME → value` object, written atomically at mode `0600`.
 
-Eight credentials: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`,
-`DEEPSEEK_API_KEY`, `OMLX_API_KEY`, `EMBEDDING_API_KEY`, `GITHUB_TOKEN`,
-`FOLO_TOKEN`. The set is closed — every credential the system can require has a
-control on that page, `EMBEDDING_API_KEY` being the one an OpenAI-compatible
-embedding endpoint uses.
+Ten credentials: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`,
+`DEEPSEEK_API_KEY`, `OMLX_API_KEY`, `EMBEDDING_API_KEY`, `VOYAGE_API_KEY`,
+`GOOGLE_GENERATIVE_AI_API_KEY`, `GITHUB_TOKEN`, `FOLO_TOKEN`. The set is
+closed — every credential the system can require has a control on that page.
+`EMBEDDING_API_KEY` is the one an OpenAI-compatible embedding endpoint (the
+radar dedup embedder) uses; `VOYAGE_API_KEY` and `GOOGLE_GENERATIVE_AI_API_KEY`
+are read by GBrain itself when you choose that provider at
+`next-signal knowledge gbrain-init` — see [containerized-deployment.md
+§8](./containerized-deployment.md#8-caveats-specific-to-a-cloud-only-container).
 
 Three properties worth knowing:
 
@@ -282,8 +286,8 @@ or flags a corrupt/unrecognized preference-file value), the resolved embedder
 is present, or reports that none is selected and deduplication is inactive — no
 embedding request is made, and unusable `embedding.json` is
 reported as a failed check rather than crashing doctor),
-Postgres reachability, configured agents, registered tools, the
-GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`FOLO_TOKEN` present in the store, then
+Postgres reachability, configured agents, registered tools, GBrain
+readiness, folocli auth (`FOLO_TOKEN` present in the store, then
 `folocli whoami`; a cached folocli session no longer counts), and that info-radar's
 runtime goals file exists, parses, and declares at least one goal. The goals
 check reports three failures distinctly — no file at all, a configured-but-empty
@@ -301,6 +305,15 @@ for `local*` uses DeepSeek when OMLX is unreachable. A missing
 read from the credential store; setting them in the environment does not satisfy
 the check. Credential checks report presence only and never print a value. If you
 deliberately run local-only, understand that those cloud fallbacks will fail.
+
+GBrain readiness is three distinct states, not a pass/fail: **not
+initialised** (the expected state of a first-time stack — bootstrap
+deliberately leaves it that way; the check names `next-signal knowledge
+gbrain-init`), **initialised but its provider's credential is missing** (the
+brain exists with a chosen model, but cannot embed until that credential is
+saved), and **ready**. The check determines this itself rather than trusting
+`gbrain doctor --fast`, which reports a healthy brain and exits 0 even when
+none exists.
 
 In a cloud-only container, OMLX (and Anthropic, if unset) showing ✗ is expected —
 confirm Postgres, agents, and tools are ✔ and treat the rest as informational.
@@ -412,6 +425,10 @@ uv run next-signal dashboard --start                         # start an already-
 uv run next-signal knowledge ingest <url|staged-file>        # ingest into the knowledge base
 #   --category <taxonomy-path>   pick the destination folder, skipping auto-classification
 #   --progress                   emit one JSON event per step (used by the dashboard progress panel)
+uv run next-signal knowledge gbrain-init --embedding-model <provider>:<model>
+                                                      # one-time GBrain init; model choice is permanent
+                                                      # (openai: voyage: google: need that provider's credential;
+                                                      #  ollama: lmstudio: llama-server: need none)
 uv run next-signal knowledge gbrain-search "query"           # search the local GBrain
 uv run next-signal knowledge gbrain-ingest <file|dir>        # import markdown into GBrain
 uv run next-signal knowledge review                          # reconcile the wiki against knowledge_reviews
@@ -526,10 +543,15 @@ docker compose logs -f scheduler
 - **The radar shows the same story repeatedly** → no embedder is selected, so
   deduplication is off. Choose one in **Settings → Embedding**;
   `next-signal doctor` reports this as a failed embedder check.
-- **GBrain search / re-index fails** → run `next-signal doctor` and
-  `gbrain doctor --fast`. When embedding fails, ingest should fail loud *after*
-  writing the wiki artifact, leaving the manifest un-advanced; fix the cause and
-  rerun `next-signal run-workflow knowledge_ingest`.
+- **GBrain search / re-index fails** → run `next-signal doctor` first: on a
+  fresh stack it is expected to report GBrain as not initialised, in which case
+  run `next-signal knowledge gbrain-init --embedding-model <provider>:<model>`
+  (see [containerized-deployment.md
+  §8](./containerized-deployment.md#8-caveats-specific-to-a-cloud-only-container)).
+  If it reports ready but a call still fails, check `gbrain doctor --fast`.
+  When embedding fails, ingest should fail loud *after* writing the wiki
+  artifact, leaving the manifest un-advanced; fix the cause and rerun
+  `next-signal run-workflow knowledge_ingest`.
 - **Dashboard won't start** → confirm `pnpm` is on `PATH`, then use
   `uv run next-signal dashboard --build` to surface Next.js compile errors. The
   dashboard does not need `next-signal serve`, but `/radar` needs Postgres,

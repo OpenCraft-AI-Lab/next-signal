@@ -89,6 +89,18 @@ This completes the first-run contract: the previous requirement is that the
 stack starts against an *unedited* `.env`; this one is that it starts against no
 `.env` at all, which is what a user who never opens a text editor actually has.
 
+The contract SHALL hold on a **first-time state volume with an empty credential
+store**, not only on a volume that a previous run already initialised. No
+bootstrap step SHALL require a credential to be present, because the store is
+written by the dashboard and the dashboard cannot start until bootstrap has
+completed — a bootstrap that needs a credential makes the first run
+unreachable by construction.
+
+A bootstrap step whose initialisation needs a credential SHALL be skipped
+entirely, leaving that capability uninitialised and reported as unavailable,
+rather than failing or substituting a reduced initialisation that cannot
+afterwards be completed.
+
 Credentials SHALL reach the containers through the shared state volume rather
 than through the container environment, so adding one SHALL NOT require
 `docker compose up -d --force-recreate`.
@@ -98,6 +110,13 @@ than through the container environment, so adding one SHALL NOT require
 - **WHEN** `docker compose up` runs in a working tree containing no `.env` file
 - **THEN** the stack starts, with wiki mounts and Postgres settings resolving to
   their defaults
+
+#### Scenario: First-time volume with an empty credential store
+
+- **WHEN** `docker compose up` runs against a state volume that has never been
+  initialised and a credential store that holds nothing
+- **THEN** bootstrap completes successfully, and the dashboard and scheduler
+  both start
 
 #### Scenario: Credentials cross containers without a recreate
 
@@ -209,8 +228,8 @@ optional under the active deployment profile, or when they report configuration
 an operator has not completed yet.
 
 A freshly started stack that nobody has configured SHALL be expected to exit
-non-zero. Unset model credentials and an unselected embedder are the normal
-first-run state, not defects in the stack.
+non-zero. Unset model credentials, an unselected embedder, and an uninitialised
+GBrain are the normal first-run state, not defects in the stack.
 
 #### Scenario: Cloud-only profile
 
@@ -226,6 +245,13 @@ first-run state, not defects in the stack.
 - **WHEN** a fresh stack has never had an embedder selected
 - **THEN** the embedder check reports ✗ naming the unselected state and the
   stack is still considered correctly started
+
+#### Scenario: An uninitialised GBrain is a first-run state
+
+- **WHEN** a first-time stack has started and no GBrain brain has been
+  initialised
+- **THEN** the GBrain check reports it as uninitialised and names knowledge
+  search as unavailable, and the stack is still considered correctly started
 
 ### Requirement: Dashboard action observability
 
