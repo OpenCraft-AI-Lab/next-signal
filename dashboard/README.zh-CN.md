@@ -179,7 +179,7 @@ nav 上的**齿轮按钮**现在链接到 `/settings`——一个带固定侧栏
 
 `engine.json` 里没设过的字段会回落到 `configs/models.yaml` 和 `OMLX_BASE_URL` 的值，
 所以全新安装看到的是真实的端点和模型，而不是 dashboard 编出来的默认值。
-`DEEPSEEK_API_KEY` 留在 `.env` 里——页面只报告它有没有配置，不读取也不存储密钥本身。
+`DEEPSEEK_API_KEY` 来自凭据仓库（设置 → 凭据）——页面只报告它有没有配置，不读取也不存储密钥本身。
 同一个 production job 的所有 LLM stage 都使用同一个选定引擎。只有第一次成功响应之前的
 provider 故障可以触发配置的回落；一旦成功，后续 stage 和 schema 修复都固定在该引擎。
 卡片状态只反映 dashboard 能观察到的事实（密钥是否存在、模型是否选了）；这里不去

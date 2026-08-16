@@ -201,8 +201,9 @@ already owns each value:
 
 Unset fields in `engine.json` read back from `configs/models.yaml` and
 `OMLX_BASE_URL`, so a fresh install shows its real endpoint and model rather
-than a value the dashboard invented. `DEEPSEEK_API_KEY` stays in `.env` — the
-page reports only whether it is set, and never reads or stores the key itself.
+than a value the dashboard invented. `DEEPSEEK_API_KEY` comes from the credential
+store (Settings → Credentials) — the page reports only whether it is set, and
+never reads or stores the key itself.
 Every LLM stage in one production job uses the same selected engine. A provider
 failure may use the configured fallback only before the first successful
 response; after that, later stages and schema repairs stay on the pinned engine.
