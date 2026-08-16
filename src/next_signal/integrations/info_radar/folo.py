@@ -10,9 +10,15 @@ the actual argv comes from each source's YAML entry. Public surface:
 - ``subscription_list()`` / ``unread_list()`` — the dashboard's subscription
   inventory and the per-feed unread counts merged into it.
 
-Auth: ``folocli`` reads ``FOLO_TOKEN`` env var if set, otherwise falls back to
-the session at ``~/.folo/config.json``. We pass the parent environment through
-unchanged so both paths keep working.
+Auth: ``FOLO_TOKEN`` comes from the credential store and is required. Every
+invocation checks for it and raises *before* spawning, then hands it to that one
+child through ``child_env``.
+
+``folocli``'s own session at ``~/.folo/config.json`` is deliberately not a
+supported fallback. It cannot be produced in the container — no volume backs it,
+and ``folocli login`` completes over a loopback callback bound inside the
+container that a browser on the host cannot reach — and accepting it would give
+one credential two sources of truth, only one of which has a UI.
 """
 
 from __future__ import annotations
@@ -22,10 +28,23 @@ import os
 import subprocess
 from typing import Any
 
+from next_signal.core.secrets import child_env, require_secret
+
 # Pinned per Appendix B: `npx folocli` (no @<version>) resolves to a stale
 # cached build that returns "operation aborted" on timeline. Override with
 # FOLO_CLI_ARGV if a newer release ships.
 _DEFAULT_ARGV = ["npx", "--yes", "folocli@0.0.5"]
+
+
+def folo_env() -> dict[str, str]:
+    """Environment for one folocli child, with the token required up front.
+
+    Checked here rather than left to folocli so the failure is ours: it names the
+    credential and points at the settings page, instead of surfacing as whatever
+    the CLI reports when it finds no auth.
+    """
+    require_secret("FOLO_TOKEN")
+    return child_env(["FOLO_TOKEN"])
 
 
 def default_argv() -> list[str]:
@@ -45,12 +64,21 @@ def whoami(timeout: float = 60.0) -> tuple[bool, str]:
     because a cold ``npx --yes folocli@<v>`` install can run 20-40s on first
     invocation; subsequent calls hit the npm cache and return in <1s.
     """
+    # Resolved before the call so a missing credential is reported rather than
+    # raised: this is the diagnostic path, and `doctor` wants every check to
+    # produce a line.
+    try:
+        env = folo_env()
+    except RuntimeError as e:
+        return (False, str(e))
+
     try:
         result = subprocess.run(
             [*default_argv(), "whoami"],
             check=False,
             capture_output=True,
             text=True,
+            env=env,
             timeout=timeout,
         )
     except FileNotFoundError as e:
@@ -90,6 +118,7 @@ def entry_get(source_id: str, *, timeout: float = 60.0) -> dict[str, Any]:
             check=False,
             capture_output=True,
             text=True,
+            env=folo_env(),
             timeout=timeout,
         )
     except FileNotFoundError as e:
@@ -166,6 +195,7 @@ def _run_envelope(command: list[str], label: str, timeout: float) -> Any:
             check=False,
             capture_output=True,
             text=True,
+            env=folo_env(),
             timeout=timeout,
         )
     except FileNotFoundError as e:

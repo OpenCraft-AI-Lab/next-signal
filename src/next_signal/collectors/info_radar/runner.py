@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from next_signal.collectors.info_radar import store
 from next_signal.collectors.info_radar.loader import SourceSpec, load_sources
 from next_signal.core.logging import get_logger
+from next_signal.integrations.info_radar.folo import folo_env
 
 log = get_logger(__name__)
 
@@ -58,6 +59,18 @@ def run_all(only: str | None = None) -> list[SourceResult]:
 
 def _run_one(spec: SourceSpec) -> SourceResult:
     log.info("info_radar_source_start", source=spec.name, argv=spec.argv)
+    # Every source today shells out to folocli, so FOLO_TOKEN is required up
+    # front and handed to only this child, same as every other folocli caller
+    # (next_signal.integrations.info_radar.folo). A subprocess spawned without
+    # it inherits this process's environment, which per the credential store's
+    # design never holds FOLO_TOKEN — it would reach folocli as no token at all.
+    try:
+        env = folo_env()
+    except RuntimeError as e:
+        msg = str(e)
+        log.error("info_radar_source_failed", source=spec.name, error=msg)
+        return SourceResult(spec.name, 0, 0, msg)
+
     try:
         completed = subprocess.run(
             spec.argv,
@@ -65,6 +78,7 @@ def _run_one(spec: SourceSpec) -> SourceResult:
             capture_output=True,
             text=True,
             timeout=spec.timeout_sec,
+            env=env,
         )
     except FileNotFoundError as e:
         msg = f"launcher not found: {e}"

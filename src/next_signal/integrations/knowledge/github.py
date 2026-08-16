@@ -2,8 +2,8 @@
 
 Pulls six classes of signal from the public REST API and assembles a
 structured markdown packet for the rest of the ingest pipeline. Auth is
-optional: with `GITHUB_TOKEN` set, calls go authenticated (5k/h); without,
-anonymous (60/h) — enough for ad-hoc personal bookmarking.
+optional: with `GITHUB_TOKEN` in the credential store, calls go authenticated
+(5k/h); without, anonymous (60/h) — enough for ad-hoc personal bookmarking.
 
 Failure policy mirrors the bilibili adapter:
 - README fetch is mandatory; failure → RuntimeError.
@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import base64
 import logging
-import os
 import re
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
 
+from next_signal.core.secrets import get_secret
 from next_signal.integrations._helpers import http_client, to_jsonable, truncate
 
 logger = logging.getLogger(__name__)
@@ -250,7 +250,7 @@ def _headers(*, force_anonymous: bool = False) -> dict[str, str]:
     }
     if force_anonymous or _AUTH_DISABLED_THIS_SESSION:
         return headers
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    token = get_secret("GITHUB_TOKEN")
     if token:
         headers["Authorization"] = f"Bearer {token}"
     return headers
@@ -266,7 +266,7 @@ def _request(path: str, *, params: dict[str, Any] | None = None) -> httpx.Respon
     if (
         response.status_code == 401
         and not _AUTH_DISABLED_THIS_SESSION
-        and os.environ.get("GITHUB_TOKEN", "").strip()
+        and get_secret("GITHUB_TOKEN")
     ):
         logger.warning(
             "github: GITHUB_TOKEN returned 401 — falling back to anonymous "

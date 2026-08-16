@@ -637,6 +637,17 @@ textarea.input { padding: 8px 10px; height: auto; line-height: 1.55; resize: ver
 .set-rowctl { flex: none; padding-top: 1px; }
 .set-sub { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--line); }
 
+/* Credentials: one row per key, each its own rule so seven of them read as a
+   list rather than one dense block. Scoped to the section — every other card
+   has a single row and would gain a stray divider. */
+#credentials .set-row + .set-row { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line); }
+#credentials .set-label { font-family: var(--font-mono); font-size: 12px; }
+.set-credrow { display: flex; align-items: center; gap: 8px; }
+/* Monospace and fixed-width: a key is a token, and the field must not resize
+   as it is typed into. It renders `type=password`, so nothing is legible here
+   anyway — a stored value is never put back into it. */
+.set-credrow .input { width: 14rem; font-family: var(--font-mono); font-size: 12.5px; }
+
 /* A setting the environment decides, shown where its control would sit. Muted
    and unboxed so the row reads as stated rather than merely disabled — there is
    nothing here to re-enable. */

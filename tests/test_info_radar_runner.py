@@ -10,6 +10,13 @@ import pytest
 
 from next_signal.collectors.info_radar import runner
 from next_signal.collectors.info_radar.loader import SourceSpec
+from next_signal.core.secrets import delete_secret, save_secret
+
+
+@pytest.fixture(autouse=True)
+def _folo_token() -> None:
+    """Every source here shells out to folocli, which now requires the token."""
+    save_secret("FOLO_TOKEN", "test-token")
 
 
 def _spec(name: str, *, argv: list[str] | None = None) -> SourceSpec:
@@ -153,6 +160,41 @@ def test_only_filter_runs_just_named_source(monkeypatch, fake_run, fake_store):
     results = runner.run_all(only="b")
 
     assert [r.name for r in results] == ["b"]
+
+
+def test_missing_token_fails_source_before_spawning(monkeypatch, fake_store):
+    """Regression: a subprocess spawned without FOLO_TOKEN inherits this
+    process's environment, which never holds it — folocli then reports
+    UNAUTHORIZED instead of the collector naming the missing credential."""
+    delete_secret("FOLO_TOKEN")
+    monkeypatch.setattr(runner, "load_sources", lambda: [_spec("good")])
+    spawned: list[list[str]] = []
+    monkeypatch.setattr(runner.subprocess, "run", lambda argv, **kw: spawned.append(list(argv)))
+
+    [result] = runner.run_all()
+
+    assert result.error and "FOLO_TOKEN is not configured" in result.error
+    assert spawned == []
+    assert fake_store == []
+
+
+def test_run_one_passes_folo_token_env(monkeypatch, fake_store):
+    """The child gets FOLO_TOKEN via env=, not by inheriting this process's."""
+    monkeypatch.setattr(runner, "load_sources", lambda: [_spec("good")])
+    seen_env: dict[str, str] = {}
+
+    def fake(argv, **kwargs):
+        seen_env.update(kwargs.get("env") or {})
+        return subprocess.CompletedProcess(
+            args=argv, returncode=0, stdout=_folo_envelope(["a"]), stderr=""
+        )
+
+    monkeypatch.setattr(runner.subprocess, "run", fake)
+
+    [result] = runner.run_all()
+
+    assert result.error is None
+    assert seen_env.get("FOLO_TOKEN") == "test-token"
 
 
 def test_disabled_source_skipped(monkeypatch, fake_run, fake_store):

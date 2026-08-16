@@ -1,7 +1,7 @@
 "use server";
 
 import { execFile } from "node:child_process";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -14,7 +14,8 @@ import {
   type Locale,
 } from "@/lib/i18n/dictionaries";
 import { startIngestJob } from "@/lib/ingest/jobs";
-import { wikiRoot } from "@/lib/paths";
+import { secretsStateFile, wikiRoot } from "@/lib/paths";
+import { CREDENTIAL_NAMES, parseSecrets } from "@/lib/secrets";
 import {
   addCategory,
   type FreshnessTier,
@@ -28,6 +29,29 @@ const execFileAsync = promisify(execFile);
  *  wins, else the `gbrain` launcher on PATH. */
 function gbrainBin(): string {
   return process.env.GBRAIN_BIN?.trim() || "gbrain";
+}
+
+/**
+ * Env for the gbrain child this module spawns directly (the Python bridge's
+ * `gbrain_env` covers every other call site). Same pattern as `folocliEnv` in
+ * `lib/radar-ingest.ts`: read the credential store fresh at spawn time, strip
+ * every known credential name from the inherited environment first, then put
+ * back only OPENAI_API_KEY — gbrain's CJK queries route through hybrid search,
+ * which embeds. Not required: keyword search works with no key configured.
+ */
+async function gbrainEnv(): Promise<NodeJS.ProcessEnv> {
+  let raw: string;
+  try {
+    raw = await readFile(secretsStateFile(), "utf-8");
+  } catch {
+    raw = "{}"; // absent store is normal — a fresh install has no credentials
+  }
+  const secrets = parseSecrets(raw);
+  const env = { ...process.env };
+  for (const name of CREDENTIAL_NAMES) delete env[name];
+  const token = secrets.OPENAI_API_KEY?.trim();
+  if (token) env.OPENAI_API_KEY = token;
+  return env;
 }
 
 export type GbrainHit = {
@@ -77,7 +101,7 @@ export async function searchKnowledge(query: string): Promise<GbrainHit[]> {
       q,
       "--limit",
       "10",
-    ]);
+    ], { env: await gbrainEnv() });
     return parseGbrainOutput(stdout);
   } catch {
     return [];

@@ -146,7 +146,7 @@ directory, not the repository or the read-only `.env` mount.
 | Component | Why it stays on the host |
 |---|---|
 | Docker Desktop / colima | The container runtime itself |
-| `.env` | Mounted read-only into `app`; kept out of the image because it holds live secrets |
+| `.env` | Optional (`required: false`); mounted read-only into `app`. Holds no credential — deployment settings only |
 | `digitalpaca-wiki/` + `digitalpaca-wiki-raw/` | Knowledge content; bind-mounted so host and container agree. The host sources come from `WIKI_DIR` / `WIKI_RAW_DIR`, defaulting to `./state/wiki` and `./state/wiki-raw` when unset, so the stack starts against an unedited `.env`. Inside the container the paths are always `/wiki` and `/wiki-raw` |
 | `~/.next-signal/` state | knowledge_ingest_manifest.json, agent-tmp/, `goals.yaml`, and the settings the dashboard writes — `language.json`, `engine.json`, `coding-agents.json`, `schedule.json`, `embedding.json`. A named volume (or bind mount) so it survives rebuilds. These are the reason the state root cannot be baked into the image: the dashboard writes them at runtime, every reader picks them up at call time without a restart, and they are hand-editable when a panel is not reachable. `goals.yaml` is here for a sharper reason still — `dashboard` and `scheduler` are separate containers off one image, so a write under `/app/configs` would be visible to neither the other service nor the next build |
 | Published ports | `localhost:3000` is how you reach the container |
@@ -275,10 +275,11 @@ auto-restart, persist data in volumes.**
 ## 7. Running with Docker
 
 The repo ships `Dockerfile`, `docker-compose.yml`, and `.dockerignore` at its
-root. Prerequisites: Docker Engine + Compose v2, and a `.env` (copy from
-`.env.example`) with at least a cloud LLM key. `WIKI_DIR` / `WIKI_RAW_DIR` are
-optional — leave them blank and Compose mounts `./state/wiki` and
-`./state/wiki-raw`; set them to point at your own wiki repos instead.
+root. Prerequisites: Docker Engine + Compose v2. **No `.env` file is needed** —
+every value Compose reads has a default, and provider credentials are entered in
+the dashboard rather than in a file. `WIKI_DIR` / `WIKI_RAW_DIR` are optional —
+leave them unset and Compose mounts `./state/wiki` and `./state/wiki-raw`; set
+them to point at your own wiki repos instead.
 
 > **Supported platform: Docker Desktop on macOS and Windows.** Its file-sharing
 > layer maps ownership, so the default wiki directories Docker creates are usable
@@ -305,9 +306,9 @@ optional — leave them blank and Compose mounts `./state/wiki` and
 ### Quickstart
 
 1. Install/start Docker Engine + Compose v2 (Docker Desktop or colima).
-2. `cp .env.example .env`, then set at least one cloud LLM key
-   (DeepSeek/Anthropic/OpenAI). Leave `WIKI_DIR` / `WIKI_RAW_DIR` blank to use
-   the repo-relative defaults, or point them at your own wiki repos.
+2. Nothing to configure. Copy `.env.example` to `.env` only if you want to change
+   a default (wiki paths, Postgres credentials, CLI versions) — the stack starts
+   without the file. API keys are **not** set here; step 5 does that in the UI.
 3. Build and start the stack:
    ```bash
    docker compose up --build
@@ -330,7 +331,8 @@ optional — leave them blank and Compose mounts `./state/wiki` and
   build args (`GBRAIN_REF`, `OPENCLI_REF`, `CODEX_CLI_VERSION`, and
   `CLAUDE_CODE_VERSION`).
 - **Persistence:** named volumes `pgdata` (Postgres — including the `gbrain`
-  database), `pstate` (`~/.next-signal` state + gbrain `config.json`),
+  database), `pstate` (`~/.next-signal` state, including `secrets.json` with every
+  provider credential, + gbrain `config.json`),
   `codex_auth` (`/root/.codex`), and `claude_auth` (`/root/.claude`).
   `docker compose down` keeps them; `down -v` wipes all four.
 
@@ -388,8 +390,8 @@ switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--por
 
    - expose a host/remote OMLX endpoint via
      `OMLX_BASE_URL=http://host.docker.internal:<port>/v1`; or
-   - open **Settings → Embedding** and select OpenAI (needs `OPENAI_API_KEY`) or
-     an OpenAI-compatible endpoint of your own.
+   - open **Settings → Embedding** and select OpenAI (needs `OPENAI_API_KEY` in
+     **Settings → Credentials**) or an OpenAI-compatible endpoint of your own.
 
    A hosted embedder has two consequences worth deciding on deliberately. Every
    kept item's analysis summary is **sent to that provider** — text that
@@ -400,16 +402,16 @@ switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--por
    provider's dedup memory, so a failure stays loud and the item is treated as
    novel.
 
-   Credentials come from the process environment, not from the state file.
-   Editing `.env` does **not** reach an already-running container: recreate the
-   service (`docker compose up -d --force-recreate dashboard scheduler`) before
-   expecting the new value to exist. `docker compose exec dashboard next-signal doctor`
-   reports the resolved embedder identity and whether its variable is present,
-   without making a model request.
+   Credentials come from the credential store on the shared state volume, read at
+   call time — so a key saved in **Settings → Credentials** applies to the next
+   item in every service, with no restart and no `--force-recreate`.
+   `docker compose exec dashboard next-signal doctor` reports the resolved
+   embedder identity and whether its credential is present, without making a
+   model request.
 2. **`next-signal doctor` exits non-zero if any check fails** — treat OMLX / Anthropic ✗
    as expected under cloud-only; do not let it block startup.
-3. **Secrets stay out of the image.** `.env` currently holds live keys; mount it at
-   runtime, never `COPY` it into a layer or push it.
+3. **Secrets stay out of the image.** Credentials live in `/state/secrets.json` on
+   a named volume, written `0600` — never in a layer, and never in `.env`.
 4. **Per-page dashboard dependencies:** `/goals` and `/design` need only
    Postgres/filesystem; `/radar` needs Postgres populated by `info-radar pull`;
    `/knowledge` needs the gbrain CLI; `/subscriptions` needs Folo auth.

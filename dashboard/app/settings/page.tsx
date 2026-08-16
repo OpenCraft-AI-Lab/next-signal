@@ -4,6 +4,7 @@ import { getEmbeddingPreferences } from "@/lib/actions/embedding";
 import { getEnginePreferences } from "@/lib/actions/engine";
 import { getContentLanguage } from "@/lib/actions/language";
 import { getSchedule, getScheduleStatus } from "@/lib/actions/schedule";
+import { getCredentialPresence } from "@/lib/actions/secrets";
 import { getCodingAgentAuthViews } from "@/lib/coding-agent-auth";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/server";
@@ -42,18 +43,18 @@ export default async function SettingsPage() {
     getScheduleStatus(),
   ]);
   const t = getDictionary(locale);
-  // Read here rather than through a server action: the page only needs to
-  // report whether the key exists, and a `"use server"` export would put that
-  // probe on a callable endpoint for no gain. The key itself never leaves the
-  // server — only this boolean is passed down.
-  const deepSeekKey = Boolean(process.env.DEEPSEEK_API_KEY?.trim());
-  const openAiKey = Boolean(process.env.OPENAI_API_KEY?.trim());
-  // The custom embedding endpoint names its own variable, so which one to probe
-  // is only knowable after reading the saved state. Same rule as above: a
-  // boolean crosses to the client, never the value.
+  // Presence from the credential store, resolved server-side. The custom
+  // embedding endpoint names its own credential, so which extra name to report
+  // is only knowable after reading the saved embedding state. Booleans cross to
+  // the client — never a value, in whole or in part.
+  const presence = await getCredentialPresence(
+    embedding.openaiCompatible ? [embedding.openaiCompatible.apiKeyEnv] : [],
+  );
+  const deepSeekKey = presence.DEEPSEEK_API_KEY;
+  const openAiKey = presence.OPENAI_API_KEY;
   const embeddingCompatibleKey = Boolean(
     embedding.openaiCompatible &&
-      process.env[embedding.openaiCompatible.apiKeyEnv]?.trim(),
+      presence[embedding.openaiCompatible.apiKeyEnv],
   );
 
   return (
@@ -72,6 +73,7 @@ export default async function SettingsPage() {
           embedding={embedding}
           openAiKey={openAiKey}
           embeddingCompatibleKey={embeddingCompatibleKey}
+          credentialPresence={presence}
           schedule={schedule}
           scheduleStatus={scheduleStatus}
           runtimeTimezone={RADAR_TZ}

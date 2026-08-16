@@ -14,7 +14,7 @@
 brew install uv
 brew install --cask postgres-app          # or brew install postgresql@16
 uv sync
-cp .env.example .env && $EDITOR .env       # at minimum DATABASE_URL + one LLM key
+cp .env.example .env && $EDITOR .env       # host-native: DATABASE_URL. Keys go in the dashboard
 createdb next_signal
 uv run python scripts/bootstrap_db.py
 uv run next-signal doctor
@@ -37,13 +37,54 @@ The Dashboard is a separate Next.js process and does not require `next-signal se
 be running alongside it: its server actions spawn one-shot `next-signal` CLI children,
 and data pages read Postgres directly.
 
+## Credentials
+
+Every provider API key and token is entered on the dashboard settings page
+(**Settings → Credentials**) and stored in one file,
+`~/.next-signal/secrets.json` (`/state/secrets.json` in a container): a flat
+`NAME → value` object, written atomically at mode `0600`.
+
+Seven credentials: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`,
+`DEEPSEEK_API_KEY`, `OMLX_API_KEY`, `GITHUB_TOKEN`, `FOLO_TOKEN`. An
+OpenAI-compatible embedding endpoint additionally stores whichever name its
+`api_key_env` points at.
+
+Three properties worth knowing:
+
+- **Saving takes effect immediately, everywhere.** Credentials resolve at call
+  time from the shared state volume, so a key saved in the browser is used by the
+  next scheduler job — no restart, no `docker compose up --force-recreate`.
+- **Nothing reads a credential from the environment.** No fallback, no import. A
+  key left in `.env` is inert, and a value set in the environment does not
+  satisfy a check.
+- **A value never comes back out.** The page reports only whether each credential
+  is set; no value, and no masked fragment of one, is returned to the browser or
+  written to a log.
+
+The store is plaintext, deliberately: it is the same threat model as the `.env`
+it replaces — an unencrypted file readable by the host user — and a Docker named
+volume is not a vault. Keeping every secret in one module means a later move to a
+real secret manager touches one file.
+
+### Getting a Folo token
+
+Folo issues no API key: its token is a session value, so there is no page that
+mints one. **Settings → Credentials → Sign in to Folo** opens Folo in a new tab,
+receives the returned one-time token on a dashboard callback route, exchanges it
+for a session token, and stores it. Pasting a token manually works too and is the
+fallback if the sign-in fails.
+
+`folocli`'s own `~/.folo/config.json` session is **not** consulted. It cannot be
+produced in the container — no volume backs it, and `folocli login` completes
+over a loopback callback bound inside the container that a host browser cannot
+reach — and accepting it would give one credential two sources of truth.
+
 ## Environment variables
 
-Key values in the repo-local `.env`:
+No credential belongs here. Key values in the repo-local `.env`:
 
 - `DATABASE_URL`
-- `OMLX_BASE_URL` / `OMLX_API_KEY`
-- Cloud model / API keys, as needed
+- `OMLX_BASE_URL` (the OMLX key is a credential — see below)
 - `GBRAIN_BIN` (when `gbrain` is not on `PATH`; the dashboard and backend resolve
   it the same way)
 - `WIKI_DIR` / `WIKI_RAW_DIR` (**required by the code**, no default — when missing,
@@ -62,19 +103,25 @@ setting that only changes the dashboard's own UI text; the two are independent a
 may differ. See [modules/core.md](./modules/core.md#output-language).
 
 Never read these directly from an arbitrary module — go through the corresponding
-core/helper function. The complete key list is in `.env.example`.
+core/helper function. The complete list is in `.env.example`; credentials are not
+among them.
 
 | Integration | Env var |
 |---|---|
-| LLM: Anthropic / OpenAI / Google / DeepSeek | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` / `DEEPSEEK_API_KEY` (plus optional `DEEPSEEK_BASE_URL`, default `https://api.deepseek.com`) |
-| Folo (info-radar) | `FOLO_TOKEN` (optional; falls back to `~/.folo/config.json`) plus optional `FOLO_CLI_ARGV` to override the default `npx --yes folocli@<v>` |
+| LLM: Anthropic / OpenAI / Google / DeepSeek | **Settings → Credentials** (optional `DEEPSEEK_BASE_URL` stays in `.env`, default `https://api.deepseek.com`) |
+| Folo (info-radar) | **Settings → Credentials** — required; use "Sign in to Folo" or paste a token. `~/.folo/config.json` is no longer consulted. Optional `FOLO_CLI_ARGV` stays in `.env` |
 | GBrain / OpenCLI (knowledge) | `GBRAIN_BIN` (when `gbrain` is not on `PATH`) / `OPENCLI_BIN` (WeChat download — path to `main.js` or a wrapper) |
 | Coding agents | `CODEX_BIN` / `CLAUDE_BIN` (optional executable overrides; saved CLI login remains provider-owned) |
-| GitHub (knowledge bookmarking) | `GITHUB_TOKEN` (optional; anonymous is 60 req/h) |
+| GitHub (knowledge bookmarking) | **Settings → Credentials** (optional; anonymous is 60 req/h) |
 | Embedder (info-radar analysis dedup) | Depends on the provider selected in **Settings → Embedding** — see below |
 
-Every cloud integration checks its key at call time. A missing key fails only the
-corresponding tool — it never blocks startup.
+Every cloud integration reads its credential from the store at call time. A
+missing credential fails only the corresponding tool — it never blocks startup —
+and a credential saved in the dashboard applies to the next call in every
+process, with no restart and no `docker compose up --force-recreate`.
+
+**No credential is ever read from the environment.** There is no fallback and no
+import: a key left in `.env` is inert.
 
 ### Choosing an embedder
 
@@ -83,8 +130,8 @@ The dedup gate's embedder is selected independently of the LLM engine, on
 
 | Provider | Configuration | Notes |
 |---|---|---|
-| `omlx` (default) | `OMLX_BASE_URL` reachable; `configs/models.yaml::embedders.local.model_id` defaults to `Qwen3-Embedding-0.6B-8bit` and the OMLX server must have that model loaded | `OMLX_API_KEY` stays optional. Nothing leaves the machine |
-| `openai` | `OPENAI_API_KEY`; model from `embedders.openai` (default `text-embedding-3-small`) | Billed per item; summaries leave the machine |
+| `omlx` (default) | `OMLX_BASE_URL` reachable; `configs/models.yaml::embedders.local.model_id` defaults to `Qwen3-Embedding-0.6B-8bit` and the OMLX server must have that model loaded | `OMLX_API_KEY` stays optional (Settings → Credentials). Nothing leaves the machine |
+| `openai` | `OPENAI_API_KEY` in **Settings → Credentials**; model from `embedders.openai` (default `text-embedding-3-small`) | Billed per item; summaries leave the machine |
 | `openai_compatible` | An API **root** (e.g. `https://host.example/v1` — the client appends `/embeddings`), a model, the **name** of the env var holding its key, and a vector-space id | No shipped default; all four must be saved before it can be selected |
 
 Three properties are worth internalising before switching:
@@ -94,13 +141,12 @@ Three properties are worth internalising before switching:
   being reshaped. `text-embedding-ada-002` and other fixed-width models that
   cannot produce 1024 are therefore unusable.
 - **The state file never holds a key.** For `openai_compatible` it stores
-  `api_key_env` — the variable's *name* — and the value is read from the
-  pipeline process's environment. Credentials in the base URL (userinfo, query,
-  fragment) are rejected outright.
-- **`.env` edits do not hot-reload.** A state-file edit steers the next item with
-  no restart, but a credential only exists in a process that started after it was
-  set: restart the host process, or
-  `docker compose up -d --force-recreate dashboard scheduler`.
+  `api_key_env` — the credential's *name* — and the value comes from the
+  credential store. Credentials in the base URL (userinfo, query, fragment) are
+  rejected outright.
+- **Nothing here needs a restart.** Both the state file and the credential store
+  are read when an item resolves its embedder, so a change to either steers the
+  next item — no host-process restart and no `--force-recreate`.
 
 `space_id` is your own label for the vectors a generic endpoint produces. Change
 it whenever weights, tokenizer, pooling, quantization, or dimension behaviour
@@ -213,16 +259,16 @@ uv run next-signal doctor                            # host-native
 docker compose exec dashboard next-signal doctor     # in the container
 ```
 
-It checks `DATABASE_URL`, `ANTHROPIC_API_KEY`, `DEEPSEEK_API_KEY`,
-`OMLX_BASE_URL`, the resolved content language (reports the `global` policy's
+It checks `DATABASE_URL`, `OMLX_BASE_URL`, the presence of `ANTHROPIC_API_KEY`
+and `DEEPSEEK_API_KEY` **in the credential store**, the resolved content language (reports the `global` policy's
 value and whether it came from the preference file or the hardcoded default,
 or flags a corrupt/unrecognized preference-file value), the resolved embedder
 (prints the active vector-space identity and whether its required configuration
 is present — no embedding request is made, and unusable `embedding.json` is
 reported as a failed check rather than crashing doctor),
 Postgres reachability, configured agents, registered tools, the
-GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`folocli whoami` —
-either `FOLO_TOKEN` or `~/.folo/config.json` is enough), and that info-radar's
+GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`FOLO_TOKEN` present in the store, then
+`folocli whoami`; a cached folocli session no longer counts), and that info-radar's
 runtime goals file exists, parses, and declares at least one goal. The goals
 check reports three failures distinctly — no file at all, a configured-but-empty
 `goals:` list, and a parse error — because they call for different fixes; in
@@ -235,7 +281,9 @@ feature, you can ignore its ✗".
 
 A missing `DEEPSEEK_API_KEY` counts as a failure — the default fallback profile
 for `local*` uses DeepSeek when OMLX is unreachable. A missing
-`ANTHROPIC_API_KEY` counts too, since the `claude_*` profiles need it. If you
+`ANTHROPIC_API_KEY` counts too, since the `claude_*` profiles need it. Both are
+read from the credential store; setting them in the environment does not satisfy
+the check. Credential checks report presence only and never print a value. If you
 deliberately run local-only, understand that those cloud fallbacks will fail.
 
 In a cloud-only container, OMLX (and Anthropic, if unset) showing ✗ is expected —
@@ -449,10 +497,13 @@ docker compose logs -f scheduler
 ## Troubleshooting
 
 - **`DATABASE_URL not set`** → copy `.env.example` to `.env` and fill it in.
+- **`<NAME> is not configured`** → the credential is missing from the store; set
+  it in **Settings → Credentials**. Setting it in `.env` has no effect.
 - **Postgres unreachable** → start Postgres.app or the Homebrew service, then
   rerun `next-signal doctor`.
-- **An OMLX profile fell back to DeepSeek** → check `OMLX_BASE_URL` /
-  `OMLX_API_KEY` and the endpoint's `/v1/models`. Once OMLX is back, a
+- **An OMLX profile fell back to DeepSeek** → check `OMLX_BASE_URL` in `.env`,
+  the optional `OMLX_API_KEY` in Settings → Credentials, and the endpoint's
+  `/v1/models`. Once OMLX is back, a
   long-running process must call `next_signal.core.models.reset_cache()` before it
   retries local.
 - **GBrain search / re-index fails** → run `next-signal doctor` and

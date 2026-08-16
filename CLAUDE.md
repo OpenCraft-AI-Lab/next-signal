@@ -200,6 +200,22 @@ Python 代码只定义"形状"——通用的 loader/builder。
 
 **不要**：在 Python 里 hardcode model ID、instructions、tool 列表。
 
+### 凭据（系统级铁律）
+
+所有 provider 的 API key / token 走 `next_signal.core.secrets`，存在
+`$NEXT_SIGNAL_STATE_DIR/secrets.json`（容器里 `/state/secrets.json`），**任何地方都不从
+环境变量读凭据**——没有回落，没有导入路径。`.env` 只留系统连接配置。
+
+- 用 `get_secret(name)` / `require_secret(name)`；后者的报错点名凭据并指向设置页
+- 子进程要凭据（folocli）→ `child_env(["NAME"])` **按 spawn 构造**，绝不写 `os.environ`
+  （dashboard 带整个环境 spawn CLI 子进程，全局注入等于把每个 secret 发给每个子进程，
+  包括故意 `inherit_env: []` 的 coding-agent）
+- agno 的 model 类构造时会自己 `getenv` 兜底——所以必须显式传 `api_key=`，并在构造**之前**
+  就为缺失凭据抛错，否则等于偷偷从环境里解析
+- 凭据的值不进浏览器、不进日志、不进异常消息；只回 presence 布尔
+- 检查方式：`grep -rn "<凭据名>" src/` 只应命中 store 读取、`CREDENTIAL_NAMES` 和
+  `child_env` 调用点
+
 Production agent 也必须走这套流程。不要在 tool / workflow 函数里临时 `Agent(...)` 然后把
 instructions、model profile 写死。需要一个 LLM 子任务（例如 frontmatter enrichment）时：
 
@@ -245,9 +261,9 @@ profile / 默认行为放这。
 - 静态 AgentOS 模型从 `configs/models.yaml` 的 profile 引用；production stage 的 baseline
   也从这里取，但 provider/model/effort 由 `engine.json` / `coding-agents.json` 在 job 开始时覆盖。
   绝不在 agent 代码里 `Codex(...)`
-- OMLX 端点读自 `.env` 的 `OMLX_BASE_URL` + `OMLX_API_KEY`，**只通过**
-  `next_signal.core.omlx.resolve_omlx_endpoint()` 解析；普通调用使用公开的
-  `next_signal.core.models.omlx_endpoint()`，不要在别处直接读 env 或复制逻辑
+- OMLX 端点：`OMLX_BASE_URL` 读自 `.env`，`OMLX_API_KEY`（可选）是凭据，走 credential
+  store——两者**只通过** `next_signal.core.omlx.resolve_omlx_endpoint()` 解析；普通调用使用
+  公开的 `next_signal.core.models.omlx_endpoint()`，不要在别处直接读 env 或复制逻辑
 - OMLX 不可达时 `next_signal.core.models.get_model` 自动捕获 `RuntimeError` 并切到 `fallback_profile`
   （YAML 里配）；恢复后需要 `reset_cache()` 才会重试 OMLX
 - Qwen3 sampling（temp 0.4 / top_p 0.85 / min_p 0.05 / 关 thinking）与 agno `OpenAILike`
@@ -400,14 +416,15 @@ profile / 默认行为放这。
 ```python
 # next_signal/integrations/<name>.py
 from agno.tools import tool
-from next_signal.integrations._helpers import env, http_client, to_jsonable, truncate
+from next_signal.core.secrets import require_secret
+from next_signal.integrations._helpers import http_client, to_jsonable, truncate
 
 _BASE = "https://api.example.com/v1"
 
 @tool(show_result=False)
 def example_action(arg: str) -> dict:
     """One-line docstring; agno turns this into the LLM-visible description."""
-    with http_client(headers={"Authorization": f"Bearer {env('EXAMPLE_API_KEY')}"}) as c:
+    with http_client(headers={"Authorization": f"Bearer {require_secret('EXAMPLE_API_KEY')}"}) as c:
         r = c.get(f"{_BASE}/something", params={"q": arg})
         r.raise_for_status()
     return to_jsonable(r.json())
@@ -422,7 +439,9 @@ def register(registry) -> None:
 由 `tools/` 或 workflow stage 调用并暴露稳定 tool。
 
 铁律：
-- API key 用 `env(NAME)` 在 **call time** 读，不在 import time——缺 key 不能阻断 startup
+- API key 是凭据，走 `next_signal.core.secrets`：`require_secret(NAME)` / `get_secret(NAME)`
+  在 **call time** 读，不在 import time——缺 key 不能阻断 startup；要在设置页可配，把 NAME
+  加进 `CREDENTIAL_NAMES`。`_helpers.env(NAME)` 只留给非凭据的部署配置（base URL、开关）
 - HTTP 一律走 `http_client()`（自带 30s timeout），不要直接 `requests` 或裸 `httpx`
 - 返回值过 `to_jsonable()` 确保 JSON-safe
 - 长文本（文章、文件内容）过 `truncate()` 防爆 context
@@ -436,8 +455,9 @@ def register(registry) -> None:
 - argv 默认走 `npx --yes folocli@<pinned-version>`（不要 `npx folocli` — 无 `--yes` 解析
   到旧 cache 会返回 stale 错误；不要 `folocli@latest` — 漂移）；version 走 `${TOOL}_CLI_ARGV`
   env var 让 operator 覆盖
-- 认证优先级：`<TOOL>_TOKEN` env var > CLI 自己的 session 文件（folocli 是 `~/.folo/config.json`）
-  → 无人值守场景优先用 token env var
+- 认证：`<TOOL>_TOKEN` 是凭据，走 credential store（`require_secret` 检查、
+  `child_env(["<TOOL>_TOKEN"])` 传给子进程）；CLI 自己的 session 文件（folocli 是
+  `~/.folo/config.json`）不是 fallback——容器里产生不出来，也会让一个凭据有两个来源
 - 给 agent / CLI 看的入口在 `next_signal/collectors/` 或 `next_signal/tools/` 而不是 integration 本身
 
 ---

@@ -12,9 +12,30 @@ import subprocess
 
 import pytest
 
+from next_signal.core.secrets import delete_secret, save_secret
 from next_signal.integrations.info_radar import folo
 
 _NO_UNREAD = {"ok": True, "data": {"total": 0, "items": []}}
+
+
+@pytest.fixture(autouse=True)
+def _folo_token() -> None:
+    """Every folocli call now requires the token before it spawns anything."""
+    save_secret("FOLO_TOKEN", "test-token")
+
+
+def test_missing_token_raises_before_spawning(monkeypatch) -> None:
+    """The failure is ours, and it happens before folocli is ever invoked."""
+    delete_secret("FOLO_TOKEN")
+    spawned: list[list[str]] = []
+    monkeypatch.setattr(
+        folo.subprocess, "run", lambda args, **kw: spawned.append(list(args))
+    )
+
+    with pytest.raises(RuntimeError, match="FOLO_TOKEN is not configured.*Settings"):
+        folo.subscription_list()
+
+    assert spawned == []
 
 
 def _result(stdout: str = "", stderr: str = "", returncode: int = 0) -> subprocess.CompletedProcess:

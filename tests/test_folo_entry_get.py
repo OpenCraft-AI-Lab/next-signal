@@ -7,7 +7,14 @@ import subprocess
 
 import pytest
 
+from next_signal.core.secrets import save_secret
 from next_signal.integrations.info_radar import folo
+
+
+@pytest.fixture(autouse=True)
+def _folo_token() -> None:
+    """Every folocli call now requires the token before it spawns anything."""
+    save_secret("FOLO_TOKEN", "test-token")
 
 
 def _result(stdout: str = "", stderr: str = "", returncode: int = 0) -> subprocess.CompletedProcess:

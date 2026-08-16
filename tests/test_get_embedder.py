@@ -6,6 +6,8 @@ import json
 
 import pytest
 
+from next_signal.core.secrets import save_secret
+
 from next_signal.core import models as models_mod
 from next_signal.core.embedding_preferences import (
     configured_embedding_defaults,
@@ -95,7 +97,7 @@ def responds(monkeypatch):
 
 def test_omlx_snapshot_uses_the_centralized_endpoint(state, responds, monkeypatch) -> None:
     monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:11434/v1")
-    monkeypatch.setenv("OMLX_API_KEY", "test-key")
+    save_secret("OMLX_API_KEY", "test-key")
     state({"provider": "omlx"})
     client = responds()
 
@@ -112,7 +114,7 @@ def test_omlx_snapshot_uses_the_centralized_endpoint(state, responds, monkeypatc
 
 
 def test_openai_snapshot_requests_the_fixed_width(state, responds, monkeypatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    save_secret("OPENAI_API_KEY", "sk-test")
     state({"provider": "openai", "openai": {"model": "text-embedding-3-large"}})
     client = responds()
 
@@ -127,7 +129,7 @@ def test_openai_snapshot_requests_the_fixed_width(state, responds, monkeypatch) 
 
 
 def test_compatible_snapshot_appends_the_route(state, responds, monkeypatch) -> None:
-    monkeypatch.setenv("MY_EMBED_KEY", "secret")
+    save_secret("MY_EMBED_KEY", "secret")
     state({"provider": "openai_compatible", "openai_compatible": COMPATIBLE})
     client = responds()
 
@@ -143,19 +145,17 @@ def test_compatible_snapshot_appends_the_route(state, responds, monkeypatch) -> 
     assert call["headers"]["Authorization"] == "Bearer secret"
 
 
-def test_openai_without_a_key_names_the_variable(state, monkeypatch) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+def test_openai_without_a_key_names_the_variable(state) -> None:
     state({"provider": "openai"})
 
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY is not set"):
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY is not configured"):
         models_mod.get_embedder()
 
 
-def test_compatible_without_its_key_names_that_variable(state, monkeypatch) -> None:
-    monkeypatch.delenv("MY_EMBED_KEY", raising=False)
+def test_compatible_without_its_key_names_that_variable(state) -> None:
     state({"provider": "openai_compatible", "openai_compatible": COMPATIBLE})
 
-    with pytest.raises(RuntimeError, match="MY_EMBED_KEY is not set"):
+    with pytest.raises(RuntimeError, match="MY_EMBED_KEY is not configured"):
         models_mod.get_embedder()
 
 

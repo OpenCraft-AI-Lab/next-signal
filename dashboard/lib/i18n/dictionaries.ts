@@ -37,6 +37,41 @@ export const dictionaries = {
       railSchedule: "Scheduled runs",
       railEngine: "Engine",
       railEmbedding: "Embedding",
+      railCredentials: "Credentials",
+
+      credentials: "Credentials",
+      credentialsHint:
+        "Every API key and token next-signal uses. Saved keys take effect on the next run — no restart needed. A saved value is never shown again; replace it by entering a new one.",
+      credentialSet: "Set",
+      credentialUnset: "Not set",
+      credentialEnter: "Enter value",
+      credentialReplace: "Enter a new value to replace",
+      credentialSave: "Save",
+      credentialClear: "Clear",
+      credentialSaved: "Credential saved",
+      credentialCleared: "Credential cleared",
+      credentialUnsetSuffix: "Unset — this will not work.",
+      foloConnect: "Sign in to Folo",
+      foloWaiting: "Waiting for Folo…",
+      foloReopen: "Reopen sign-in",
+      foloCancel: "Cancel",
+      foloConnected: "Signed in to Folo",
+      foloFailed: "Folo sign-in failed",
+      foloTimedOut: "Folo sign-in timed out",
+      foloHint:
+        "Folo has no API-key page, so signing in is the easiest way to get a token. It opens Folo in a new tab and stores the result here. Pasting one manually works too.",
+      credentialPowers: {
+        ANTHROPIC_API_KEY: "Anthropic models (the claude_* profiles).",
+        OPENAI_API_KEY: "OpenAI models and the OpenAI embedder.",
+        GOOGLE_API_KEY: "Google Gemini models.",
+        DEEPSEEK_API_KEY:
+          "DeepSeek models — the default cloud fallback when the local model is unreachable.",
+        OMLX_API_KEY:
+          "Your local OMLX server, if you gave it one. Usually left empty.",
+        GITHUB_TOKEN:
+          "GitHub ingest. Optional — without it requests are anonymous and rate-limited to 60/hour.",
+        FOLO_TOKEN: "Folo — the radar's article source and the subscriptions page.",
+      } as Record<string, string>,
 
       contentLanguage: "Content language",
       contentLanguageHint:
@@ -105,7 +140,7 @@ export const dictionaries = {
       deepseekHint:
         "Billed per token. Reasoning bills thinking tokens as output — Low keeps some chain-of-thought without the full cost.",
       deepseekKeyHint:
-        "The API key stays in .env as DEEPSEEK_API_KEY; the dashboard only reports whether it is set.",
+        "Set DEEPSEEK_API_KEY in the Credentials section above. A saved key applies to the next run.",
 
       codexModel: "Model",
       codexEffort: "Reasoning effort",
@@ -144,7 +179,7 @@ export const dictionaries = {
       embeddingHostedHint:
         "Hosted: each radar summary is sent to this endpoint, and every item can be billed — including unattended scheduled runs.",
       embeddingOpenaiKeyHint:
-        "The API key stays in .env as OPENAI_API_KEY; the dashboard only reports whether it is set. After editing .env, restart the host process or recreate the Compose service — a running process does not pick up file edits.",
+        "Set OPENAI_API_KEY in the Credentials section above. A saved key applies to the next item — no restart or service recreation needed.",
       embeddingWidthHint:
         "The request asks for 1024 values. A model that cannot return exactly 1024 is rejected at call time rather than reshaped.",
       embeddingBaseUrl: "API root",
@@ -572,6 +607,38 @@ export const dictionaries = {
       railSchedule: "定时运行",
       railEngine: "模型引擎",
       railEmbedding: "向量嵌入",
+      railCredentials: "凭据",
+
+      credentials: "凭据",
+      credentialsHint:
+        "next-signal 用到的全部 API key 和 token。保存后下次运行即生效，不用重启。已保存的值不会再显示；要换就直接填新的。",
+      credentialSet: "已配置",
+      credentialUnset: "未配置",
+      credentialEnter: "填入值",
+      credentialReplace: "填入新值以替换",
+      credentialSave: "保存",
+      credentialClear: "清除",
+      credentialSaved: "凭据已保存",
+      credentialCleared: "凭据已清除",
+      credentialUnsetSuffix: "未配置——这项功能用不了。",
+      foloConnect: "登录 Folo",
+      foloWaiting: "等待 Folo 授权…",
+      foloReopen: "重新打开登录页",
+      foloCancel: "取消",
+      foloConnected: "已登录 Folo",
+      foloFailed: "Folo 登录失败",
+      foloTimedOut: "Folo 登录超时",
+      foloHint:
+        "Folo 没有 API key 页面，所以登录是拿 token 最省事的方式。会新开一个标签页打开 Folo，拿到后直接存到这里。手动粘贴也行。",
+      credentialPowers: {
+        ANTHROPIC_API_KEY: "Anthropic 模型（claude_* profile）。",
+        OPENAI_API_KEY: "OpenAI 模型，以及 OpenAI embedder。",
+        GOOGLE_API_KEY: "Google Gemini 模型。",
+        DEEPSEEK_API_KEY: "DeepSeek 模型——本地模型不可达时默认的云端回落。",
+        OMLX_API_KEY: "你自己的 OMLX server，如果设了 key 的话。一般留空。",
+        GITHUB_TOKEN: "GitHub 入库。可选——不填就走匿名，限流 60 次/小时。",
+        FOLO_TOKEN: "Folo——雷达的文章来源，以及订阅页。",
+      } as Record<string, string>,
 
       contentLanguage: "内容语言",
       contentLanguageHint:
@@ -635,7 +702,7 @@ export const dictionaries = {
       deepseekHint:
         "按 token 计费。推理会把思考 token 算进输出——「低」保留一部分思考链但不吃满成本。",
       deepseekKeyHint:
-        "API 密钥留在 .env 的 DEEPSEEK_API_KEY 里；dashboard 只报告它有没有配置。",
+        "在上面的「凭据」里填 DEEPSEEK_API_KEY。保存后下次运行即生效。",
 
       codexModel: "模型",
       codexEffort: "推理强度",
@@ -673,7 +740,7 @@ export const dictionaries = {
       embeddingHostedHint:
         "云端：每条雷达摘要都会发到这个端点，每个条目都可能计费——包括无人值守的定时运行。",
       embeddingOpenaiKeyHint:
-        "API 密钥留在 .env 的 OPENAI_API_KEY 里，dashboard 只报告它有没有配置。改完 .env 要重启宿主进程或重建 Compose 服务——已经在跑的进程不会自己读到文件改动。",
+        "在上面的「凭据」里填 OPENAI_API_KEY。保存后下一条就生效，不用重启，也不用重建服务。",
       embeddingWidthHint:
         "请求会要 1024 个值。返回不是正好 1024 的模型会在调用时被拒绝，而不是被截断或补齐。",
       embeddingBaseUrl: "API 根地址",

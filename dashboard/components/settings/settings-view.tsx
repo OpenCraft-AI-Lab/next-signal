@@ -1,9 +1,10 @@
 "use client";
 
-import { Clock, Cpu, Languages, Waypoints } from "lucide-react";
+import { Clock, Cpu, KeyRound, Languages, Waypoints } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { useI18n } from "@/components/i18n-provider";
+import { CredentialsSection } from "@/components/settings/credentials-section";
 import { EmbeddingSection } from "@/components/settings/embedding-section";
 import { EngineSection } from "@/components/settings/engine-section";
 import { LanguageSection } from "@/components/settings/language-section";
@@ -17,9 +18,16 @@ import type { CodingAgentSettings } from "@/lib/coding-agent-preferences";
 import type { EmbeddingPreferences } from "@/lib/embedding-preferences";
 import type { EnginePreferences } from "@/lib/engine-preferences";
 import type { Locale } from "@/lib/i18n/dictionaries";
+import type { CredentialPresence } from "@/lib/secrets";
 import { cn } from "@/lib/utils";
 
-const SECTIONS = ["language", "schedule", "engine", "embedding"] as const;
+const SECTIONS = [
+  "language",
+  "schedule",
+  "engine",
+  "embedding",
+  "credentials",
+] as const;
 type SectionId = (typeof SECTIONS)[number];
 
 /**
@@ -52,6 +60,7 @@ export function SettingsView({
   embedding,
   openAiKey,
   embeddingCompatibleKey,
+  credentialPresence,
   schedule,
   scheduleStatus,
   runtimeTimezone,
@@ -64,6 +73,7 @@ export function SettingsView({
   embedding: EmbeddingPreferences;
   openAiKey: boolean;
   embeddingCompatibleKey: boolean;
+  credentialPresence: CredentialPresence;
   schedule: Schedule;
   scheduleStatus: ScheduleStatus;
   runtimeTimezone: string;
@@ -98,6 +108,7 @@ export function SettingsView({
     ["schedule", t.settings.railSchedule, Clock],
     ["engine", t.settings.railEngine, Cpu],
     ["embedding", t.settings.railEmbedding, Waypoints],
+    ["credentials", t.settings.railCredentials, KeyRound],
   ];
 
   return (
@@ -138,6 +149,7 @@ export function SettingsView({
           openAiKey={openAiKey}
           compatibleKey={embeddingCompatibleKey}
         />
+        <CredentialsSection presence={credentialPresence} />
       </div>
     </div>
   );

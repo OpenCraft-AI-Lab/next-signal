@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 import {
@@ -7,6 +10,36 @@ import {
   resolveRadarIngestValue,
   type RadarIngestRow,
 } from "./radar-ingest";
+
+/**
+ * Points `NEXT_SIGNAL_STATE_DIR` at a fresh temp dir and imports a fresh
+ * module instance, same pattern as `lib/actions/secrets.test.ts` — so these
+ * tests never touch a real `~/.next-signal/secrets.json`.
+ */
+async function withStore<T>(
+  secrets: Record<string, string> | null,
+  body: (mod: typeof import("./radar-ingest")) => Promise<T>,
+): Promise<T> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ns-radar-ingest-"));
+  if (secrets) {
+    await writeFile(
+      path.join(dir, "secrets.json"),
+      JSON.stringify(secrets),
+      "utf-8",
+    );
+  }
+  const previous = process.env.NEXT_SIGNAL_STATE_DIR;
+  process.env.NEXT_SIGNAL_STATE_DIR = dir;
+  try {
+    const mod = (await import(
+      `./radar-ingest.ts?case=${Math.random()}`
+    )) as typeof import("./radar-ingest");
+    return await body(mod);
+  } finally {
+    if (previous === undefined) delete process.env.NEXT_SIGNAL_STATE_DIR;
+    else process.env.NEXT_SIGNAL_STATE_DIR = previous;
+  }
+}
 
 test("resolveRadarIngestValue stages folo full text before ingest", async () => {
   const row: RadarIngestRow = {
@@ -62,6 +95,29 @@ test("resolveRadarIngestValue rejects malformed non-folo URL before spawning", a
         },
       ),
     /malformed/,
+  );
+});
+
+test("folocliEnv rejects before spawning when no token is configured", async () => {
+  await withStore(null, async ({ folocliEnv }) => {
+    await assert.rejects(() => folocliEnv(), /FOLO_TOKEN is not configured/);
+  });
+});
+
+test("folocliEnv carries the stored token to the child", async () => {
+  await withStore({ FOLO_TOKEN: "test-token" }, async ({ folocliEnv }) => {
+    const env = await folocliEnv();
+    assert.equal(env.FOLO_TOKEN, "test-token");
+  });
+});
+
+test("folocliEnv never leaks an unrelated stored credential to folocli", async () => {
+  await withStore(
+    { FOLO_TOKEN: "test-token", OPENAI_API_KEY: "sk-should-not-leak" },
+    async ({ folocliEnv }) => {
+      const env = await folocliEnv();
+      assert.equal(env.OPENAI_API_KEY, undefined);
+    },
   );
 });
 

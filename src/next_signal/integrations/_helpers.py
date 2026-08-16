@@ -1,10 +1,12 @@
 """Common helpers for cloud-API integrations.
 
 Pattern shared across all integrations:
-  * Env vars hold credentials (TAVILY_API_KEY, NOTION_API_KEY, ...).
-  * Tools fail loud with a clear "set X" message at *call* time, not import
-    time — so a missing key for one integration doesn't break the whole
-    AgentOS startup.
+  * Credentials come from the credential store (`next_signal.core.secrets`),
+    never from `env()` here — `require_secret(NAME)` / `get_secret(NAME)` fail
+    loud with a clear "set X" message at *call* time, not import time, so a
+    missing key for one integration doesn't break the whole AgentOS startup.
+    `env()` below is for non-credential deployment config only (base URLs,
+    feature switches).
   * httpx.Client is the default HTTP transport (sync; agno's tool runner is
     sync). Set a per-integration timeout: assistant tools should never hang.
 """
@@ -24,7 +26,10 @@ _LAST_CALL_BY_BUCKET: dict[str, float] = {}
 
 
 def env(name: str, *, hint: str | None = None) -> str:
-    """Read a required env var, or raise with a clear remediation message."""
+    """Read a required non-credential env var, or raise with a clear remediation message.
+
+    Not for API keys/tokens — those go through `next_signal.core.secrets`.
+    """
     val = os.environ.get(name, "").strip()
     if not val:
         msg = f"environment variable {name} is not set"
