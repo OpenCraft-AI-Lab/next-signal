@@ -68,6 +68,8 @@ export const dictionaries = {
           "DeepSeek models — the default cloud fallback when the local model is unreachable.",
         OMLX_API_KEY:
           "Your local OMLX server, if you gave it one. Usually left empty.",
+        EMBEDDING_API_KEY:
+          "The custom embedding endpoint, if you configured one in the Embedding section.",
         GITHUB_TOKEN:
           "GitHub ingest. Optional — without it requests are anonymous and rate-limited to 60/hour.",
         FOLO_TOKEN: "Folo — the radar's article source and the subscriptions page.",
@@ -131,6 +133,8 @@ export const dictionaries = {
       omlxParallel: "Parallel requests",
       omlxHint:
         "Runs on your own machine — nothing is billed and nothing leaves it. Any OpenAI-compatible server works; a single one rarely parallelises cleanly, so keep this low.",
+      omlxEndpointHint:
+        "Leave it empty if you are not running a local model — profiles fall back to the cloud. Scheduled runs and new commands use a change immediately; agents already running inside AgentOS pick it up when that process restarts.",
 
       deepseekModel: "Model",
       deepseekReasoning: "Reasoning",
@@ -163,6 +167,13 @@ export const dictionaries = {
       embeddingHint:
         "Which embedder the radar's duplicate check uses. Pick one — its settings open below.",
       embeddingSaved: "Embedding settings saved",
+      embeddingUnselectedHint:
+        "No embedder is selected, so the duplicate check is off — the radar still pulls, scores, and shows everything, you will just see repeats of the same story. Fill in one of the options below and save it to turn deduplication on.",
+      embeddingIdentityNone: "none — deduplication is off",
+      embeddingSwitchConfirm:
+        "Switching the embedder parks every topic remembered under the current vector space. The radar will call some already-seen topics new until it rebuilds its memory here. Nothing is deleted, and switching back restores them. Continue?",
+      embeddingSaveToSelectHint:
+        "Save to store these settings and start using this embedder.",
       embeddingOmlx: "Local model",
       embeddingOpenai: "OpenAI",
       embeddingCompatible: "Custom endpoint",
@@ -176,6 +187,8 @@ export const dictionaries = {
         "Topics stored before this setting existed are labelled legacy:unknown and stay parked: the old schema never recorded which model produced them, and guessing would compare unrelated vectors. Relabelling them is a deliberate manual SQL step — see docs/operations.md.",
       embeddingOmlxHint:
         "Runs on your own machine — nothing is billed and nothing leaves it. Embedding shares the local GPU limit with on-device inference.",
+      embeddingOmlxEndpointHint:
+        "The embedding server's own address, separate from the Engine section's local endpoint: one local model server holds one model, so a chat model and an embedding model are two ports.",
       embeddingHostedHint:
         "Hosted: each radar summary is sent to this endpoint, and every item can be billed — including unattended scheduled runs.",
       embeddingOpenaiKeyHint:
@@ -185,9 +198,8 @@ export const dictionaries = {
       embeddingBaseUrl: "API root",
       embeddingBaseUrlHint:
         "A plain API root such as https://host.example/v1 — the /embeddings route is appended for you. A key or parameter inside the URL is rejected.",
-      embeddingApiKeyEnv: "API key variable",
-      embeddingApiKeyEnvHint:
-        "The NAME of the environment variable holding the key, never the key itself. The value is read from the pipeline's own environment, so nothing secret is stored here or sent to this page.",
+      embeddingCompatibleKeyHint:
+        "Set EMBEDDING_API_KEY in the Credentials section above. A saved key applies to the next item — no restart or service recreation needed.",
       embeddingSpaceId: "Vector space id",
       embeddingSpaceIdHint:
         "Your own name for the vectors this endpoint produces. Change it whenever the weights, tokenizer, pooling, or quantization change; moving the same service to a new URL does not need a new id.",
@@ -636,6 +648,8 @@ export const dictionaries = {
         GOOGLE_API_KEY: "Google Gemini 模型。",
         DEEPSEEK_API_KEY: "DeepSeek 模型——本地模型不可达时默认的云端回落。",
         OMLX_API_KEY: "你自己的 OMLX server，如果设了 key 的话。一般留空。",
+        EMBEDDING_API_KEY:
+          "自定义嵌入端点——如果你在「向量嵌入」一节配了一个的话。",
         GITHUB_TOKEN: "GitHub 入库。可选——不填就走匿名，限流 60 次/小时。",
         FOLO_TOKEN: "Folo——雷达的文章来源，以及订阅页。",
       } as Record<string, string>,
@@ -693,6 +707,8 @@ export const dictionaries = {
       omlxParallel: "并发请求",
       omlxHint:
         "跑在你自己的机器上——不计费，数据不出本机。任何 OpenAI 兼容的服务都可以；单个服务通常并行不干净，这个值保持小一点。",
+      omlxEndpointHint:
+        "没在本地跑模型就留空——相关 profile 会回落到云端。改动对定时任务和新命令立即生效；AgentOS 里已经跑起来的 agent 要等该进程重启才会用上。",
 
       deepseekModel: "模型",
       deepseekReasoning: "推理",
@@ -724,6 +740,12 @@ export const dictionaries = {
       embedding: "向量嵌入",
       embeddingHint: "雷达的去重判断用哪个嵌入模型。选一个，它的设置会在下面展开。",
       embeddingSaved: "嵌入设置已保存",
+      embeddingUnselectedHint:
+        "还没有选嵌入模型，所以去重是关着的——雷达照常抓取、打分、展示，只是同一件事会重复出现。在下面任选一项填好并保存，去重就会打开。",
+      embeddingIdentityNone: "无 —— 去重已关闭",
+      embeddingSwitchConfirm:
+        "切换嵌入模型会把当前向量空间下记住的所有主题搁置起来。在这边重新积累记忆之前，雷达会把一些见过的主题当成新的。数据不会被删除，切回去就能恢复。要继续吗？",
+      embeddingSaveToSelectHint: "保存后即存下这些设置，并开始使用这个嵌入模型。",
       embeddingOmlx: "本地模型",
       embeddingOpenai: "OpenAI",
       embeddingCompatible: "自定义端点",
@@ -737,6 +759,8 @@ export const dictionaries = {
         "这个设置出现之前存下的主题标为 legacy:unknown 并保持搁置：旧表结构没记录是哪个模型产生的，猜一个就等于去比较毫不相干的向量。要重新打标是一步刻意的手工 SQL——见 docs/operations.md。",
       embeddingOmlxHint:
         "跑在你自己的机器上——不计费，数据不出本机。嵌入和本机推理共用同一个本地 GPU 并发上限。",
+      embeddingOmlxEndpointHint:
+        "嵌入服务自己的地址，和「引擎」一节的本地端点是两回事：一个本地模型服务只挂一个模型，所以对话模型和嵌入模型是两个端口。",
       embeddingHostedHint:
         "云端：每条雷达摘要都会发到这个端点，每个条目都可能计费——包括无人值守的定时运行。",
       embeddingOpenaiKeyHint:
@@ -746,9 +770,8 @@ export const dictionaries = {
       embeddingBaseUrl: "API 根地址",
       embeddingBaseUrlHint:
         "填 API 根地址，例如 https://host.example/v1——/embeddings 这段由程序自己拼。URL 里带密钥或参数会被拒绝。",
-      embeddingApiKeyEnv: "API 密钥变量名",
-      embeddingApiKeyEnvHint:
-        "填存放密钥的环境变量的名字，不是密钥本身。取值时从流水线自己的环境里读，所以这里不存任何机密，也不会发到这个页面。",
+      embeddingCompatibleKeyHint:
+        "在上面的「凭据」里填 EMBEDDING_API_KEY。保存后下一条就生效，不用重启，也不用重建服务。",
       embeddingSpaceId: "向量空间 id",
       embeddingSpaceIdHint:
         "你自己给这个端点产出的向量起的名字。权重、分词器、pooling 或量化变了就换一个；同一个服务换个 URL 不需要换 id。",

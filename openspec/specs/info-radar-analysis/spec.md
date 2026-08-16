@@ -4,6 +4,7 @@
 
 Two-tier LLM analysis layer that consumes the `radar_items` table populated by the `info-radar` collector, filters items against user-declared goals, deepens analysis on what survives via full-content fetch, and dedups against a vector-backed long-term memory before any user-facing push. Owns `radar_items.seen_at` (collector never writes it); a tier-2 failure leaves the item unpersisted and unseen so it is retried on the next analysis run.
 ## Requirements
+
 ### Requirement: Runtime goals file provisioning
 
 The runtime goals file SHALL be populated by an explicit setup step, never as a
@@ -371,6 +372,14 @@ For every tier-2 `keep` result, the workflow SHALL resolve one
 snapshot's identity beside that vector through search and persistence. A live
 settings re-read after embedding SHALL NOT determine the stored identity.
 
+When no embedder is selected, the workflow SHALL skip deduplication for the
+item and continue. It SHALL store the analysis as novel, insert no topic row,
+and record the reason as *no embedder selected*, distinct from the reason
+recorded when a configured embedder fails. Nothing else about the run SHALL
+change: items are still pulled, filtered, analysed, persisted, and displayed.
+An unselected embedder SHALL NOT abort the batch, fail the job, or suppress
+user-facing output.
+
 The workflow SHALL run an exact cosine search over
 `radar_pushed_topics.embedding`, restricted first to rows whose `embedder`
 equals the query vector's captured identity, limited to the top 5 candidates
@@ -402,9 +411,16 @@ verifying their provenance.
 
 #### Scenario: embedding failure remains conservative
 
-- **WHEN** snapshot resolution or embedding raises
+- **WHEN** snapshot resolution or embedding raises for a selected provider
 - **THEN** the workflow logs loudly, stores the analysis as novel, and inserts no
   topic row
+
+#### Scenario: no embedder selected turns dedup off and nothing else
+
+- **WHEN** an analysis run starts and no embedder has been selected
+- **THEN** every item is analysed, persisted, and displayed as normal with
+  deduplication inactive, each recording *no embedder selected* rather than an
+  embedding failure, and no topic rows are written
 
 #### Scenario: settings change cannot mislabel an in-flight vector
 
@@ -422,4 +438,3 @@ verifying their provenance.
 
 - **WHEN** the operator switches from A to B and later back to A
 - **THEN** previously stored A rows become candidates again without re-embedding
-

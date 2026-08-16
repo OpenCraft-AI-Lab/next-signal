@@ -31,7 +31,11 @@ const UNCONFIGURED: EnginePreferences = {
   primary: "omlx",
   fallback: "deepseek",
   omlx: {
-    baseUrl: "http://127.0.0.1:8000/v1",
+    // Empty until an operator points next-signal at a local server: no value
+    // this repo could ship would be right, and borrowing one from the
+    // environment would show the dashboard container's answer while the
+    // scheduler resolves its own.
+    baseUrl: "",
     model: "Qwen3.5-122B-A10B-mlx-oQ4",
     parallel: 2,
   },
@@ -56,9 +60,9 @@ function profile(models: Record<string, unknown>, name: string) {
 
 /**
  * The baseline every unset field reads back as: what the repo is actually
- * configured with. Derived from `configs/models.yaml` plus `OMLX_BASE_URL`,
- * so a fresh install shows its real endpoint and model rather than a literal
- * this module made up.
+ * configured with, from `configs/models.yaml`. The local endpoint is not part
+ * of it — that answer lives only in `engine.json`, so a fresh install shows an
+ * empty field rather than a value read from this container's environment.
  */
 async function configuredDefaults(): Promise<EnginePreferences> {
   let models: Record<string, unknown>;
@@ -83,8 +87,7 @@ async function configuredDefaults(): Promise<EnginePreferences> {
     primary: PROVIDER_ENGINE[String(local.provider ?? "")] ?? UNCONFIGURED.primary,
     fallback: (PROVIDER_ENGINE[fallbackProvider] ?? "none") as Fallback,
     omlx: {
-      baseUrl:
-        process.env.OMLX_BASE_URL?.trim() || UNCONFIGURED.omlx.baseUrl,
+      baseUrl: UNCONFIGURED.omlx.baseUrl,
       model: String(local.model_id ?? UNCONFIGURED.omlx.model),
       parallel: (Number(asRecord(models.concurrency).omlx) ||
         UNCONFIGURED.omlx.parallel) as OmlxParallel,

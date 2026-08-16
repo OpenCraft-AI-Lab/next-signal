@@ -10,7 +10,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from next_signal.core.config import ModelsConfig, load_models
-from next_signal.core.omlx import resolve_omlx_endpoint
 from next_signal.core.paths import STATE_ROOT
 
 Engine = Literal["omlx", "deepseek", "codex_cli", "claude_cli"]
@@ -25,14 +24,21 @@ _PROVIDER_ENGINE: dict[str, Engine] = {"omlx": "omlx", "deepseek": "deepseek"}
 class OmlxSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    base_url: str
+    # Unset until an operator points next-signal at a local server. There is no
+    # value this repo could ship that would be right, so a fresh install reads
+    # as unset and OMLX profiles take their configured `fallback_profile`.
+    base_url: str | None = None
     model: str
     parallel: Literal[1, 2, 4]
 
     @field_validator("base_url")
     @classmethod
-    def _valid_url(cls, value: str) -> str:
+    def _valid_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         selected = value.strip()
+        if not selected:
+            return None
         if not re.fullmatch(r"https?://\S+", selected):
             raise ValueError(f"OMLX endpoint must be an http(s) URL: {selected}")
         return selected
@@ -92,9 +98,9 @@ def configured_engine_defaults(models: ModelsConfig | None = None) -> EnginePref
         primary=_PROVIDER_ENGINE.get(local.provider, "omlx"),
         fallback=_PROVIDER_ENGINE.get(fallback_provider, "none"),
         omlx=OmlxSettings(
-            base_url=resolve_omlx_endpoint(
-                default_base_url="http://127.0.0.1:8000/v1"
-            )["base_url"],
+            # No endpoint baseline: the local server's address is the one thing
+            # this repo cannot know, so it stays unset until someone saves it.
+            base_url=None,
             model=local.model_id,
             parallel=config.concurrency.get("omlx", 2),
         ),

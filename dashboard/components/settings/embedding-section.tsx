@@ -10,6 +10,7 @@ import {
   usePaneSave,
 } from "@/components/settings/engine-section";
 import { Input } from "@/components/ui/input";
+import type { EmbeddingPrefill } from "@/lib/actions/embedding";
 import { setEmbeddingPreferences } from "@/lib/actions/embedding";
 import {
   EMBEDDING_PROVIDERS,
@@ -28,14 +29,6 @@ const GLYPHS: Record<EmbeddingProvider, ComponentType<{ size?: number }>> = {
   openai_compatible: Share2,
 };
 
-/** A blank draft for a section that has never been saved. Never written. */
-const BLANK_COMPATIBLE: OpenAICompatibleEmbeddingSettings = {
-  baseUrl: "",
-  model: "",
-  apiKeyEnv: "",
-  spaceId: "",
-};
-
 /**
  * Which embedder the info-radar dedup gate resolves for each item.
  *
@@ -43,25 +36,32 @@ const BLANK_COMPATIBLE: OpenAICompatibleEmbeddingSettings = {
  * interaction is the same one — but the consequence is not. Switching an LLM
  * engine changes who answers a question; switching an embedder changes the
  * vector space, which parks every topic memorised under the old identity until
- * the operator switches back. The notes below say so before the click, and the
- * exact active identity is displayed verbatim.
+ * the operator switches back. That is why a switch is confirmed rather than
+ * committed on click, and why the exact active identity is displayed verbatim.
  *
- * One asymmetry with the engine section: `openai_compatible` has no baseline
- * anywhere in the repo, so its card cannot commit a selection on click until its
- * four fields have been saved. Until then the card only opens its pane.
+ * Nothing is selected on a fresh install. There is no provider this repo could
+ * honestly pick on someone's behalf — the local one needs an address only they
+ * know, the hosted ones need a key and spend money — so every card starts
+ * unselected, panes open prefilled with suggestions, and the section says
+ * plainly that deduplication is off until one is chosen. All three cards behave
+ * identically: a card commits only once its section is complete.
  */
 export function EmbeddingSection({
   initial,
+  prefill,
   openAiKey,
   compatibleKey,
 }: {
   initial: EmbeddingPreferences;
+  prefill: EmbeddingPrefill;
   openAiKey: boolean;
   compatibleKey: boolean;
 }) {
   const { t } = useI18n();
   const [saved, setSaved] = useState<EmbeddingPreferences>(initial);
-  const [selected, setSelected] = useState<EmbeddingProvider>(initial.provider);
+  // Which pane is open. Starts on the saved provider, or the local card when
+  // nothing is chosen — an open pane is an invitation, not a selection.
+  const [open, setOpen] = useState<EmbeddingProvider>(initial.provider ?? "omlx");
 
   const NAMES: Record<EmbeddingProvider, string> = {
     omlx: t.settings.embeddingOmlx,
@@ -74,42 +74,40 @@ export function EmbeddingSection({
     openai_compatible: t.settings.embeddingKindEndpoint,
   };
 
-  /** Only the generic provider can be present-but-unusable. */
-  const configured = (provider: EmbeddingProvider) =>
-    provider !== "openai_compatible" || saved.openaiCompatible !== null;
+  const section = (provider: EmbeddingProvider) =>
+    provider === "omlx"
+      ? saved.omlx
+      : provider === "openai"
+        ? saved.openai
+        : saved.openaiCompatible;
+
+  /** A card can only be selected once its own settings have been saved. */
+  const configured = (provider: EmbeddingProvider) => section(provider) !== null;
 
   const cardState = (provider: EmbeddingProvider) => {
-    switch (provider) {
-      case "omlx":
-        return {
-          tone: "ok",
-          label: t.settings.engineStatusConfigured,
-          meta: saved.omlx.model,
-        };
-      case "openai":
-        return {
-          tone: openAiKey ? "ok" : "warn",
-          label: openAiKey
-            ? t.settings.engineStatusKeySet
-            : t.settings.engineStatusNoKey,
-          meta: saved.openai.model,
-        };
-      case "openai_compatible":
-        if (!saved.openaiCompatible) {
-          return {
-            tone: "idle",
-            label: t.settings.engineStatusUnset,
-            meta: "—",
-          };
-        }
-        return {
-          tone: compatibleKey ? "ok" : "warn",
-          label: compatibleKey
-            ? t.settings.engineStatusKeySet
-            : t.settings.engineStatusNoKey,
-          meta: saved.openaiCompatible.spaceId,
-        };
+    if (!configured(provider)) {
+      return { tone: "idle", label: t.settings.engineStatusUnset, meta: "—" };
     }
+    if (provider === "omlx") {
+      // A local server usually has no key at all, so the endpoint it was saved
+      // with is the whole story.
+      return {
+        tone: "ok",
+        label: t.settings.engineStatusConfigured,
+        meta: saved.omlx!.model,
+      };
+    }
+    const hasKey = provider === "openai" ? openAiKey : compatibleKey;
+    return {
+      tone: hasKey ? "ok" : "warn",
+      label: hasKey
+        ? t.settings.engineStatusKeySet
+        : t.settings.engineStatusNoKey,
+      meta:
+        provider === "openai"
+          ? saved.openai!.model
+          : saved.openaiCompatible!.spaceId,
+    };
   };
 
   const commit = async (next: EmbeddingPreferences) => {
@@ -125,14 +123,39 @@ export function EmbeddingSection({
     }
   };
 
+  /**
+   * Confirm before changing which vector space new items land in.
+   *
+   * Unconditional rather than conditioned on whether stored vectors exist: a
+   * database read to choose between two wordings buys accuracy nobody acts on,
+   * and the consequence is worth stating either way.
+   */
+  const confirmSwitch = (provider: EmbeddingProvider) =>
+    saved.provider === null ||
+    saved.provider === provider ||
+    window.confirm(t.settings.embeddingSwitchConfirm);
+
   const choose = (provider: EmbeddingProvider) => {
-    setSelected(provider);
-    // An unconfigured generic endpoint has nothing valid to select, so its card
-    // opens the pane and writes nothing. Its Save is the commit instead.
-    if (provider !== saved.provider && configured(provider)) {
-      void commit({ ...saved, provider });
-    }
+    setOpen(provider);
+    // An unconfigured card has nothing valid to select, so it only opens its
+    // pane and writes nothing. Its Save is the commit instead.
+    if (provider === saved.provider || !configured(provider)) return;
+    if (!confirmSwitch(provider)) return;
+    void commit({ ...saved, provider });
   };
+
+  /** Saving a pane stores its settings and selects that provider. */
+  const saveAndSelect = async (
+    provider: EmbeddingProvider,
+    next: EmbeddingPreferences,
+  ) => {
+    if (!confirmSwitch(provider)) return;
+    const selected = { ...next, provider };
+    await setEmbeddingPreferences(selected);
+    setSaved(selected);
+  };
+
+  const identity = embedderIdentity(saved);
 
   return (
     <section className="card pad set-card" id="embedding">
@@ -143,16 +166,25 @@ export function EmbeddingSection({
         </div>
       </div>
 
+      {saved.provider === null && (
+        <p className="set-note">{t.settings.embeddingUnselectedHint}</p>
+      )}
+
       <div className="set-engines">
         {EMBEDDING_PROVIDERS.map((provider) => {
           const Glyph = GLYPHS[provider];
           const state = cardState(provider);
+          const active = saved.provider === provider;
           return (
             <button
               key={provider}
               type="button"
-              aria-pressed={selected === provider}
-              className={cn("set-engine", selected === provider && "on")}
+              aria-pressed={active}
+              className={cn(
+                "set-engine",
+                active && "on",
+                open === provider && !active && "set-engineopen",
+              )}
               onClick={() => choose(provider)}
             >
               <div className="set-enginetop">
@@ -186,46 +218,36 @@ export function EmbeddingSection({
 
       <div className="set-detail">
         <div className="set-detailhead">
-          <span className="eyebrow">{NAMES[selected]}</span>
+          <span className="eyebrow">{NAMES[open]}</span>
         </div>
 
-        {selected === "omlx" && (
+        {open === "omlx" && (
           <OmlxEmbeddingPane
-            initial={saved.omlx}
-            onSave={async (omlx) => {
-              const next = { ...saved, omlx };
-              await setEmbeddingPreferences(next);
-              setSaved(next);
-            }}
+            initial={
+              saved.omlx ?? { baseUrl: "", model: prefill.omlxModel }
+            }
+            configured={saved.omlx !== null}
+            onSave={(omlx) => saveAndSelect("omlx", { ...saved, omlx })}
           />
         )}
-        {selected === "openai" && (
+        {open === "openai" && (
           <OpenAIEmbeddingPane
-            initial={saved.openai}
+            initial={saved.openai ?? { model: prefill.openaiModel }}
             hasKey={openAiKey}
-            onSave={async (openai) => {
-              const next = { ...saved, openai };
-              await setEmbeddingPreferences(next);
-              setSaved(next);
-            }}
+            configured={saved.openai !== null}
+            onSave={(openai) => saveAndSelect("openai", { ...saved, openai })}
           />
         )}
-        {selected === "openai_compatible" && (
+        {open === "openai_compatible" && (
           <CompatibleEmbeddingPane
-            initial={saved.openaiCompatible ?? BLANK_COMPATIBLE}
+            initial={
+              saved.openaiCompatible ?? { baseUrl: "", model: "", spaceId: "" }
+            }
             hasKey={compatibleKey}
             configured={saved.openaiCompatible !== null}
-            onSave={async (openaiCompatible) => {
-              // Saving a complete pane is also the selection — the card could
-              // not commit one earlier because there was nothing to select.
-              const next: EmbeddingPreferences = {
-                ...saved,
-                openaiCompatible,
-                provider: "openai_compatible",
-              };
-              await setEmbeddingPreferences(next);
-              setSaved(next);
-            }}
+            onSave={(openaiCompatible) =>
+              saveAndSelect("openai_compatible", { ...saved, openaiCompatible })
+            }
           />
         )}
       </div>
@@ -236,7 +258,9 @@ export function EmbeddingSection({
           <span className="set-hint">{t.settings.embeddingIdentityHint}</span>
         </div>
         <div className="set-rowctl">
-          <span className="mono">{embedderIdentity(saved)}</span>
+          <span className="mono">
+            {identity ?? t.settings.embeddingIdentityNone}
+          </span>
         </div>
       </div>
 
@@ -248,9 +272,11 @@ export function EmbeddingSection({
 
 function OmlxEmbeddingPane({
   initial,
+  configured,
   onSave,
 }: {
   initial: OmlxEmbeddingSettings;
+  configured: boolean;
   onSave: (value: OmlxEmbeddingSettings) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -263,22 +289,35 @@ function OmlxEmbeddingPane({
   return (
     <>
       <div className="set-form">
+        <label htmlFor="embedding-omlx-url">{t.settings.embeddingBaseUrl}</label>
+        <Input
+          id="embedding-omlx-url"
+          className="mono"
+          value={value.baseUrl}
+          placeholder="http://host.docker.internal:8081/v1"
+          onChange={(e) => setValue({ ...value, baseUrl: e.target.value })}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+        />
         <label htmlFor="embedding-omlx-model">{t.settings.omlxModel}</label>
         <Input
           id="embedding-omlx-model"
           className="mono"
           value={value.model}
-          onChange={(e) => setValue({ model: e.target.value })}
+          onChange={(e) => setValue({ ...value, model: e.target.value })}
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
         />
       </div>
+      <p className="set-note">{t.settings.embeddingOmlxEndpointHint}</p>
       <p className="set-note">{t.settings.embeddingOmlxHint}</p>
+      {!configured && <p className="set-note">{t.settings.embeddingSaveToSelectHint}</p>}
       <PaneActions
-        dirty={value.model !== saved.model}
+        dirty={value.baseUrl !== saved.baseUrl || value.model !== saved.model}
         saving={saving}
-        canSave={Boolean(value.model.trim())}
+        canSave={Boolean(value.baseUrl.trim() && value.model.trim())}
         onSave={() => void save()}
         onReset={reset}
       />
@@ -289,10 +328,12 @@ function OmlxEmbeddingPane({
 function OpenAIEmbeddingPane({
   initial,
   hasKey,
+  configured,
   onSave,
 }: {
   initial: OpenAIEmbeddingSettings;
   hasKey: boolean;
+  configured: boolean;
   onSave: (value: OpenAIEmbeddingSettings) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -327,6 +368,7 @@ function OpenAIEmbeddingPane({
       <p className="set-note">{t.settings.embeddingHostedHint}</p>
       <p className="set-note">{t.settings.embeddingOpenaiKeyHint}</p>
       <p className="set-note">{t.settings.embeddingWidthHint}</p>
+      {!configured && <p className="set-note">{t.settings.embeddingSaveToSelectHint}</p>}
       <PaneActions
         dirty={value.model !== saved.model}
         saving={saving}
@@ -358,7 +400,6 @@ function CompatibleEmbeddingPane({
   const dirty =
     value.baseUrl !== saved.baseUrl ||
     value.model !== saved.model ||
-    value.apiKeyEnv !== saved.apiKeyEnv ||
     value.spaceId !== saved.spaceId;
 
   return (
@@ -389,19 +430,6 @@ function CompatibleEmbeddingPane({
           autoCorrect="off"
           spellCheck={false}
         />
-        <label htmlFor="embedding-compatible-key">
-          {t.settings.embeddingApiKeyEnv}
-        </label>
-        <Input
-          id="embedding-compatible-key"
-          className="mono"
-          value={value.apiKeyEnv}
-          placeholder="MY_EMBEDDING_API_KEY"
-          onChange={(e) => setValue({ ...value, apiKeyEnv: e.target.value })}
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-        />
         <label htmlFor="embedding-compatible-space">
           {t.settings.embeddingSpaceId}
         </label>
@@ -424,7 +452,7 @@ function CompatibleEmbeddingPane({
         )}
       </div>
       <p className="set-note">{t.settings.embeddingBaseUrlHint}</p>
-      <p className="set-note">{t.settings.embeddingApiKeyEnvHint}</p>
+      <p className="set-note">{t.settings.embeddingCompatibleKeyHint}</p>
       <p className="set-note">{t.settings.embeddingSpaceIdHint}</p>
       <p className="set-note">{t.settings.embeddingHostedHint}</p>
       <p className="set-note">{t.settings.embeddingWidthHint}</p>
@@ -436,10 +464,7 @@ function CompatibleEmbeddingPane({
         saving={saving}
         // No inherit path: a partial endpoint cannot be sent anywhere.
         canSave={Boolean(
-          value.baseUrl.trim() &&
-            value.model.trim() &&
-            value.apiKeyEnv.trim() &&
-            value.spaceId.trim(),
+          value.baseUrl.trim() && value.model.trim() && value.spaceId.trim(),
         )}
         onSave={() => void save()}
         onReset={reset}

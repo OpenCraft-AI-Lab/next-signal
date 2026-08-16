@@ -102,10 +102,12 @@ export function validateEnginePreferences(
     throw new Error(`${value.primary} cannot fall back to itself`);
   }
 
+  // Empty is a real state: nobody has pointed next-signal at a local server
+  // yet, and OMLX profiles take their configured fallback until someone does.
   const baseUrl = value.omlx.baseUrl.trim();
   // A bare host would be accepted by the OpenAI client and then fail at call
   // time with a confusing 404, so the scheme is required here instead.
-  if (!/^https?:\/\/\S+$/.test(baseUrl)) {
+  if (baseUrl && !/^https?:\/\/\S+$/.test(baseUrl)) {
     throw new Error(`OMLX endpoint must be an http(s) URL: ${baseUrl}`);
   }
   const omlxModel = value.omlx.model.trim();

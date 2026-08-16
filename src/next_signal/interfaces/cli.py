@@ -86,22 +86,27 @@ def _check_embedder() -> tuple[str, bool, str]:
         prefs = load_embedding_preferences()
     except RuntimeError as e:
         return ("embedder", False, str(e))
+
+    if not prefs.selected:
+        return (
+            "embedder",
+            False,
+            "no embedder selected — deduplication is inactive; choose one on "
+            "the dashboard settings page (Settings → Embedding)",
+        )
+
     identity = embedder_identity(prefs)
 
     if prefs.provider == "omlx":
-        from next_signal.core.models import omlx_endpoint
-
-        # OMLX_API_KEY stays optional — the local server usually has none —
-        # so only the base URL can fail this check.
-        try:
-            return ("embedder", True, f"{identity} at {omlx_endpoint()['base_url']}")
-        except RuntimeError as e:
-            return ("embedder", False, f"{identity} — {e}")
+        # OMLX_API_KEY stays optional — the local server usually has none — and
+        # a selected OMLX section always carries its own endpoint, so there is
+        # nothing left for this branch to fail on.
+        return ("embedder", True, f"{identity} at {prefs.omlx.base_url}")
 
     if prefs.provider == "openai":
         variable, where = "OPENAI_API_KEY", "https://api.openai.com/v1"
     else:
-        variable = prefs.openai_compatible.api_key_env
+        variable = "EMBEDDING_API_KEY"
         where = prefs.openai_compatible.base_url
     if not get_secret(variable):
         return (
@@ -397,7 +402,7 @@ def doctor() -> None:
         present = bool(get_secret(name))
         checks.append((name, present, "set" if present else f"not configured ({consequence})"))
 
-    # 2. OMLX endpoint (centralized in next_signal.core.models.omlx_endpoint)
+    # 2. Local chat endpoint, from engine preferences — configured, not reachable.
     from next_signal.core.models import omlx_endpoint
 
     try:
@@ -406,9 +411,11 @@ def doctor() -> None:
         omlx_url = ""
     checks.append(
         (
-            "OMLX_BASE_URL",
+            "local chat endpoint",
             bool(omlx_url),
-            omlx_url or "not set (omlx profiles will fail to fallback_profile)",
+            omlx_url
+            or "not set (omlx profiles will fall back); set it on the dashboard "
+            "settings page (Settings → Engine)",
         )
     )
 

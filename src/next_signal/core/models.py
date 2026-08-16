@@ -8,8 +8,8 @@ classes fall back to reading their own provider env var when constructed without
 one, which would resolve a credential from a source this system does not read.
 
 Supported providers:
-  * ``omlx``     — local mlx-lm OpenAI-compatible server; ``OMLX_BASE_URL`` in
-                   ``.env``, optional ``OMLX_API_KEY`` in the credential store.
+  * ``omlx``     — local mlx-lm OpenAI-compatible server; endpoint from
+                   ``engine.json``, optional ``OMLX_API_KEY`` in the store.
   * ``claude``   — Anthropic, requires ``ANTHROPIC_API_KEY``.
   * ``openai``   — OpenAI cloud, requires ``OPENAI_API_KEY``.
   * ``gemini``   — Google, requires ``GOOGLE_API_KEY``.
@@ -32,7 +32,6 @@ import math
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import Any
 
 from agno.models.base import Model
@@ -40,13 +39,14 @@ from agno.models.base import Model
 from next_signal.core.concurrency import ProviderConcurrency
 from next_signal.core.config import ModelProfile, load_models
 from next_signal.core.embedding_preferences import (
+    EmbedderNotSelected,
     embedder_identity,
     load_embedding_preferences,
 )
 from next_signal.core.engine_preferences import EnginePreferences
 from next_signal.core.logging import get_logger
 from next_signal.core.omlx import resolve_omlx_endpoint
-from next_signal.core.secrets import require_secret
+from next_signal.core.secrets import get_secret, require_secret
 
 log = get_logger(__name__)
 
@@ -56,14 +56,21 @@ _concurrency_configured = False
 def get_model(profile_name: str) -> Model:
     """Build an agno Model from a profile in ``configs/models.yaml``.
 
-    The result is cached per (profile_name) so multiple agents sharing a
-    profile share a single underlying client. The first call also configures
-    the per-provider concurrency limits.
+    Built fresh each call, never cached. The endpoint and credentials a model is
+    built from live in user state the dashboard can rewrite at any moment, so
+    the profile name no longer determines the result. The first call also
+    configures the per-provider concurrency limits.
 
-    If the requested profile fails to build (e.g. OMLX endpoint unreachable)
+    If the requested profile fails to build (e.g. no OMLX endpoint configured)
     and the profile defines a ``fallback_profile``, the fallback is built
     instead. This preserves the design promise that local-first agents stay
-    available when the local model is down.
+    available when the local model is down — and, with no cache, the next call
+    retries the local profile once it recovers.
+
+    A caller that *retains* a built model keeps whatever it was built with.
+    AgentOS constructs its agents once at import, so its interactive agents pick
+    up a settings change on restart; stage models and embedders resolve per job
+    and per item, so they observe changes immediately.
     """
     ensure_concurrency_configured()
     return _build(profile_name)
@@ -109,7 +116,6 @@ def get_stage_model(
     raise ValueError(f"stage engine {engine!r} is not an API model provider")
 
 
-@lru_cache(maxsize=32)
 def _build(profile_name: str) -> Model:
     profiles = load_models().profiles
     if profile_name not in profiles:
@@ -318,11 +324,6 @@ def _build_deepseek(p: ModelProfile) -> Model:
     )
 
 
-def reset_cache() -> None:
-    """Drop cached model instances. Called by hot-reload after YAML edits."""
-    _build.cache_clear()
-
-
 # ---------------------------------------------------------------------------
 # Embedders — provider-neutral, one immutable snapshot per item
 # ---------------------------------------------------------------------------
@@ -356,6 +357,10 @@ def get_embedder() -> ResolvedEmbedder:
     here — not inside ``embed()`` — so every call on the returned object talks to
     the same endpoint under the same identity.
 
+    Raises ``EmbedderNotSelected`` when nobody has chosen an embedder — a
+    distinct type, because "not set up yet" and "set up and broken" deserve
+    different reporting.
+
     There is no fallback: providers are not substitutable, and quietly embedding
     into a different vector space would park the selected provider's dedup memory
     without saying so. Missing credentials, transport errors, non-2xx responses,
@@ -371,11 +376,18 @@ def get_embedder() -> ResolvedEmbedder:
     prefs = load_embedding_preferences()
     provider = prefs.provider
 
+    if provider is None:
+        raise EmbedderNotSelected(
+            "No embedder has been selected, so deduplication is inactive. "
+            "Choose one on the dashboard settings page (Settings -> Embedding)."
+        )
+
     if provider == "omlx":
-        endpoint = omlx_endpoint()
         model_id = prefs.omlx.model
-        url = endpoint["base_url"].rstrip("/") + "/embeddings"
-        api_key = endpoint["api_key"]
+        # The embedding server's own endpoint, not the engine's: one mlx-lm
+        # process serves one model.
+        url = f"{prefs.omlx.base_url}/embeddings"
+        api_key = get_secret("OMLX_API_KEY")
         # OMLX's route has no `dimensions` parameter and the shipped model
         # already emits 1024 values; a model that does not is caught on response.
         dimensions: int | None = None
@@ -388,7 +400,7 @@ def get_embedder() -> ResolvedEmbedder:
         compatible = prefs.openai_compatible
         model_id = compatible.model
         url = f"{compatible.base_url}/embeddings"
-        api_key = require_secret(compatible.api_key_env)
+        api_key = require_secret("EMBEDDING_API_KEY")
         dimensions = EMBEDDING_DIMENSIONS
 
     def embed(text: str) -> list[float]:

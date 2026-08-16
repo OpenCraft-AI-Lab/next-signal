@@ -13,15 +13,13 @@ import json
 import pytest
 
 from next_signal.core import models as models_mod
-from next_signal.core.embedding_preferences import (
-    configured_embedding_defaults,
-    load_embedding_preferences,
-)
+from next_signal.core.embedding_preferences import load_embedding_preferences
 from next_signal.workflows.info_radar_analysis.stages import dedup as dedup_mod
 
 VECTOR = [0.1] * 1024
-A = {"provider": "omlx", "omlx": {"model": "embed-A"}}
-B = {"provider": "omlx", "omlx": {"model": "embed-B"}}
+_ENDPOINT = "http://localhost:11434/v1"
+A = {"provider": "omlx", "omlx": {"base_url": _ENDPOINT, "model": "embed-A"}}
+B = {"provider": "omlx", "omlx": {"base_url": _ENDPOINT, "model": "embed-B"}}
 
 
 class _FakeClient:
@@ -50,13 +48,11 @@ class _FakeResponse:
 @pytest.fixture
 def live_state(tmp_path, monkeypatch):
     """A rewritable state file that every ``get_embedder()`` call re-reads."""
-    monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:11434/v1")
     path = tmp_path / "embedding.json"
-    defaults = configured_embedding_defaults()
     monkeypatch.setattr(
         models_mod,
         "load_embedding_preferences",
-        lambda: load_embedding_preferences(path, defaults=defaults),
+        lambda: load_embedding_preferences(path),
     )
 
     def write(payload: dict) -> None:
@@ -137,6 +133,27 @@ def test_embedder_failure_stores_no_provenance(live_state, monkeypatch) -> None:
     assert outcome.status == "novel"
     assert outcome.embedding is None
     assert outcome.embedder is None
+
+
+def test_unselected_embedder_turns_dedup_off_without_failing(
+    live_state, monkeypatch
+) -> None:
+    """Nobody has chosen one yet: the item still flows, dedup just does nothing."""
+    live_state({})
+    searched: list[str] = []
+    monkeypatch.setattr(
+        dedup_mod.analysis_store,
+        "search_topics",
+        lambda *a, **kw: searched.append("searched") or [],  # noqa: ARG005
+    )
+
+    outcome = dedup_mod.run("a summary")
+
+    assert outcome.status == "novel"
+    assert outcome.embedding is None
+    assert outcome.embedder is None
+    # No vector means nothing to search, so the table is never touched.
+    assert searched == []
 
 
 class _Verdict:

@@ -3,11 +3,15 @@
 #
 #   docker compose up --build            # postgres + bootstrap + dashboard + scheduler
 #
-# Cloud-LLM by default: OMLX is left unset so model profiles fall back to the
-# cloud (DeepSeek/Claude, per configs/models.yaml). To use the LOCAL LLM
-# embedder, run an OMLX server on the HOST and set, in .env:
-#   OMLX_BASE_URL=http://host.docker.internal:<port>/v1
-# (host.docker.internal is wired below for Linux via host-gateway too.)
+# Cloud-LLM by default: no local endpoint is configured, so model profiles fall
+# back to the cloud (DeepSeek/Claude, per configs/models.yaml) and the radar's
+# duplicate check stays off until an embedder is chosen.
+#
+# To use LOCAL models, run an OMLX server on the HOST and enter its address in
+# the dashboard — Settings → Engine for the chat model, Settings → Embedding for
+# the embedder (one mlx-lm process serves one model, so those are two ports).
+# Use http://host.docker.internal:<port>/v1; host.docker.internal is wired below
+# for Linux via host-gateway too. Nothing about this goes in .env.
 
 name: next-signal
 

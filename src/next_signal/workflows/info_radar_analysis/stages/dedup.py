@@ -5,6 +5,10 @@ raises) is logged loudly and the item is treated as ``novel`` — we'd rather
 show a likely-dup than swallow a novel item. The push pipeline can mark
 freshly-novel-with-failed-embed items separately if it wants.
 
+An *unselected* embedder takes the same conservative path but is logged as its
+own thing, not as a failure: it means nobody has finished setting up yet, so
+dedup is simply off while the rest of the run proceeds normally.
+
 One embedder snapshot is resolved per item and used for both the search and
 the identity handed back for persistence. Live settings are never re-read
 afterwards, so a settings write landing mid-item cannot label this vector with
@@ -18,6 +22,7 @@ import logging
 from dataclasses import dataclass
 
 from next_signal.agents.stage import run_stage
+from next_signal.core.embedding_preferences import EmbedderNotSelected
 from next_signal.core.models import get_embedder
 from next_signal.workflows.info_radar_analysis import store as analysis_store
 from next_signal.workflows.info_radar_analysis.schemas import DedupVerdict
@@ -40,14 +45,20 @@ class DedupOutcome:
 
 def run(summary: str, *, threshold: float = DEFAULT_THRESHOLD, k: int = DEFAULT_K) -> DedupOutcome:
     """Decide whether ``summary`` is a paraphrase of a previously-pushed topic."""
+    off = DedupOutcome(
+        status="novel", matched_topic_id=None, embedding=None, embedder=None
+    )
     try:
         embedder = get_embedder()
         embedding = embedder.embed(summary)
+    except EmbedderNotSelected as e:
+        # Not a failure: nobody has set one up yet. Dedup is off, everything
+        # else about the run is unchanged.
+        log.info("dedup_embedder_not_selected", extra={"error": str(e)})
+        return off
     except RuntimeError as e:
         log.warning("dedup_embedder_failed", extra={"error": str(e)})
-        return DedupOutcome(
-            status="novel", matched_topic_id=None, embedding=None, embedder=None
-        )
+        return off
 
     identity = embedder.identity
     novel = DedupOutcome(

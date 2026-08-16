@@ -52,13 +52,20 @@ Business stages never construct provider models directly.
 - **The fallback chain:** a `RuntimeError` while building a provider (typically
   an unreachable OMLX endpoint) automatically rebuilds against
   `fallback_profile`. `KeyError` / `ValueError` are programmer errors — they
-  propagate instead of falling back. The result is lru-cached, so **once OMLX is
-  back you must call `next_signal.core.models.reset_cache()` before local is retried** —
-  this matters most for long-running processes like `next-signal serve`.
-- `next_signal.core.omlx.resolve_omlx_endpoint()` is the only reader of
-  `OMLX_BASE_URL` (environment) and `OMLX_API_KEY` (credential store); ordinary
-  callers use the strict public `next_signal.core.models.omlx_endpoint()`
-  wrapper. Never duplicate that access.
+  propagate instead of falling back. **Models are not cached** — the endpoint and
+  credentials they are built from live in user state that can change while a
+  process runs, so the profile name no longer determines the result — which also
+  means OMLX is retried automatically once it recovers, with no manual step.
+  The caveat is a caller that *retains* a built model: `next-signal serve`
+  constructs its agents once at import, so those pick up an endpoint change on
+  restart. Stage models and embedders resolve per job and per item.
+- `next_signal.core.omlx.resolve_omlx_endpoint()` is the only reader of the local
+  chat endpoint, taking `base_url` from `engine.json` and `OMLX_API_KEY` from the
+  credential store; ordinary callers use the strict public
+  `next_signal.core.models.omlx_endpoint()` wrapper. Never duplicate that access,
+  and never read an endpoint from the environment — the dashboard and scheduler
+  are separate containers that share `/state` but not their environments. The
+  embedder's OMLX endpoint is separate again, in `embedding.json`.
 - Qwen3 specifics are pinned in `_build_omlx`: thinking disabled, sampling
   parameters, and structured output through the standard OpenAI
   `response_format` json_schema (xgrammar constrained decoding on the OMLX side).
@@ -97,10 +104,17 @@ Business stages never construct provider models directly.
   `vector(1024)` across a provider switch — and it excludes fixed-width models
   that cannot produce it, such as `text-embedding-ada-002`.
 
+  **Nothing is selected until an operator selects one.** An absent or
+  provider-less `embedding.json` resolves to unselected, `get_embedder()` raises
+  `EmbedderNotSelected` — a distinct type so callers can tell "not set up" from
+  "broken" — and the dedup gate turns itself off while the rest of the run
+  proceeds. `configs/models.yaml::embedders` is form prefill, never a default.
+
   **State and secrets are split.** The state file holds the selection, models,
-  API root, and vector-space id; it never holds a key. `openai` reads
-  `OPENAI_API_KEY` and the generic provider reads the credential *named* in
-  `api_key_env`, both from the credential store when the snapshot is built.
+  API roots, and vector-space id; it never holds a key, or even names one. Each
+  provider's credential has a fixed name — `OMLX_API_KEY` (optional),
+  `OPENAI_API_KEY`, `EMBEDDING_API_KEY` — read from the store when the snapshot
+  is built.
   Both the state file and the store are read at snapshot time, so an edit to
   either steers the next item with no restart and no `--force-recreate`. There is no embedder fallback: unlike two LLMs, two embedders are not
   substitutable, so a failure raises and the dedup gate treats the item as novel.

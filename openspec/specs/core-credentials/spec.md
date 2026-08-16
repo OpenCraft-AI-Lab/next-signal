@@ -17,14 +17,15 @@ a flat JSON object mapping a credential name to its string value.
 
 The credentials the system resolves by name SHALL be `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY`, `GOOGLE_API_KEY`, `DEEPSEEK_API_KEY`, `OMLX_API_KEY`,
-`GITHUB_TOKEN`, and `FOLO_TOKEN`. Names match the environment variables they
-replace because child processes require the literal string.
+`EMBEDDING_API_KEY`, `GITHUB_TOKEN`, and `FOLO_TOKEN`. Names match the
+environment variables they replace because child processes require the literal
+string; `EMBEDDING_API_KEY` replaces no environment variable and names the
+credential an operator-defined OpenAI-compatible embedding endpoint uses.
 
-The store SHALL NOT be limited to those names: an operator-defined
-OpenAI-compatible embedding endpoint names its own credential through
-`embedding.json`, so any name valid there SHALL be storable here. Names SHALL be
-validated against the same pattern that file already enforces, so a name one
-accepts the other accepts.
+The set of resolved names SHALL be closed. Every credential the system resolves
+SHALL appear in that enumeration, so an interface that renders one control per
+credential covers all of them and no configurable credential can exist without a
+place to enter it. Names SHALL still be validated against a documented pattern.
 
 An absent file SHALL read as an empty store, since a fresh install has no
 credentials and that is a valid state. A file that is present but unreadable,
@@ -45,6 +46,12 @@ System connection configuration — `DATABASE_URL`, `GBRAIN_*`, `POSTGRES_*`,
 - **WHEN** `secrets.json` exists but does not parse as a JSON object of strings
 - **THEN** reading it raises `RuntimeError` naming the file, rather than
   degrading to an empty store
+
+#### Scenario: every resolved credential has an entry point
+
+- **WHEN** an interface renders one control per credential the system resolves
+- **THEN** every credential any feature can require is present in that list,
+  including the one an OpenAI-compatible embedding endpoint uses
 
 ### Requirement: Credentials are written atomically and readable only by the owner
 

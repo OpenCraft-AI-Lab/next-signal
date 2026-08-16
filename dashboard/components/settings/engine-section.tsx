@@ -451,6 +451,7 @@ function OmlxPane({
           id="omlx-endpoint"
           className="mono"
           value={value.baseUrl}
+          placeholder="http://host.docker.internal:8000/v1"
           onChange={(e) => setValue({ ...value, baseUrl: e.target.value })}
           autoCapitalize="none"
           autoCorrect="off"
@@ -483,10 +484,13 @@ function OmlxPane({
         </Field>
       </div>
       <p className="set-note">{t.settings.omlxHint}</p>
+      <p className="set-note">{t.settings.omlxEndpointHint}</p>
       <PaneActions
         dirty={dirty}
         saving={saving}
-        canSave={Boolean(value.baseUrl.trim() && value.model.trim())}
+        // An empty endpoint is savable: it is how an operator says they have no
+        // local server, which sends OMLX profiles to their cloud fallback.
+        canSave={Boolean(value.model.trim())}
         onSave={() => void save()}
         onReset={reset}
       />

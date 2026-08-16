@@ -99,13 +99,14 @@ def test_malformed_name_is_refused(store: Path) -> None:
         save_secret("lowercase_key", "value", store)
 
 
-def test_known_credential_names_are_the_documented_seven() -> None:
+def test_known_credential_names_are_the_documented_eight() -> None:
     assert set(CREDENTIAL_NAMES) == {
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "GOOGLE_API_KEY",
         "DEEPSEEK_API_KEY",
         "OMLX_API_KEY",
+        "EMBEDDING_API_KEY",
         "GITHUB_TOKEN",
         "FOLO_TOKEN",
     }

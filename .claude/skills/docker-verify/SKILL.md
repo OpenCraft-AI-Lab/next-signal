@@ -267,10 +267,11 @@ path listed as free, update this table in the same change.
 
 ### `next-signal doctor` exits 1 by design
 
-Under the cloud-only container profile, `OMLX_BASE_URL` and any unset model key
-report ✗ and force a non-zero exit. **Read the check lines, not the exit code.**
-The stack is healthy when `DATABASE_URL`, `Postgres`, `configured agents`, and
-`registered tools` all show ✔.
+Under the cloud-only container profile, the local chat endpoint, the unselected
+embedder, and any unset model key report ✗ and force a non-zero exit — that is
+the normal state of a stack nobody has configured yet. **Read the check lines,
+not the exit code.** The stack is healthy when `DATABASE_URL`, `Postgres`,
+`configured agents`, and `registered tools` all show ✔.
 
 ### `sh -lc` erases `next-signal` from PATH
 

@@ -44,10 +44,11 @@ Every provider API key and token is entered on the dashboard settings page
 `~/.next-signal/secrets.json` (`/state/secrets.json` in a container): a flat
 `NAME → value` object, written atomically at mode `0600`.
 
-Seven credentials: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`,
-`DEEPSEEK_API_KEY`, `OMLX_API_KEY`, `GITHUB_TOKEN`, `FOLO_TOKEN`. An
-OpenAI-compatible embedding endpoint additionally stores whichever name its
-`api_key_env` points at.
+Eight credentials: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`,
+`DEEPSEEK_API_KEY`, `OMLX_API_KEY`, `EMBEDDING_API_KEY`, `GITHUB_TOKEN`,
+`FOLO_TOKEN`. The set is closed — every credential the system can require has a
+control on that page, `EMBEDDING_API_KEY` being the one an OpenAI-compatible
+embedding endpoint uses.
 
 Three properties worth knowing:
 
@@ -81,10 +82,11 @@ reach — and accepting it would give one credential two sources of truth.
 
 ## Environment variables
 
-No credential belongs here. Key values in the repo-local `.env`:
+No credential belongs here, and neither does a local model endpoint — those are
+entered on the settings page (**Settings → Engine** for the chat model,
+**Settings → Embedding** for the embedder). Key values in the repo-local `.env`:
 
 - `DATABASE_URL`
-- `OMLX_BASE_URL` (the OMLX key is a credential — see below)
 - `GBRAIN_BIN` (when `gbrain` is not on `PATH`; the dashboard and backend resolve
   it the same way)
 - `WIKI_DIR` / `WIKI_RAW_DIR` (**required by the code**, no default — when missing,
@@ -126,13 +128,26 @@ import: a key left in `.env` is inert.
 ### Choosing an embedder
 
 The dedup gate's embedder is selected independently of the LLM engine, on
-`/settings`, and stored in `~/.next-signal/embedding.json`. Three providers:
+`/settings`, and stored in `~/.next-signal/embedding.json`.
+
+**A fresh install has no embedder selected.** There is no provider next-signal
+could honestly pick for you — the local one needs an address only you know, the
+hosted ones need a key and spend money — so nothing is chosen until you choose
+it, and **deduplication is off until then**. The radar still pulls, scores, and
+displays everything; you will simply see the same story more than once.
+`next-signal doctor` reports the unselected state, and the settings page says so
+above the cards.
+
+Three providers:
 
 | Provider | Configuration | Notes |
 |---|---|---|
-| `omlx` (default) | `OMLX_BASE_URL` reachable; `configs/models.yaml::embedders.local.model_id` defaults to `Qwen3-Embedding-0.6B-8bit` and the OMLX server must have that model loaded | `OMLX_API_KEY` stays optional (Settings → Credentials). Nothing leaves the machine |
-| `openai` | `OPENAI_API_KEY` in **Settings → Credentials**; model from `embedders.openai` (default `text-embedding-3-small`) | Billed per item; summaries leave the machine |
-| `openai_compatible` | An API **root** (e.g. `https://host.example/v1` — the client appends `/embeddings`), a model, the **name** of the env var holding its key, and a vector-space id | No shipped default; all four must be saved before it can be selected |
+| `omlx` | Its own API root (**Settings → Embedding**), plus a model the server has loaded; `configs/models.yaml::embedders.local.model_id` prefills `Qwen3-Embedding-0.6B-8bit` | Separate endpoint from **Settings → Engine**: one mlx-lm process serves one model, so chat and embedding are two ports. `OMLX_API_KEY` stays optional. Nothing leaves the machine |
+| `openai` | `OPENAI_API_KEY` in **Settings → Credentials**; model prefilled from `embedders.openai` (`text-embedding-3-small`) | Billed per item; summaries leave the machine |
+| `openai_compatible` | An API **root** (e.g. `https://host.example/v1` — the client appends `/embeddings`), a model, and a vector-space id, plus `EMBEDDING_API_KEY` in **Settings → Credentials** | No shipped default; all three fields must be saved before it can be selected |
+
+Values from `configs/models.yaml` are **form prefill, not defaults** — they fill
+an empty pane and nothing more. Only what you save runs.
 
 Three properties are worth internalising before switching:
 
@@ -140,10 +155,9 @@ Three properties are worth internalising before switching:
   request `dimensions: 1024`; anything else raises at call time rather than
   being reshaped. `text-embedding-ada-002` and other fixed-width models that
   cannot produce 1024 are therefore unusable.
-- **The state file never holds a key.** For `openai_compatible` it stores
-  `api_key_env` — the credential's *name* — and the value comes from the
-  credential store. Credentials in the base URL (userinfo, query, fragment) are
-  rejected outright.
+- **The state file never holds a key, or even names one.** Each provider's
+  credential has a fixed name in the store. Credentials in the base URL
+  (userinfo, query, fragment) are rejected outright.
 - **Nothing here needs a restart.** Both the state file and the credential store
   are read when an item resolves its embedder, so a change to either steers the
   next item — no host-process restart and no `--force-recreate`.
@@ -259,12 +273,14 @@ uv run next-signal doctor                            # host-native
 docker compose exec dashboard next-signal doctor     # in the container
 ```
 
-It checks `DATABASE_URL`, `OMLX_BASE_URL`, the presence of `ANTHROPIC_API_KEY`
+It checks `DATABASE_URL`, the local chat endpoint recorded in `engine.json`
+(configured, not reachable), the presence of `ANTHROPIC_API_KEY`
 and `DEEPSEEK_API_KEY` **in the credential store**, the resolved content language (reports the `global` policy's
 value and whether it came from the preference file or the hardcoded default,
 or flags a corrupt/unrecognized preference-file value), the resolved embedder
 (prints the active vector-space identity and whether its required configuration
-is present — no embedding request is made, and unusable `embedding.json` is
+is present, or reports that none is selected and deduplication is inactive — no
+embedding request is made, and unusable `embedding.json` is
 reported as a failed check rather than crashing doctor),
 Postgres reachability, configured agents, registered tools, the
 GBrain CLI/service (`gbrain doctor --fast`), folocli auth (`FOLO_TOKEN` present in the store, then
@@ -501,11 +517,15 @@ docker compose logs -f scheduler
   it in **Settings → Credentials**. Setting it in `.env` has no effect.
 - **Postgres unreachable** → start Postgres.app or the Homebrew service, then
   rerun `next-signal doctor`.
-- **An OMLX profile fell back to DeepSeek** → check `OMLX_BASE_URL` in `.env`,
-  the optional `OMLX_API_KEY` in Settings → Credentials, and the endpoint's
-  `/v1/models`. Once OMLX is back, a
-  long-running process must call `next_signal.core.models.reset_cache()` before it
-  retries local.
+- **An OMLX profile fell back to DeepSeek** → check the endpoint in
+  **Settings → Engine**, the optional `OMLX_API_KEY` in Settings → Credentials,
+  and the endpoint's `/v1/models`. Models are not cached, so once OMLX is back
+  the next call retries local on its own. The exception is AgentOS, which builds
+  its interactive agents once at startup: restart that process to pick up a new
+  endpoint.
+- **The radar shows the same story repeatedly** → no embedder is selected, so
+  deduplication is off. Choose one in **Settings → Embedding**;
+  `next-signal doctor` reports this as a failed embedder check.
 - **GBrain search / re-index fails** → run `next-signal doctor` and
   `gbrain doctor --fast`. When embedding fails, ingest should fail loud *after*
   writing the wiki artifact, leaving the manifest un-advanced; fix the cause and

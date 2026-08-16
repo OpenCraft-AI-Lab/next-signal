@@ -199,9 +199,15 @@ already owns each value:
 | Codex CLI · Claude Code CLI model / effort / speed | `~/.next-signal/coding-agents.json` | Validated when that CLI is invoked |
 | Primary engine, fallback, OMLX, and DeepSeek settings | `~/.next-signal/engine.json` | Read once at the start of each production job; changes apply to the next job |
 
-Unset fields in `engine.json` read back from `configs/models.yaml` and
-`OMLX_BASE_URL`, so a fresh install shows its real endpoint and model rather
-than a value the dashboard invented. `DEEPSEEK_API_KEY` comes from the credential
+Unset fields in `engine.json` read back from `configs/models.yaml`, so a fresh
+install shows its real models rather than values the dashboard invented. The
+local endpoint is the exception: it has no baseline at all and starts **empty**,
+because no value the repo could ship would be right and reading one from this
+container's environment would show the dashboard's answer while the scheduler
+resolves its own. An empty endpoint is savable — it is how you say you have no
+local server, which sends OMLX profiles to their cloud fallback. Scheduled runs
+and new commands see a change immediately; agents already running inside AgentOS
+pick it up when that process restarts. `DEEPSEEK_API_KEY` comes from the credential
 store (Settings → Credentials) — the page reports only whether it is set, and
 never reads or stores the key itself.
 Every LLM stage in one production job uses the same selected engine. A provider
@@ -238,28 +244,38 @@ identity until you switch back. The group states that before the click, and
 displays the exact active identity (`omlx:<model>`, `openai:<model>`, or
 `openai_compatible:<space_id>`) verbatim.
 
-Three peers — **Local model**, **OpenAI**, **Custom endpoint** — with one
-asymmetry worth knowing:
+**Nothing is selected on a fresh install**, and the section says so above the
+cards: deduplication is off until you choose an embedder, and the radar
+otherwise runs normally. There is no provider the repo could honestly pick for
+you — the local one needs an address only you know, the hosted ones need a key
+and spend money.
+
+Three peers — **Local model**, **OpenAI**, **Custom endpoint** — all behaving
+identically:
 
 | Card | Selecting it |
 |---|---|
-| Local model, OpenAI | commits on click, against that provider's last saved parameters |
-| Custom endpoint, before it has ever been saved | **opens its pane and writes nothing** — there is no baseline to select |
-| Custom endpoint, once saved | commits on click like the others |
+| Any card whose settings are incomplete | **opens its pane and writes nothing** — there is nothing valid to select yet |
+| Any card once saved | prompts for confirmation, then commits |
 
-The custom endpoint has no shipped default anywhere in the repo, so its pane is
-all-or-nothing: **Save** stores `base_url`, `model`, `api_key_env`, and
-`space_id` together and makes it active in the same write. `space_id` is your
-own name for the vectors that endpoint produces — change it when weights,
-tokenizer, pooling, or quantization change; moving the same service to a new URL
-does not need a new one.
+A pane opens prefilled with suggestions from `configs/models.yaml` — form
+prefill, not defaults; only what you save runs. **Save** stores that provider's
+fields and selects it in the same write. Changing provider always asks first,
+because it parks every topic remembered under the current vector space.
 
-No credential passes through this page. The custom endpoint takes the *name* of
-an environment variable, never a key, and its URL is restricted to a plain API
+The local card carries **its own API root**, separate from the engine section's:
+one mlx-lm process serves one model, so a chat model and an embedding model are
+two ports. `space_id`, on the custom endpoint, is your own name for the vectors
+it produces — change it when weights, tokenizer, pooling, or quantization
+change; moving the same service to a new URL does not need a new one.
+
+No credential passes through this page, and no section even names one: each
+provider's key has a fixed name in the store (`OPENAI_API_KEY`,
+`EMBEDDING_API_KEY`). URLs are restricted to a plain API
 root so a secret cannot be persisted in userinfo, a query, or a fragment. Key
-presence is computed server-side and reaches the browser as a boolean. Because
-the value is read from the pipeline's own environment, editing `.env` needs a
-host-process restart or a Compose recreate before it exists — the pane says so.
+presence is computed server-side and reaches the browser as a boolean. A key
+saved in **Settings → Credentials** applies to the next item — no restart and no
+Compose recreate — because the store is read when an item resolves its embedder.
 Hosted providers also state that every kept item's summary leaves the machine
 and can be billed, including on unattended scheduler runs.
 

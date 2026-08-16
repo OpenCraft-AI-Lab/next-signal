@@ -253,8 +253,9 @@ volumes, not the image.
 7. Gate `app` on Postgres **health** (`depends_on: condition: service_healthy`),
    not just "started".
 8. Inject config: `.env` via `env_file` (read-only), `DATABASE_URL` pointing at the
-   `postgres` service name, `OMLX_BASE_URL` left unset (→ cloud fallback), wiki
-   bind mounts, state volume.
+   `postgres` service name, wiki bind mounts, state volume. No model endpoint
+   goes in the environment — a local one is entered in Settings, and its absence
+   means the cloud fallback.
 
 ### Entrypoint (every boot, idempotent)
 
@@ -368,10 +369,12 @@ Postgres and next-signal state should also be lost.
 
 **Local LLM (optional).** On a cloud-only deployment, select DeepSeek or a
 logged-in CLI in Settings (or configure it as the pre-first-response fallback).
-To enable the OMLX engine and embedder — required for info-radar `analyze`
-semantic dedup — run an OMLX server on the **host** and add to `.env`:
-`OMLX_BASE_URL=http://host.docker.internal:<port>/v1`. `host.docker.internal` is
-wired for Linux via `extra_hosts: host-gateway`.
+To enable local models, run an OMLX server on the **host** and enter
+`http://host.docker.internal:<port>/v1` in the dashboard — **Settings → Engine**
+for the chat model, **Settings → Embedding** for the embedder. Those are two
+separate fields because one mlx-lm process serves one model, so a chat model and
+an embedding model are two ports. `host.docker.internal` is wired for Linux via
+`extra_hosts: host-gateway`. Nothing about this belongs in `.env`.
 
 **First-build notes.** `openai-whisper` pulls in **torch**; `pyproject.toml`
 pins Linux installs to PyTorch's CPU-only wheel index (`tool.uv.sources` /
@@ -383,15 +386,16 @@ switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--por
 
 ## 8. Caveats specific to a cloud-only container
 
-1. **The embedder is selectable, but never falls back on its own.** It defaults
-   to OMLX, so in a pure container info-radar `analyze` dedup **fails** until you
-   act — every item then reads as novel. Chat, agents, and dashboard pages work.
-   Two ways out:
+1. **No embedder is selected until you select one, and none falls back on its
+   own.** A fresh container therefore runs info-radar `analyze` with dedup
+   **off** — every item reads as novel, and `next-signal doctor` says so. Chat,
+   agents, and dashboard pages work normally. Two ways out, both in
+   **Settings → Embedding**:
 
-   - expose a host/remote OMLX endpoint via
-     `OMLX_BASE_URL=http://host.docker.internal:<port>/v1`; or
-   - open **Settings → Embedding** and select OpenAI (needs `OPENAI_API_KEY` in
-     **Settings → Credentials**) or an OpenAI-compatible endpoint of your own.
+   - point the local option at a host/remote OMLX endpoint, typically
+     `http://host.docker.internal:<port>/v1`; or
+   - select OpenAI (needs `OPENAI_API_KEY` in **Settings → Credentials**) or an
+     OpenAI-compatible endpoint of your own (needs `EMBEDDING_API_KEY`).
 
    A hosted embedder has two consequences worth deciding on deliberately. Every
    kept item's analysis summary is **sent to that provider** — text that

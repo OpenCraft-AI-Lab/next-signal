@@ -9,6 +9,7 @@ import { EmbeddingSection } from "@/components/settings/embedding-section";
 import { EngineSection } from "@/components/settings/engine-section";
 import { LanguageSection } from "@/components/settings/language-section";
 import { ScheduleSection } from "@/components/settings/schedule-section";
+import type { EmbeddingPrefill } from "@/lib/actions/embedding";
 import type { Schedule, ScheduleStatus } from "@/lib/actions/schedule";
 import type {
   CodingAgentAuthProvider,
@@ -58,6 +59,7 @@ export function SettingsView({
   engine,
   deepSeekKey,
   embedding,
+  embeddingPrefill,
   openAiKey,
   embeddingCompatibleKey,
   credentialPresence,
@@ -71,6 +73,7 @@ export function SettingsView({
   engine: EnginePreferences;
   deepSeekKey: boolean;
   embedding: EmbeddingPreferences;
+  embeddingPrefill: EmbeddingPrefill;
   openAiKey: boolean;
   embeddingCompatibleKey: boolean;
   credentialPresence: CredentialPresence;
@@ -146,6 +149,7 @@ export function SettingsView({
         />
         <EmbeddingSection
           initial={embedding}
+          prefill={embeddingPrefill}
           openAiKey={openAiKey}
           compatibleKey={embeddingCompatibleKey}
         />

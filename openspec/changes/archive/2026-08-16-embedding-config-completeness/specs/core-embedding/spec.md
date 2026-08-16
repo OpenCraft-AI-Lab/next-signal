@@ -1,8 +1,91 @@
-# core-embedding Specification
+## REMOVED Requirements
 
-## Purpose
-TBD - created by archiving change switchable-embedding-provider. Update Purpose after archive.
-## Requirements
+### Requirement: Real profiles supply baselines and generic configuration is explicit
+
+**Reason**: Its premise is what this change removes. It made `models.yaml` a
+runtime baseline that an unsaved section inherited at resolution time, which is
+exactly how a form suggestion came to decide what runs. All three of its
+scenarios describe behaviour that no longer exists — "fresh install selects
+local embedding" is now the opposite of the contract.
+
+**Migration**: Replaced by "Real profiles supply prefill and every selection is
+explicit", which keeps the same YAML as the source of *suggested* values while
+requiring every section to be complete before its provider can be selected.
+
+## ADDED Requirements
+
+### Requirement: Real profiles supply prefill and every selection is explicit
+
+`configs/models.yaml::embedders` SHALL remain the source of suggested values for
+providers with real shipped defaults: `embedders.local` supplies a suggested
+OMLX model and `embedders.openai` supplies a suggested OpenAI model. These are
+form prefill. They SHALL NOT be applied as runtime defaults, and a section that
+has never been saved SHALL NOT inherit them at resolution time.
+
+Every provider section SHALL be complete before its provider can be selected.
+No universal endpoint, model, credential, or vector-space id SHALL be invented
+for any provider. Selecting a provider whose section is incomplete SHALL raise
+`RuntimeError` before any HTTP request.
+
+Because no section inherits a baseline, a partial section SHALL be rejected
+rather than silently completed. The backend and Dashboard SHALL derive suggested
+values from the same YAML profiles.
+
+#### Scenario: unsaved section does not inherit a baseline
+
+- **WHEN** state selects a provider whose section is missing required fields
+- **THEN** resolution raises an actionable `RuntimeError` naming the missing
+  fields, rather than filling them from `models.yaml`
+
+#### Scenario: prefill reaches the form, not the pipeline
+
+- **WHEN** an operator opens an unconfigured provider's settings pane
+- **THEN** its fields are prefilled from `models.yaml` and nothing is selected
+  or persisted until they save
+
+#### Scenario: no provider has a fabricated default
+
+- **WHEN** any provider is selected without a complete saved section
+- **THEN** resolution raises before any request
+
+### Requirement: No embedder is selected until an operator selects one
+
+Embedding SHALL have no default provider. An absent `embedding.json`, or a
+present one that records no selection, SHALL resolve to an **unselected** state
+rather than to any provider.
+
+The capability SHALL expose that state distinctly from a resolution failure, so
+a consumer can report "no embedder has been selected" without attempting a
+request and without inferring it from an error message. Attempting to resolve a
+snapshot while unselected SHALL raise rather than return a degraded embedder.
+
+`configs/models.yaml::embedders` SHALL supply suggested values for a provider an
+operator is configuring. It SHALL NOT cause any provider to be selected, and
+SHALL NOT determine what runs.
+
+The unselected state is a valid resting state, not a fault. It SHALL NOT prevent
+process startup, SHALL NOT abort a running job, and SHALL NOT be repaired by
+writing a selection on the operator's behalf.
+
+#### Scenario: fresh install selects nothing
+
+- **WHEN** no `embedding.json` exists
+- **THEN** the resolved state is unselected, no provider is chosen, and no
+  request is attempted
+
+#### Scenario: unselected is distinguishable from broken
+
+- **WHEN** a consumer asks whether embedding is available and nothing is selected
+- **THEN** it learns that no selection exists, separately from any error that a
+  configured-but-failing provider would produce
+
+#### Scenario: suggested values do not select a provider
+
+- **WHEN** `configs/models.yaml::embedders` names a local model
+- **THEN** that value is available to prefill a form and nothing about it causes
+  the local provider to be selected
+
+## MODIFIED Requirements
 
 ### Requirement: One resolved embedder snapshot owns one item's vector and identity
 
@@ -139,87 +222,6 @@ item without restarting a host process or recreating a Compose service.
   settings page instead, and saving there applies to the next item with no
   restart or recreation
 
-### Requirement: Every returned embedding is exactly 1024 finite numbers
-
-`embed()` SHALL validate that the provider response contains a JSON array of
-exactly 1024 finite numeric elements. It SHALL raise `RuntimeError` naming the
-failure for a wrong length, non-numeric value, `NaN`, or infinity. It SHALL NOT
-truncate, pad, normalize, or return a partially valid vector.
-
-This keeps `radar_pushed_topics.embedding` at `vector(1024)` across provider
-switches and excludes models that cannot produce the fixed width.
-
-#### Scenario: wrong-width model is rejected
-
-- **WHEN** a provider returns 1536 elements
-- **THEN** `embed()` reports 1024 expected and 1536 received, and nothing is stored
-
-#### Scenario: non-finite vector is rejected
-
-- **WHEN** one of 1024 elements is `NaN` or infinity
-- **THEN** `embed()` raises before the vector reaches pgvector
-
-#### Scenario: correct vector passes unchanged
-
-- **WHEN** a provider returns exactly 1024 finite numbers
-- **THEN** the vector is returned without normalization or resizing
-
-### Requirement: Every new vector carries a stable vector-space identity
-
-The capability SHALL expose the identity captured in `ResolvedEmbedder`:
-
-- OMLX: `omlx:<model_id>`
-- OpenAI: `openai:<model_id>`
-- OpenAI-compatible: `openai_compatible:<space_id>`
-
-The compatible `space_id` is operator-managed and SHALL change whenever weights,
-tokenizer, pooling, quantization, dimension behavior, or any other
-vector-producing behavior changes. A transport-only base URL change SHALL NOT
-force an identity change.
-
-The provider's advertised model name SHALL NOT replace `space_id` for generic
-endpoints, because different endpoints may use the same name for incompatible
-vector spaces.
-
-#### Scenario: compatible endpoint moves without changing vectors
-
-- **WHEN** a compatible service moves to a new base URL while retaining the same
-  vector-producing implementation and `space_id`
-- **THEN** its identity remains stable and its existing rows remain searchable
-
-#### Scenario: compatible implementation changes
-
-- **WHEN** the endpoint's weights, tokenizer, pooling, or quantization changes
-- **THEN** the operator saves a new `space_id`, producing a new identity that
-  cannot compare against the earlier rows
-
-### Requirement: Embedding has no provider fallback
-
-No embedding provider SHALL automatically fall back to another. A failed
-embedding SHALL raise `RuntimeError` to the consumer, which owns the conservative
-`novel` policy.
-
-#### Scenario: down provider does not switch vector space
-
-- **WHEN** the selected provider is unreachable and another is configured
-- **THEN** the call raises and no other provider is attempted
-
-### Requirement: Embedding uses the resolved provider's concurrency slot
-
-Each `embed()` call SHALL acquire `ProviderConcurrency` using the provider
-captured by its `ResolvedEmbedder`. OMLX embedding therefore contends with OMLX
-LLM inference for the local GPU; hosted embedding does not consume that slot.
-
-#### Scenario: local embedding shares the local cap
-
-- **WHEN** OMLX LLM stages saturate the OMLX cap
-- **THEN** an OMLX embedding waits for a slot
-
-#### Scenario: hosted embedding does not block on OMLX
-
-- **WHEN** OpenAI is selected while the OMLX cap is saturated
-- **THEN** embedding proceeds under OpenAI's provider slot
-
 ### Requirement: Doctor reports the active snapshot configuration
 
 `next-signal doctor` SHALL report the resolved identity and whether its required
@@ -258,74 +260,3 @@ a host process, or recreate a Compose service, none of which affect resolution.
 
 - **WHEN** state and credential are valid
 - **THEN** doctor reports the identity successfully and performs no HTTP call
-
-### Requirement: Real profiles supply prefill and every selection is explicit
-
-`configs/models.yaml::embedders` SHALL remain the source of suggested values for
-providers with real shipped defaults: `embedders.local` supplies a suggested
-OMLX model and `embedders.openai` supplies a suggested OpenAI model. These are
-form prefill. They SHALL NOT be applied as runtime defaults, and a section that
-has never been saved SHALL NOT inherit them at resolution time.
-
-Every provider section SHALL be complete before its provider can be selected.
-No universal endpoint, model, credential, or vector-space id SHALL be invented
-for any provider. Selecting a provider whose section is incomplete SHALL raise
-`RuntimeError` before any HTTP request.
-
-Because no section inherits a baseline, a partial section SHALL be rejected
-rather than silently completed. The backend and Dashboard SHALL derive suggested
-values from the same YAML profiles.
-
-#### Scenario: unsaved section does not inherit a baseline
-
-- **WHEN** state selects a provider whose section is missing required fields
-- **THEN** resolution raises an actionable `RuntimeError` naming the missing
-  fields, rather than filling them from `models.yaml`
-
-#### Scenario: prefill reaches the form, not the pipeline
-
-- **WHEN** an operator opens an unconfigured provider's settings pane
-- **THEN** its fields are prefilled from `models.yaml` and nothing is selected
-  or persisted until they save
-
-#### Scenario: no provider has a fabricated default
-
-- **WHEN** any provider is selected without a complete saved section
-- **THEN** resolution raises before any request
-
-### Requirement: No embedder is selected until an operator selects one
-
-Embedding SHALL have no default provider. An absent `embedding.json`, or a
-present one that records no selection, SHALL resolve to an **unselected** state
-rather than to any provider.
-
-The capability SHALL expose that state distinctly from a resolution failure, so
-a consumer can report "no embedder has been selected" without attempting a
-request and without inferring it from an error message. Attempting to resolve a
-snapshot while unselected SHALL raise rather than return a degraded embedder.
-
-`configs/models.yaml::embedders` SHALL supply suggested values for a provider an
-operator is configuring. It SHALL NOT cause any provider to be selected, and
-SHALL NOT determine what runs.
-
-The unselected state is a valid resting state, not a fault. It SHALL NOT prevent
-process startup, SHALL NOT abort a running job, and SHALL NOT be repaired by
-writing a selection on the operator's behalf.
-
-#### Scenario: fresh install selects nothing
-
-- **WHEN** no `embedding.json` exists
-- **THEN** the resolved state is unselected, no provider is chosen, and no
-  request is attempted
-
-#### Scenario: unselected is distinguishable from broken
-
-- **WHEN** a consumer asks whether embedding is available and nothing is selected
-- **THEN** it learns that no selection exists, separately from any error that a
-  configured-but-failing provider would produce
-
-#### Scenario: suggested values do not select a provider
-
-- **WHEN** `configs/models.yaml::embedders` names a local model
-- **THEN** that value is available to prefill a form and nothing about it causes
-  the local provider to be selected

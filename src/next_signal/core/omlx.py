@@ -1,39 +1,41 @@
-"""Centralized OMLX endpoint resolution.
+"""Centralized OMLX endpoint resolution for the local *chat* model.
 
-The endpoint's two halves have different sources by rule: ``base_url`` is
-deployment configuration and stays in the environment, while the API key is a
-credential and comes from the credential store. Both are resolved here so the
-endpoint is still assembled in exactly one place.
+Both halves come from the shared state volume: ``base_url`` from the engine
+preferences the settings page writes, the API key from the credential store.
+Neither is read from the environment, so an operator who starts a local server
+points next-signal at it in the browser rather than by editing ``.env`` and
+recreating a container.
+
+The embedding capability owns its own OMLX endpoint in ``embedding.json``: one
+mlx-lm process serves one model, so a chat model and an embedding model are two
+addresses.
 """
 
 from __future__ import annotations
 
-import os
-
 from next_signal.core.secrets import get_secret
 
 
-def resolve_omlx_endpoint(
-    *,
-    base_url: str | None = None,
-    default_base_url: str | None = None,
-) -> dict[str, str]:
+def resolve_omlx_endpoint(*, base_url: str | None = None) -> dict[str, str]:
     """Return the selected OMLX base URL and API key.
 
-    ``base_url`` is an explicit runtime override. Otherwise the environment is
-    authoritative; ``default_base_url`` is only for fresh-install settings
-    whose persisted value must be usable before an environment is configured.
+    ``base_url`` is an explicit runtime override — a production stage passing
+    the endpoint its own job already resolved. Otherwise the engine preferences
+    are authoritative.
     """
     if base_url is not None:
         selected = base_url.strip()
     else:
-        selected = os.environ.get("OMLX_BASE_URL", "").strip()
-        if not selected and default_base_url is not None:
-            selected = default_base_url.strip()
+        # Imported here rather than at module scope: engine preferences are read
+        # at call time, and a module-level import would make this file's import
+        # order matter to a settings read.
+        from next_signal.core.engine_preferences import load_engine_preferences
+
+        selected = (load_engine_preferences().omlx.base_url or "").strip()
     if not selected:
         raise RuntimeError(
-            "OMLX_BASE_URL not set. Either set OMLX_BASE_URL in .env, or use a "
-            "non-omlx model profile."
+            "No local OMLX endpoint is configured. Set it on the dashboard "
+            "settings page (Settings -> Engine), or use a non-omlx model profile."
         )
     # Optional: a local OMLX server usually has no key at all.
     return {

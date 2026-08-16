@@ -12,13 +12,18 @@
  * - a credential value is never logged, including inside an error.
  */
 
-/** The credentials the system resolves by name. */
+/**
+ * Every credential the system resolves, by name. The set is closed: this list
+ * is what the credentials section renders, so a credential missing from here
+ * would be one no operator could enter.
+ */
 export const CREDENTIAL_NAMES = [
   "ANTHROPIC_API_KEY",
   "OPENAI_API_KEY",
   "GOOGLE_API_KEY",
   "DEEPSEEK_API_KEY",
   "OMLX_API_KEY",
+  "EMBEDDING_API_KEY",
   "GITHUB_TOKEN",
   "FOLO_TOKEN",
 ] as const;
@@ -36,6 +41,7 @@ export const CREDENTIAL_USES: Record<CredentialName, string> = {
   GOOGLE_API_KEY: "gemini",
   DEEPSEEK_API_KEY: "deepseek",
   OMLX_API_KEY: "omlx",
+  EMBEDDING_API_KEY: "embedding",
   GITHUB_TOKEN: "github",
   FOLO_TOKEN: "folo",
 };
@@ -43,12 +49,7 @@ export const CREDENTIAL_USES: Record<CredentialName, string> = {
 /** Presence per credential. This is the only shape that reaches the client. */
 export type CredentialPresence = Record<string, boolean>;
 
-/**
- * The store is not limited to the names above: an operator-defined
- * OpenAI-compatible embedding endpoint names its own credential through
- * `embedding.json::api_key_env`. Same pattern that file validates against, so a
- * name one accepts the other accepts.
- */
+/** The shape a credential name must have, mirroring the Python validator. */
 const VALID_NAME = /^[A-Z][A-Z0-9_]{0,63}$/;
 
 export function isValidCredentialName(name: string): boolean {

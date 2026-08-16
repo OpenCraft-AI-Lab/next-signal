@@ -39,9 +39,10 @@ Dashboard 是单独的 Next.js 进程，不要求 `next-signal serve` 同时运�
 存在同一个文件 `~/.next-signal/secrets.json`（容器里 `/state/secrets.json`）：扁平的
 `NAME → value` 对象，原子写入，权限 `0600`。
 
-七个凭据：`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GOOGLE_API_KEY`、
-`DEEPSEEK_API_KEY`、`OMLX_API_KEY`、`GITHUB_TOKEN`、`FOLO_TOKEN`。用
-OpenAI-compatible 嵌入端点时，还会存 `api_key_env` 指定的那个名字。
+八个凭据：`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GOOGLE_API_KEY`、
+`DEEPSEEK_API_KEY`、`OMLX_API_KEY`、`EMBEDDING_API_KEY`、`GITHUB_TOKEN`、
+`FOLO_TOKEN`。这个集合是封闭的——系统会用到的每个凭据在那一页上都有对应的输入框，
+`EMBEDDING_API_KEY` 就是 OpenAI-compatible 嵌入端点用的那个。
 
 三条要点：
 
@@ -68,10 +69,10 @@ token，换成 session token 存起来。手动粘贴也行，登录失败时就
 
 ## 环境变量
 
-凭据不放这里。repo-local `.env` 关键值：
+凭据不放这里，本地模型端点也不放——那些在设置页里填（对话模型走**设置 → 引擎**，
+嵌入模型走**设置 → 向量嵌入**）。repo-local `.env` 关键值：
 
 - `DATABASE_URL`
-- `OMLX_BASE_URL`（OMLX 的 key 是凭据，见上）
 - `GBRAIN_BIN`（`gbrain` 不在 `PATH` 时；dashboard 与后端同一套解析）
 - `WIKI_DIR` / `WIKI_RAW_DIR`（**代码层面必填**，无默认；缺失时 knowledge pipeline 与
   dashboard wiki 视图 fail loud。跑 Docker Compose 时可以留空：Compose 会挂载
@@ -104,21 +105,31 @@ dashboard 里存的凭据下一次调用就生效，所有进程都一样，不�
 ### 选择 embedder
 
 dedup gate 的 embedder 与 LLM 引擎分开选，在 `/settings` 上，存进
-`~/.next-signal/embedding.json`。三个 provider：
+`~/.next-signal/embedding.json`。
+
+**全新安装不会选中任何 embedder。** next-signal 没有一个能替你老实挑的 provider——
+本地那个要一个只有你知道的地址，云端那两个要密钥、要花钱——所以在你选之前什么都不选，
+**在那之前去重是关着的**。雷达照常抓取、打分、展示，你只会看到同一件事出现多次。
+`next-signal doctor` 会报出这个未选中状态，设置页也会在卡片上方写明。
+
+三个 provider：
 
 | Provider | 配置 | 说明 |
 |---|---|---|
-| `omlx`（默认） | `OMLX_BASE_URL` 可达；`configs/models.yaml::embedders.local.model_id` 默认 `Qwen3-Embedding-0.6B-8bit`，需要 OMLX server 加载该模型 | `OMLX_API_KEY` 仍是可选的（设置 → 凭据）。数据不出本机 |
-| `openai` | **设置 → 凭据**里的 `OPENAI_API_KEY`；模型取自 `embedders.openai`（默认 `text-embedding-3-small`） | 按条目计费；摘要会离开本机 |
-| `openai_compatible` | 一个 API **根地址**（例如 `https://host.example/v1`——`/embeddings` 由程序拼），一个模型，凭据的**名字**，以及一个向量空间 id | 没有出厂默认值；四项都保存后才能选中 |
+| `omlx` | 它自己的 API 根地址（**设置 → 向量嵌入**）加一个服务已加载的模型；`configs/models.yaml::embedders.local.model_id` 预填 `Qwen3-Embedding-0.6B-8bit` | 与**设置 → 引擎**是两个端点：一个 mlx-lm 进程只挂一个模型，对话和嵌入是两个端口。`OMLX_API_KEY` 仍是可选的。数据不出本机 |
+| `openai` | **设置 → 凭据**里的 `OPENAI_API_KEY`；模型由 `embedders.openai` 预填（`text-embedding-3-small`） | 按条目计费；摘要会离开本机 |
+| `openai_compatible` | 一个 API **根地址**（例如 `https://host.example/v1`——`/embeddings` 由程序拼）、一个模型、一个向量空间 id，外加**设置 → 凭据**里的 `EMBEDDING_API_KEY` | 没有出厂默认值；三项都保存后才能选中 |
+
+`configs/models.yaml` 里的值是**表单预填，不是默认值**——它只负责把空面板填上，仅此而已。
+只有你保存下来的东西才会真的跑。
 
 换之前有三条值得先想清楚：
 
 - **每个 embedder 都必须返回正好 1024 个有限数值。** 云端路径会带 `dimensions: 1024`；
   其他情况在调用时直接抛，不会被塑形。所以 `text-embedding-ada-002` 之类做不到 1024
   的定宽模型无法使用。
-- **状态文件从不存密钥。** `openai_compatible` 存的是 `api_key_env`——凭据的*名字*——
-  取值时从凭据库读。URL 里带凭据（userinfo、query、fragment）会被直接拒绝。
+- **状态文件从不存密钥，连名字都不存。** 每个 provider 的凭据在凭据库里都有固定名字。
+  URL 里带凭据（userinfo、query、fragment）会被直接拒绝。
 - **这里没有任何东西需要重启。** 状态文件和凭据库都在 item 解析 embedder 时才读，
   所以改哪一个都是下一个 item 生效——不用重启宿主进程，也不用 `--force-recreate`。
 
@@ -216,11 +227,12 @@ uv run next-signal doctor                            # host-native
 docker compose exec dashboard next-signal doctor     # 容器里
 ```
 
-检查：`DATABASE_URL`、`OMLX_BASE_URL`、**凭据库里** `ANTHROPIC_API_KEY` 和
-`DEEPSEEK_API_KEY` 在不在、
+检查：`DATABASE_URL`、`engine.json` 里记录的本地对话端点（只看配没配，不看通不通）、
+**凭据库里** `ANTHROPIC_API_KEY` 和 `DEEPSEEK_API_KEY` 在不在、
 解析后的内容语言（报出 `global` policy 的值、来自偏好文件还是硬编码默认值，偏好文件
-损坏或值不认识则标红）、解析后的 embedder（打印当前向量空间身份，以及它需要的配置在不在
-——全程不发嵌入请求，`embedding.json` 不可用时报成失败项而不是把 doctor 弄挂）、
+损坏或值不认识则标红）、解析后的 embedder（打印当前向量空间身份，以及它需要的配置在不在；
+一个都没选时报出未选中、去重已关闭——全程不发嵌入请求，`embedding.json` 不可用时报成
+失败项而不是把 doctor 弄挂）、
 Postgres 可达、
 configured agents、registered tools、GBrain CLI/service（`gbrain doctor --fast`）、
 folocli auth（先看凭据库里有没有 `FOLO_TOKEN`，再跑 `folocli whoami`；folocli 自己
@@ -407,9 +419,11 @@ docker compose logs -f scheduler
 - **`<NAME> is not configured`** → 凭据库里没有这个凭据，去**设置 → 凭据**填；
   填在 `.env` 里没有用。
 - **Postgres unreachable** → 启动 Postgres.app 或 Homebrew service，重跑 `next-signal doctor`。
-- **OMLX profile 回落到 DeepSeek** → 查 `.env` 的 `OMLX_BASE_URL`、设置 → 凭据里可选的
-  `OMLX_API_KEY`、以及端点 `/v1/models`；
-  OMLX 恢复后长驻进程要调 `next_signal.core.models.reset_cache()`。
+- **OMLX profile 回落到 DeepSeek** → 查**设置 → 引擎**里的端点、设置 → 凭据里可选的
+  `OMLX_API_KEY`、以及端点 `/v1/models`。模型不再缓存，OMLX 恢复后下一次调用自己就会
+  重试本地；例外是 AgentOS——它在启动时一次性构建 interactive agent，换端点后要重启该进程。
+- **雷达反复推同一件事** → 没选 embedder，去重是关着的。去**设置 → 向量嵌入**选一个；
+  `next-signal doctor` 会把这个报成 embedder 检查失败。
 - **GBrain 搜索 / re-index 失败** → 跑 `next-signal doctor` 和 `gbrain doctor --fast`；
   embed 失败时 ingest 应在写完 wiki artifact 后 loud fail，manifest 不前进，
   修好后重跑 `next-signal run-workflow knowledge_ingest`。

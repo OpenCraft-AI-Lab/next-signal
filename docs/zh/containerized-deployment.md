@@ -229,7 +229,7 @@ docker compose up -d --force-recreate dashboard scheduler
 7. 让 `app` 依赖 Postgres 的**健康状态**（`depends_on: condition: service_healthy`），
    而不只是「已启动」。
 8. 注入配置：`.env` 经 `env_file`（只读）、`DATABASE_URL` 指向 `postgres` 服务名、
-   `OMLX_BASE_URL` 留空（→ 云回落）、wiki bind mount、state 卷。
+   wiki bind mount、state 卷。模型端点不进环境变量——本地端点在设置页里填，没填就是走云回落。
 
 ### 入口脚本（每次启动，幂等）
 
@@ -328,10 +328,11 @@ docker compose exec dashboard next-signal coding-agent auth-status claude
 `docker compose down -v`。
 
 **本地 LLM（可选）。** 纯云部署应在设置中选择 DeepSeek 或已登录的 CLI（也可以把它设为
-首次响应前的回落）。要启用 OMLX 引擎和 embedder——info-radar `analyze` 的语义去重需要
-后者——在**宿主机**上跑一个 OMLX server，然后
-在 `.env` 里加：`OMLX_BASE_URL=http://host.docker.internal:<port>/v1`。
-`host.docker.internal` 已经通过 `extra_hosts: host-gateway` 为 Linux 接好。
+首次响应前的回落）。要启用本地模型，在**宿主机**上跑一个 OMLX server，然后在 dashboard 里填
+`http://host.docker.internal:<port>/v1`——对话模型填**设置 → 引擎**，嵌入模型填
+**设置 → 向量嵌入**。这是两个独立的字段，因为一个 mlx-lm 进程只挂一个模型，
+对话模型和嵌入模型是两个端口。`host.docker.internal` 已经通过
+`extra_hosts: host-gateway` 为 Linux 接好。这些都不该写进 `.env`。
 
 **首次构建注意。** `openai-whisper` 会带进 **torch**；`pyproject.toml` 把 Linux 上的
 安装钉到 PyTorch 的纯 CPU wheel 源（`tool.uv.sources` / `tool.uv.index`，见 §8），
@@ -343,14 +344,15 @@ docker compose exec dashboard next-signal coding-agent auth-status claude
 
 ## 8. 纯云容器特有的注意事项
 
-1. **embedder 可选，但它自己永远不回落。** 默认走 OMLX，所以在纯容器环境里
-   info-radar `analyze` 的 dedup 在你动手之前会**失败**——那时每个条目都会被当成新的。
-   对话、agent 和 dashboard 页面都正常。两条出路：
+1. **不选就没有 embedder，而且它自己永远不回落。** 所以全新容器跑 info-radar
+   `analyze` 时 dedup 是**关着的**——每个条目都会被当成新的，`next-signal doctor`
+   会把这件事报出来。对话、agent 和 dashboard 页面都正常。两条出路，都在
+   **设置 → 向量嵌入**里：
 
-   - 通过 `OMLX_BASE_URL=http://host.docker.internal:<port>/v1` 暴露一个宿主机/远程
-     OMLX 端点；或者
-   - 打开 **设置 → 向量嵌入**，选 OpenAI（需要在**设置 → 凭据**里填 `OPENAI_API_KEY`）
-     或者你自己的 OpenAI 兼容端点。
+   - 把本地那项指向宿主机/远程 OMLX 端点，一般是
+     `http://host.docker.internal:<port>/v1`；或者
+   - 选 OpenAI（需要在**设置 → 凭据**里填 `OPENAI_API_KEY`）或者你自己的
+     OpenAI 兼容端点（需要 `EMBEDDING_API_KEY`）。
 
    选云端 embedder 有两个后果，值得刻意决定一下。每条留下来的条目，它的分析摘要都会
    **发给那个服务商**——而 OMLX 同时承担两半时这些文本根本不出本机——并且每个条目都

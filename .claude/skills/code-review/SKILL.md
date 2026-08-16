@@ -211,9 +211,9 @@ SQL, or path handling elsewhere — against:
   through the concurrency limiter.
 - `async` code does not block the event loop with sync I/O (raw `requests`,
   blocking DB calls, `time.sleep`).
-- After OMLX recovers, the model cache needs `next_signal.core.models.reset_cache()`
-  to retry it — a long-lived process that pinned the cloud fallback must not
-  stay stuck there.
+- Models are not cached: `get_model` rebuilds each call, because the endpoint and
+  credentials come from user state that can change while a process runs. A new
+  cache keyed on profile name would silently pin a stale endpoint.
 
 ### Database
 - agno-managed tables (sessions / memory / knowledge / traces) go through the

@@ -31,23 +31,22 @@ from next_signal.core.paths import STATE_ROOT
 
 SECRETS_FILE = STATE_ROOT / "secrets.json"
 
-# The credentials this system resolves by name. The settings page renders one
-# control per entry and `doctor` reports on them. The store is not limited to
-# these: an operator-defined OpenAI-compatible embedding endpoint names its own
-# credential through `embedding.json::api_key_env`, so any well-formed name may
-# be stored. See `_VALID_NAME`.
+# Every credential this system resolves, by name. The set is closed: the
+# settings page renders one control per entry, so a credential absent from here
+# would be one no operator could enter. `EMBEDDING_API_KEY` replaces no
+# environment variable — it is the fixed name for whatever OpenAI-compatible
+# embedding endpoint an operator configures.
 CREDENTIAL_NAMES: tuple[str, ...] = (
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
     "GOOGLE_API_KEY",
     "DEEPSEEK_API_KEY",
     "OMLX_API_KEY",
+    "EMBEDDING_API_KEY",
     "GITHUB_TOKEN",
     "FOLO_TOKEN",
 )
 
-# Same shape `embedding.json::api_key_env` already validates against, so a name
-# that file accepts is a name this store accepts.
 _VALID_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
 
@@ -160,13 +159,6 @@ def _write(secrets: dict[str, str], path: Path) -> None:
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
-
-    # Model instances hold whatever credential they were built with, so a
-    # corrected key would otherwise stay dead until the process restarts.
-    # Imported here rather than at module scope: `core.models` reads this module.
-    from next_signal.core.models import reset_cache
-
-    reset_cache()
 
 
 def child_env(names: list[str], path: Path | None = None) -> dict[str, str]:

@@ -6,6 +6,7 @@ The contract the containerized stack offers to anything verifying against it: wh
 
 Runtime and end-to-end verification happens in containers, not on the host. That only produces trustworthy results if the verifier can tell whether the container is running the code under test — `/app` is image-baked, so an edit to `src/` followed by an immediate `docker compose exec` silently verifies the previous code. These requirements pin the facts a verifier depends on, so a pass means what it claims and so verifying plumbing does not incur model cost.
 ## Requirements
+
 ### Requirement: Source visibility contract
 
 The containerized stack SHALL make explicit which host paths are live inside a
@@ -204,14 +205,27 @@ that project executables resolve. Invocations MUST NOT use a login shell.
 
 `next-signal doctor` SHALL report per-check status independently of its exit code. A
 non-zero exit MUST NOT be read as stack failure when the failing checks are
-optional under the active deployment profile.
+optional under the active deployment profile, or when they report configuration
+an operator has not completed yet.
+
+A freshly started stack that nobody has configured SHALL be expected to exit
+non-zero. Unset model credentials and an unselected embedder are the normal
+first-run state, not defects in the stack.
 
 #### Scenario: Cloud-only profile
 
-- **WHEN** `next-signal doctor` runs in a container with no OMLX endpoint configured
-- **THEN** it exits non-zero because `OMLX_BASE_URL` and unset model keys report ✗
+- **WHEN** `next-signal doctor` runs in a container with no local endpoint
+  configured and no embedder selected
+- **THEN** it exits non-zero because unset model keys and the unselected
+  embedder report ✗
 - **AND** the stack is nonetheless healthy if `DATABASE_URL`, Postgres,
   configured agents, and registered tools all report ✔
+
+#### Scenario: An unselected embedder is a first-run state
+
+- **WHEN** a fresh stack has never had an embedder selected
+- **THEN** the embedder check reports ✗ naming the unselected state and the
+  stack is still considered correctly started
 
 ### Requirement: Dashboard action observability
 
@@ -243,4 +257,3 @@ only.
 - **WHEN** `pytest` is invoked inside the app container
 - **THEN** it fails because neither the runner nor `tests/` is present
 - **AND** the suite must be run on the host via `uv run pytest`
-
