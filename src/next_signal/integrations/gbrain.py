@@ -11,6 +11,7 @@ import subprocess
 from typing import Any
 
 from next_signal.core.paths import PROJECT_ROOT
+from next_signal.core.secrets import child_env
 from next_signal.integrations._helpers import to_jsonable, truncate
 
 _DEFAULT_TIMEOUT = 60
@@ -24,7 +25,7 @@ def resolve_gbrain_home(value: str) -> str:
 
 
 def gbrain_env(*, gbrain_home: str | None = None) -> dict[str, str]:
-    env = os.environ.copy()
+    env = child_env(["OPENAI_API_KEY"])
     gbrain_home = (gbrain_home if gbrain_home is not None else env.get("GBRAIN_HOME", "")).strip()
     gbrain_url = env.get("GBRAIN_DATABASE_URL", "").strip()
 

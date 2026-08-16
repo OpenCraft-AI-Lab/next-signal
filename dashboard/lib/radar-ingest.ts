@@ -1,9 +1,12 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+
+import { secretsStateFile } from "@/lib/paths";
+import { CREDENTIAL_NAMES, parseSecrets } from "@/lib/secrets";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_FOLO_ARGV = ["npx", "--yes", "folocli@0.0.5"];
@@ -68,12 +71,14 @@ export async function resolveRadarIngestValue(
 
 export async function fetchFoloEntry(sourceId: string): Promise<FoloEntry> {
   const argv = foloArgv();
+  const env = await folocliEnv();
   let stdout: string;
   try {
     const result = await execFileAsync(
       argv[0],
       [...argv.slice(1), "entry", "get", sourceId],
       {
+        env,
         maxBuffer: 10 * 1024 * 1024,
         timeout: 60_000,
       },
@@ -160,6 +165,37 @@ export function renderFoloEntryHtml(
 </body>
 </html>
 `;
+}
+
+/**
+ * Env for the one folocli child this module spawns. Mirrors
+ * `next_signal.core.secrets.child_env`: read the credential store fresh at
+ * spawn time (not `process.env`, which never holds it — nothing writes
+ * FOLO_TOKEN there), strip every known credential name from the inherited
+ * environment first, then put back only FOLO_TOKEN. Duplicated here rather
+ * than reused from `lib/actions/secrets.ts` because that module is `"use
+ * server"` and deliberately exports no function that returns a credential
+ * value — doing so here, in a plain (non-action) module, keeps that
+ * boundary intact.
+ */
+export async function folocliEnv(): Promise<NodeJS.ProcessEnv> {
+  let raw: string;
+  try {
+    raw = await readFile(secretsStateFile(), "utf-8");
+  } catch {
+    raw = "{}"; // absent store is normal — a fresh install has no credentials
+  }
+  const secrets = parseSecrets(raw);
+  const token = secrets.FOLO_TOKEN?.trim();
+  if (!token) {
+    throw new Error(
+      "FOLO_TOKEN is not configured. Set it on the dashboard settings page (Settings -> Credentials).",
+    );
+  }
+  const env = { ...process.env };
+  for (const name of CREDENTIAL_NAMES) delete env[name];
+  env.FOLO_TOKEN = token;
+  return env;
 }
 
 function foloArgv(): string[] {
