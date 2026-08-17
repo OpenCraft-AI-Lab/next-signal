@@ -13,7 +13,7 @@
 brew install uv
 brew install --cask postgres-app          # 或 brew install postgresql@16
 uv sync
-cp .env.example .env && $EDITOR .env       # 至少 DATABASE_URL + 一个 LLM key
+cp .env.example .env && $EDITOR .env       # host-native：DATABASE_URL。凭据在 dashboard 里配
 createdb next_signal
 uv run python scripts/bootstrap_db.py
 uv run next-signal doctor

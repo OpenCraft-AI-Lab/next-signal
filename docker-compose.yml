@@ -8,10 +8,11 @@
 # duplicate check stays off until an embedder is chosen.
 #
 # To use LOCAL models, run an OMLX server on the HOST and enter its address in
-# the dashboard — Settings → Engine for the chat model, Settings → Embedding for
-# the embedder (one mlx-lm process serves one model, so those are two ports).
-# Use http://host.docker.internal:<port>/v1; host.docker.internal is wired below
-# for Linux via host-gateway too. Nothing about this goes in .env.
+# the dashboard — Settings → Engine for the chat model, Settings → Radar
+# Embedding for the dedup embedder (one mlx-lm process serves one model, so
+# those are two ports). Use http://host.docker.internal:<port>/v1;
+# host.docker.internal is wired below for Linux via host-gateway too. Nothing
+# about this goes in .env.
 
 name: next-signal
 

@@ -118,6 +118,9 @@ CLI 子命令：
 - `next-signal knowledge ingest <url|file>` — 路由输入、保存 raw / clean markdown、可选导入 GBrain
   （`--category <taxonomy-path>` 指定落点跳过自动分类；`--progress` 每步输出一行 JSON 事件，dashboard 入库进度面板用）
 - `next-signal knowledge gbrain-search|gbrain-ingest` — 通过本地 GBrain CLI 搜索 / 导入 markdown
+- `next-signal knowledge gbrain-init --embedding-model <provider>:<model>` — 用选定的 embedding 模型
+  初始化 GBrain；模型永久决定 schema 尺寸，只能跑一次，容器 bootstrap 故意不做这一步，留给
+  operator 显式选择
 - `next-signal knowledge review` — 对照 wiki 与 `knowledge_reviews`（入列新文档、移除文件已删的行）；回顾卡片直接用文档 frontmatter 的 `summary`，不调 LLM（固定艾宾浩斯曲线）
 - `next-signal info-radar pull [--source NAME]` — 跑一次 info-radar 各 source 的 CLI，写入 `radar_items`
 - `next-signal info-radar sweep` — 删除 30 天前的 `radar_items` 行
