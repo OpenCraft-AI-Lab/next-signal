@@ -11,6 +11,8 @@ from typing import Any
 
 import pytest
 
+from next_signal.agents import stage
+from next_signal.core.engine_preferences import configured_engine_defaults
 from next_signal.workflows.info_radar_analysis import runner
 from next_signal.workflows.info_radar_analysis.goals import Goal
 from next_signal.workflows.info_radar_analysis.schemas import (
@@ -26,6 +28,18 @@ _GOAL = Goal(
     topics=["topic"],
     keywords=["kw"],
 )
+
+
+@pytest.fixture(autouse=True)
+def _engine_selected(monkeypatch):
+    """`runner.py` wraps the whole run in a bare `stage_job()`, which now needs
+    an engine selected. Every stage call in this file is mocked separately, so
+    which engine is irrelevant to what's under test."""
+    monkeypatch.setattr(
+        stage,
+        "load_engine_preferences",
+        lambda: configured_engine_defaults().model_copy(update={"primary": "omlx"}),
+    )
 
 
 def _item(item_id: int, *, source: str = "src", source_id: str = "sid") -> dict[str, Any]:

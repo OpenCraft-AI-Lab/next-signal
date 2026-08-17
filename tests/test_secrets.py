@@ -30,7 +30,7 @@ def test_absent_file_is_an_empty_store(store: Path) -> None:
 
 
 def test_absent_credential_raises_pointing_at_settings(store: Path) -> None:
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY.*Settings"):
+    with pytest.raises(RuntimeError, match="OPENAI_API_KEY.*settings page"):
         require_secret("OPENAI_API_KEY", store)
 
 
@@ -101,15 +101,12 @@ def test_malformed_name_is_refused(store: Path) -> None:
 
 def test_known_credential_names_are_the_documented_set() -> None:
     assert set(CREDENTIAL_NAMES) == {
-        "ANTHROPIC_API_KEY",
-        "OPENAI_API_KEY",
-        "GOOGLE_API_KEY",
-        "GOOGLE_GENERATIVE_AI_API_KEY",
         "DEEPSEEK_API_KEY",
-        "OMLX_API_KEY",
+        "RADAR_EMBEDDING_OPENAI_API_KEY",
         "EMBEDDING_API_KEY",
+        "OPENAI_API_KEY",
         "VOYAGE_API_KEY",
-        "GITHUB_TOKEN",
+        "GOOGLE_GENERATIVE_AI_API_KEY",
         "FOLO_TOKEN",
     }
 

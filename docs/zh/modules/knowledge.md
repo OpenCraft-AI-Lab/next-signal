@@ -62,8 +62,10 @@ KB **检索**是横向基础设施（不在本模块）：`search_knowledge` 在
 - **GBrain** —— 长期知识库 peer service。入库走横向 GBrain bridge
   （`next_signal/integrations/gbrain.py`），不是本模块独占。容器 bootstrap 刻意不
   初始化它——embedding model 会永久决定 GBrain 的 Postgres schema，所以这个选择是
-  operator 的一次性显式步骤：`next-signal knowledge gbrain-init --embedding-model
-  <provider>:<model>`（见
+  operator 的一次性显式步骤：可以在 dashboard 的**设置 → 知识库向量嵌入**里做
+  （选 provider 和模型，需要凭据的话就在面板里填，确认永久锁定的警告），也可以
+  直接跑 `next-signal knowledge gbrain-init --embedding-model <provider>:<model>`
+  （见
   [containerized-deployment.md §8](../containerized-deployment.md#8-纯云容器特有的注意事项)）。
   GBrain 未初始化时 `search_knowledge` 会抛错而不是返回空列表，因为 GBrain 自己的
   `search`/`query` 在那个状态下会打印 "No results." 并退出 0——跟知识库里确实
@@ -229,8 +231,10 @@ agent 不在这条路径上。唯一会写 `title` 的是一次全新的 `next-s
 - GBrain ingest 失败不能丢 artifact：clean wiki / raw 文件保留在磁盘，workflow loud fail。
   不把这次运行标成成功；修好 GBrain 后靠 direct ingest / weekly sync 补索引。
 - GBrain 的 embedding model 在 `gbrain-init` 跑过之后就锁定：它决定 Postgres schema
-  的大小，所以第二次 `gbrain-init` 会拒绝，而不是重新配置或销毁这个 brain。没有
-  dashboard 控件，也没有"存了凭据就自动初始化"——永远是显式的 CLI 步骤。
+  的大小，所以第二次 `gbrain-init` 会拒绝，而不是重新配置或销毁这个 brain。dashboard
+  的**设置 → 知识库向量嵌入**区块包了这同一条命令，成功后也跟着永久锁定——没有任何
+  字段还能改——但不存在"存了凭据就自动初始化"：不管走哪条路径，operator 都要先
+  确认一次显式的永久锁定警告。
 - re-ingest manifest 只在成功索引后才前进，否则后续不重试、KB search 会 stale。
 - 直接 ingest 和 re-ingest 必须从 wiki-relative path 推出同一个 GBrain-safe slug；
   非 ASCII 路径要补稳定 hash 后缀避免 GBrain page 撞车。

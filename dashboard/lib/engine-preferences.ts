@@ -38,7 +38,10 @@ export interface DeepSeekSettings {
 }
 
 export interface EnginePreferences {
-  primary: Engine;
+  // Unset until an operator explicitly saves a selection — `models.yaml`
+  // prefills the omlx/deepseek panes' own fields, never a primary, mirroring
+  // `EmbeddingPreferences.provider` on the Radar Embedding side.
+  primary: Engine | null;
   fallback: Fallback;
   omlx: OmlxSettings;
   deepseek: DeepSeekSettings;
@@ -92,13 +95,13 @@ function optionalString(
 export function validateEnginePreferences(
   value: EnginePreferences,
 ): EnginePreferences {
-  if (!ENGINES.includes(value.primary)) {
+  if (value.primary !== null && !ENGINES.includes(value.primary)) {
     throw new Error(`unknown engine: ${value.primary}`);
   }
   if (!FALLBACKS.includes(value.fallback)) {
     throw new Error(`unknown fallback engine: ${value.fallback}`);
   }
-  if (value.fallback === value.primary) {
+  if (value.primary !== null && value.fallback === value.primary) {
     throw new Error(`${value.primary} cannot fall back to itself`);
   }
 
@@ -168,8 +171,23 @@ export function parseEnginePreferences(
   }
   rejectUnknownKeys(deepseek, DEEPSEEK_KEYS, "deepseek");
 
+  // `optionalString` treats a JSON `null` as a type error, which is right for
+  // every other field but wrong here: `primary` being explicitly `null` means
+  // "no engine selected", the same state an absent key or absent file means.
+  const primaryRaw = data.primary;
+  let primary: Engine | null;
+  if (primaryRaw === undefined) {
+    primary = base.primary;
+  } else if (primaryRaw === null) {
+    primary = null;
+  } else if (typeof primaryRaw === "string") {
+    primary = primaryRaw as Engine;
+  } else {
+    throw new Error("engine.primary must be a string or null");
+  }
+
   return validateEnginePreferences({
-    primary: (optionalString(data, "primary", "engine") ?? base.primary) as Engine,
+    primary,
     fallback: (optionalString(data, "fallback", "engine") ??
       base.fallback) as Fallback,
     omlx: {

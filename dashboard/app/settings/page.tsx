@@ -5,6 +5,7 @@ import {
   getEmbeddingPreferences,
 } from "@/lib/actions/embedding";
 import { getEnginePreferences } from "@/lib/actions/engine";
+import { getGbrainReadiness } from "@/lib/actions/knowledge-embedding";
 import { getContentLanguage } from "@/lib/actions/language";
 import { getSchedule, getScheduleStatus } from "@/lib/actions/schedule";
 import { getCredentialPresence } from "@/lib/actions/secrets";
@@ -34,6 +35,7 @@ export default async function SettingsPage() {
     engine,
     embedding,
     embeddingPrefill,
+    knowledgeEmbeddingReadiness,
     schedule,
     scheduleStatus,
     // Presence from the credential store, resolved server-side. Every
@@ -48,14 +50,12 @@ export default async function SettingsPage() {
     getEnginePreferences(),
     getEmbeddingPreferences(),
     getEmbeddingPrefill(),
+    getGbrainReadiness(),
     getSchedule(),
     getScheduleStatus(),
     getCredentialPresence(),
   ]);
   const t = getDictionary(locale);
-  const deepSeekKey = presence.DEEPSEEK_API_KEY;
-  const openAiKey = presence.OPENAI_API_KEY;
-  const embeddingCompatibleKey = presence.EMBEDDING_API_KEY;
 
   return (
     <div className="page page-enter">
@@ -69,11 +69,9 @@ export default async function SettingsPage() {
           codingAgentSettings={codingAgentSettings}
           codingAgentAuth={codingAgentAuth}
           engine={engine}
-          deepSeekKey={deepSeekKey}
           embedding={embedding}
           embeddingPrefill={embeddingPrefill}
-          openAiKey={openAiKey}
-          embeddingCompatibleKey={embeddingCompatibleKey}
+          knowledgeEmbeddingReadiness={knowledgeEmbeddingReadiness}
           credentialPresence={presence}
           schedule={schedule}
           scheduleStatus={scheduleStatus}

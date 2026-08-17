@@ -394,7 +394,9 @@ def get_embedder() -> ResolvedEmbedder:
     elif provider == "openai":
         model_id = prefs.openai.model
         url = f"{OPENAI_API_ROOT}/embeddings"
-        api_key = require_secret("OPENAI_API_KEY")
+        # Distinct from GBrain's `OPENAI_API_KEY`: the two coincidentally
+        # shared a name despite being independent embedding flows.
+        api_key = require_secret("RADAR_EMBEDDING_OPENAI_API_KEY")
         dimensions = EMBEDDING_DIMENSIONS
     else:
         compatible = prefs.openai_compatible

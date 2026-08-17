@@ -121,7 +121,7 @@ def test_omlx_snapshot_uses_its_own_endpoint(state, responds) -> None:
 
 
 def test_openai_snapshot_requests_the_fixed_width(state, responds, monkeypatch) -> None:
-    save_secret("OPENAI_API_KEY", "sk-test")
+    save_secret("RADAR_EMBEDDING_OPENAI_API_KEY", "sk-test")
     state({"provider": "openai", "openai": {"model": "text-embedding-3-large"}})
     client = responds()
 
@@ -155,7 +155,9 @@ def test_compatible_snapshot_appends_the_route(state, responds, monkeypatch) -> 
 def test_openai_without_a_key_names_the_variable(state) -> None:
     state({"provider": "openai", "openai": {"model": "text-embedding-3-small"}})
 
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY is not configured"):
+    with pytest.raises(
+        RuntimeError, match="RADAR_EMBEDDING_OPENAI_API_KEY is not configured"
+    ):
         models_mod.get_embedder()
 
 

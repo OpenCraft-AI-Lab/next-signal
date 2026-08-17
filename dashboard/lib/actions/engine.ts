@@ -7,9 +7,7 @@ import YAML from "yaml";
 import {
   parseEnginePreferences,
   serializeEnginePreferences,
-  type Engine,
   type EnginePreferences,
-  type Fallback,
   type OmlxParallel,
 } from "@/lib/engine-preferences";
 import { REPO_ROOT, engineStateFile } from "@/lib/paths";
@@ -28,8 +26,11 @@ const DEEPSEEK_PROFILE = "deepseek_smart";
  * applied to a run.
  */
 const UNCONFIGURED: EnginePreferences = {
-  primary: "omlx",
-  fallback: "deepseek",
+  // No engine this repo could pick on the operator's behalf — nothing is
+  // selected until one is explicitly saved, mirroring the Radar Embedding
+  // section's unselected state.
+  primary: null,
+  fallback: "none",
   omlx: {
     // Empty until an operator points next-signal at a local server: no value
     // this repo could ship would be right, and borrowing one from the
@@ -40,12 +41,6 @@ const UNCONFIGURED: EnginePreferences = {
     parallel: 2,
   },
   deepseek: { model: "deepseek-v4-flash", reasoning: "low" },
-};
-
-/** `models.yaml` provider names → the engine ids this page selects between. */
-const PROVIDER_ENGINE: Record<string, Engine> = {
-  omlx: "omlx",
-  deepseek: "deepseek",
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -75,17 +70,13 @@ async function configuredDefaults(): Promise<EnginePreferences> {
 
   const local = profile(models, OMLX_PROFILE);
   const deepseek = profile(models, DEEPSEEK_PROFILE);
-  // The local profile's own `fallback_profile` is already the answer to "where
-  // does work go when the local box is down", so read it rather than inventing
-  // a default. A fallback pointing at a provider with no engine here (openai,
-  // gemini, the Anthropic API) is not representable, and reads as none.
-  const fallbackProvider = String(
-    profile(models, String(local.fallback_profile ?? "")).provider ?? "",
-  );
 
   return {
-    primary: PROVIDER_ENGINE[String(local.provider ?? "")] ?? UNCONFIGURED.primary,
-    fallback: (PROVIDER_ENGINE[fallbackProvider] ?? "none") as Fallback,
+    // `local.provider` / `local.fallback_profile` are prefill sources for the
+    // panes' own fields below, never a runtime default — nothing in
+    // `models.yaml` causes an engine to be treated as chosen.
+    primary: UNCONFIGURED.primary,
+    fallback: UNCONFIGURED.fallback,
     omlx: {
       baseUrl: UNCONFIGURED.omlx.baseUrl,
       model: String(local.model_id ?? UNCONFIGURED.omlx.model),

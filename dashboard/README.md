@@ -13,7 +13,7 @@ no auth, no mobile. Cross-module conventions live in
 - pnpm (install via `npm install -g pnpm` if missing — pnpm 11+ recommended)
 - `uv` on `PATH` (used by server actions to invoke `next-signal ...`)
 - `gbrain` on `PATH` (used by the knowledge search server action)
-- `npx` and a Folo token for `/subscriptions` (Settings → Credentials)
+- `npx` and a Folo token for `/subscriptions` (Settings → RSS)
 
 ## Run
 
@@ -66,7 +66,7 @@ the day a page actually needs to call AgentOS HTTP endpoints — none do yet.
 | `DATABASE_URL`             | (Postgres URL)            | `dashboard-radar` (direct DB reads)                                |
 | `NEXT_SIGNAL_DATABASE_URL` | `DATABASE_URL`            | Optional dashboard-specific Postgres URL                           |
 | `INFO_RADAR_TIMEZONE`      | `America/Los_Angeles`     | Calendar-day grouping and recap ranges for `/radar`                |
-| _(`FOLO_TOKEN`)_           | not an env var            | Set in Settings → Credentials; used by `/subscriptions`             |
+| _(`FOLO_TOKEN`)_           | not an env var            | Set in Settings → RSS; used by `/subscriptions`                     |
 | `FOLO_CLI_ARGV`            | `npx --yes folocli@0.0.5` | Optional override for the Folo CLI launcher                        |
 
 ## Visual design system
@@ -154,23 +154,35 @@ names is rendered as stored.
 
 ## Settings
 
-The **gear button** in the nav links to `/settings`, a page with four groups
-and a sticky rail: content language, scheduled runs, engine, and embedding. It
-replaced a nav popover — sections stacked in a 22rem panel left the engine group
-nowhere to go.
+The **gear button** in the nav links to `/settings`, a page with seven
+collapsible sections and a sticky rail: content language, scheduled runs,
+engine, radar embedding, knowledge embedding, RSS, and a read-only credentials
+summary. It replaced a nav popover — sections stacked in a 22rem panel left the
+engine group nowhere to go.
 
-Every value resolves server-side in `app/settings/page.tsx`, so the controls
-paint their real state with no fetch on mount. When a setting persists depends
-on the control, not the section:
+Every section starts **collapsed**, showing only its label and a one-line
+summary of what is selected (or that nothing is); expanding it is required to
+change anything. Every value resolves server-side in `app/settings/page.tsx`,
+so the controls paint their real state with no fetch on mount. When a setting
+persists depends on the control, not the section:
 
 | Control | Commits on | Why |
 |---|---|---|
 | Segmented (language, on/off, skip/catch-up, parallelism) | click | one interaction is already a complete, valid intent |
 | A schedule time | blur / Enter | a native time input emits a complete value per segment edit, so saving each change would publish half-typed times |
-| An engine's or embedder's own parameters | explicit **Save** | a partial combination is invalid and cannot be sent |
+| An engine's, embedder's, or GBrain provider's own parameters | explicit **Save configuration** | a partial combination is invalid and cannot be sent |
+| Which engine is primary, which embedder is selected | explicit **Apply selection** (Engine) or the pane's own confirmed Save (Radar/Knowledge Embedding) | picking a card only proposes it; a separate commit is what writes it, unlike the plain discrete choices above |
 
 Either way a successful write raises a toast and a failed one rolls the control
 back — an optimistic control moves whether or not the write landed.
+
+Every credential (`DEEPSEEK_API_KEY`, the two OpenAI keys, `EMBEDDING_API_KEY`,
+`VOYAGE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `FOLO_TOKEN`) is entered
+inline, in the section that consumes it — there is no shared credential-entry
+section anymore. The **Credentials** section at the bottom of the page is a
+plain, read-only, presence-only summary of all of them; it exists so an
+operator can see the whole configured surface at a glance, not to enter or
+clear anything.
 
 ## Content language
 
@@ -185,11 +197,22 @@ syncs or warns about the two disagreeing.
 
 ## Engine
 
-The third group picks which LLM engine next-signal calls, presented as four peers —
-**Local model**, **DeepSeek**, **Codex CLI**, **Claude Code CLI** — with the
-chosen one's settings opening below it, plus a fallback for when it cannot be
-reached. Only the selected engine's form is on screen; four stacked forms was
-the reason this needed a page.
+The engine section picks which LLM engine next-signal calls, presented as four
+peers — **Local model**, **DeepSeek**, **Codex CLI**, **Claude Code CLI** —
+with the chosen one's settings opening below it, plus a fallback for when it
+cannot be reached. Only the selected engine's form is on screen; four stacked
+forms was the reason this needed a page.
+
+**Nothing is selected on a fresh install**, and no card shows as chosen until
+one is explicitly applied — this is real, not cosmetic: on the Python side,
+`EnginePreferences.primary` is genuinely optional, and every production stage
+job (`stage_job()`) raises a distinct `EngineNotSelected` before any provider
+call when nothing has been saved, rather than silently defaulting to the local
+model the way it once did. Clicking a card only proposes it as primary; an
+explicit **Apply selection** action (rendered beside whichever pane's own Save
+button is currently open, not in a separate block) is the commit, matching
+every other section's own-parameters-need-explicit-Save rule rather than the
+commit-on-click behavior a plain discrete choice gets elsewhere on this page.
 
 They are peers to the operator but not on disk, and the split follows what
 already owns each value:
@@ -199,17 +222,19 @@ already owns each value:
 | Codex CLI · Claude Code CLI model / effort / speed | `~/.next-signal/coding-agents.json` | Validated when that CLI is invoked |
 | Primary engine, fallback, OMLX, and DeepSeek settings | `~/.next-signal/engine.json` | Read once at the start of each production job; changes apply to the next job |
 
-Unset fields in `engine.json` read back from `configs/models.yaml`, so a fresh
-install shows its real models rather than values the dashboard invented. The
-local endpoint is the exception: it has no baseline at all and starts **empty**,
-because no value the repo could ship would be right and reading one from this
-container's environment would show the dashboard's answer while the scheduler
-resolves its own. An empty endpoint is savable — it is how you say you have no
-local server, which sends OMLX profiles to their cloud fallback. Scheduled runs
-and new commands see a change immediately; agents already running inside AgentOS
-pick it up when that process restarts. `DEEPSEEK_API_KEY` comes from the credential
-store (Settings → Credentials) — the page reports only whether it is set, and
-never reads or stores the key itself.
+Unset fields in `engine.json` read back from `configs/models.yaml` as **form
+prefill only** — a suggested model string for the OMLX/DeepSeek panes' own
+fields — never as a selected primary. The local endpoint has no baseline at
+all and starts **empty**, because no value the repo could ship would be right
+and reading one from this container's environment would show the dashboard's
+answer while the scheduler resolves its own. An empty endpoint is savable — it
+is how you say you have no local server, which sends OMLX profiles to their
+cloud fallback. The OMLX card's status reflects whether that endpoint has
+actually been saved, not a fixed "configured" label. Scheduled runs and new
+commands see a change immediately; agents already running inside AgentOS pick
+it up when that process restarts. `DEEPSEEK_API_KEY` is entered inline in the
+DeepSeek pane — the page reports only whether it is set, and never reads or
+stores the key itself.
 Every LLM stage in one production job uses the same selected engine. A provider
 failure may use the configured fallback only before the first successful
 response; after that, later stages and schema repairs stay on the pinned engine.
@@ -233,35 +258,35 @@ bounded Connect/Reconnect/Disconnect flow. It invokes only fixed provider auth
 commands and leaves the resulting files in the provider's own auth volume;
 model settings remain in `coding-agents.json`.
 
-## Embedding
+## Radar Embedding
 
-The fourth group picks the embedder behind the radar's duplicate check, and
-writes only `~/.next-signal/embedding.json`. It reuses the engine group's cards
-and panes because the interaction is the same, but the consequence is not:
-switching an LLM changes who answers a question, while switching an embedder
-changes the *vector space*, parking every topic memorised under the previous
-identity until you switch back. The group states that before the click, and
-displays the exact active identity (`omlx:<model>`, `openai:<model>`, or
-`openai_compatible:<space_id>`) verbatim.
+This section picks the embedder behind the radar's duplicate check, and writes
+only `~/.next-signal/embedding.json`. It reuses the engine section's cards and
+panes because the interaction is similar, but the consequence is bigger: an
+embedder choice **locks the section in full once saved** — every card and pane
+renders read-only afterward, with no unlock path through this UI. A different
+model produces vectors that cannot be compared against ones already stored, so
+this is a one-time choice for the life of the install, not a switchable
+preference the way the engine is. The section displays the exact active
+identity (`omlx:<model>`, `openai:<model>`, or `openai_compatible:<space_id>`)
+verbatim once locked.
 
-**Nothing is selected on a fresh install**, and the section says so above the
-cards: deduplication is off until you choose an embedder, and the radar
-otherwise runs normally. There is no provider the repo could honestly pick for
-you — the local one needs an address only you know, the hosted ones need a key
-and spend money.
+**Nothing is selected on a fresh install**, and the section says so: dedup is
+off until you choose an embedder, and the radar otherwise runs normally. There
+is no provider the repo could honestly pick for you — the local one needs an
+address only you know, the hosted ones need a key and spend money.
 
 Three peers — **Local model**, **OpenAI**, **Custom endpoint** — all behaving
-identically:
+identically while unlocked:
 
 | Card | Selecting it |
 |---|---|
 | Any card whose settings are incomplete | **opens its pane and writes nothing** — there is nothing valid to select yet |
-| Any card once saved | prompts for confirmation, then commits |
+| The first complete, credentialed pane you save | prompts for confirmation that the choice is permanent, then commits and locks the section |
 
 A pane opens prefilled with suggestions from `configs/models.yaml` — form
-prefill, not defaults; only what you save runs. **Save** stores that provider's
-fields and selects it in the same write. Changing provider always asks first,
-because it parks every topic remembered under the current vector space.
+prefill, not defaults; only what you save runs. **Save configuration** stores
+that provider's fields and selects it in the same write.
 
 The local card carries **its own API root**, separate from the engine section's:
 one mlx-lm process serves one model, so a chat model and an embedding model are
@@ -269,15 +294,57 @@ two ports. `space_id`, on the custom endpoint, is your own name for the vectors
 it produces — change it when weights, tokenizer, pooling, or quantization
 change; moving the same service to a new URL does not need a new one.
 
-No credential passes through this page, and no section even names one: each
-provider's key has a fixed name in the store (`OPENAI_API_KEY`,
-`EMBEDDING_API_KEY`). URLs are restricted to a plain API
+Each hosted pane's credential is entered **inline, in that pane** —
+`RADAR_EMBEDDING_OPENAI_API_KEY` for OpenAI, `EMBEDDING_API_KEY` for the
+custom endpoint — and saving requires that credential to already be present,
+not just the other fields, since this save is about to lock the section
+permanently. `RADAR_EMBEDDING_OPENAI_API_KEY` is a different stored credential
+from GBrain's own `OPENAI_API_KEY` (see Knowledge Embedding below), even
+though both are "an OpenAI key" — they're independent embedding flows that
+coincidentally shared one name in the past. URLs are restricted to a plain API
 root so a secret cannot be persisted in userinfo, a query, or a fragment. Key
-presence is computed server-side and reaches the browser as a boolean. A key
-saved in **Settings → Credentials** applies to the next item — no restart and no
-Compose recreate — because the store is read when an item resolves its embedder.
-Hosted providers also state that every kept item's summary leaves the machine
-and can be billed, including on unattended scheduler runs.
+presence is computed server-side and reaches the browser as a boolean. Hosted
+providers also state that every kept item's summary leaves the machine and can
+be billed, including on unattended scheduler runs.
+
+## Knowledge Embedding
+
+This section configures and initializes **GBrain**'s embedding provider for
+knowledge-base search — independent of Radar Embedding above, which configures
+a different embedder for a different vector space entirely. It's the
+dashboard's front end for what used to be CLI-only:
+`next-signal knowledge gbrain-init --embedding-model <provider>:<model>`.
+
+Six peers — **OpenAI**, **Voyage**, **Google**, **Ollama**, **LM Studio**,
+**llama-server** — the three hosted ones needing a credential entered inline in
+their own pane (`OPENAI_API_KEY`, `VOYAGE_API_KEY`,
+`GOOGLE_GENERATIVE_AI_API_KEY` respectively — GBrain's own subprocess reads
+these exact names from its environment, an external contract this dashboard
+doesn't choose), the three local runners needing none. Saving a hosted pane
+requires its credential to already be present, same rule as Radar Embedding.
+
+Saving is a two-step commit: an explicit warning that the model choice is
+**permanent for the life of this GBrain instance** (it sizes GBrain's Postgres
+schema; a second `gbrain-init` against an initialised brain refuses rather than
+reconfiguring it), then the actual `gbrain-init` call — awaited, not
+fire-and-forget, so the section knows the real outcome before deciding whether
+to lock. Success locks the section; a failure (including "already
+initialised") leaves it open and reports the error.
+
+The section reports GBrain's readiness as one of three states — **not
+initialized**, **initialized but credential missing**, **ready** — computed by
+reading `.gbrain/config.json` directly, the same way `next-signal doctor`
+does, rather than trusting `gbrain doctor --fast` (which reports a healthy
+brain even when none exists).
+
+## RSS
+
+This section owns `FOLO_TOKEN` — the credential info-radar's Folo source and
+the `/subscriptions` page depend on. Two entry points: **Sign in to Folo**
+(opens Folo in a new tab, exchanges the returned one-time token on a
+dashboard-hosted callback route, and stores the resulting session token) and
+**Paste manually** (opens a small dialog for a browser that cannot reach the
+dashboard, or if sign-in fails — the same stored result either way).
 
 ## Scheduled runs
 

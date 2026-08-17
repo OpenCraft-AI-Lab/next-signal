@@ -378,10 +378,10 @@ Postgres and next-signal state should also be lost.
 logged-in CLI in Settings (or configure it as the pre-first-response fallback).
 To enable local models, run an OMLX server on the **host** and enter
 `http://host.docker.internal:<port>/v1` in the dashboard — **Settings → Engine**
-for the chat model, **Settings → Embedding** for the embedder. Those are two
-separate fields because one mlx-lm process serves one model, so a chat model and
-an embedding model are two ports. `host.docker.internal` is wired for Linux via
-`extra_hosts: host-gateway`. Nothing about this belongs in `.env`.
+for the chat model, **Settings → Radar Embedding** for the dedup embedder. Those
+are two separate fields because one mlx-lm process serves one model, so a chat
+model and an embedding model are two ports. `host.docker.internal` is wired for
+Linux via `extra_hosts: host-gateway`. Nothing about this belongs in `.env`.
 
 **First-build notes.** `openai-whisper` pulls in **torch**; `pyproject.toml`
 pins Linux installs to PyTorch's CPU-only wheel index (`tool.uv.sources` /
@@ -397,12 +397,16 @@ switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--por
    own.** A fresh container therefore runs info-radar `analyze` with dedup
    **off** — every item reads as novel, and `next-signal doctor` says so. Chat,
    agents, and dashboard pages work normally. Two ways out, both in
-   **Settings → Embedding**:
+   **Settings → Radar Embedding** — and once saved, this section locks
+   permanently; there is no changing providers afterward:
 
    - point the local option at a host/remote OMLX endpoint, typically
      `http://host.docker.internal:<port>/v1`; or
-   - select OpenAI (needs `OPENAI_API_KEY` in **Settings → Credentials**) or an
-     OpenAI-compatible endpoint of your own (needs `EMBEDDING_API_KEY`).
+   - select OpenAI (needs `RADAR_EMBEDDING_OPENAI_API_KEY`, entered inline in
+     that pane — distinct from GBrain's own `OPENAI_API_KEY` in Settings →
+     Knowledge Embedding, even though both are "an OpenAI key") or an
+     OpenAI-compatible endpoint of your own (needs `EMBEDDING_API_KEY`,
+     likewise entered inline).
 
    A hosted embedder has two consequences worth deciding on deliberately. Every
    kept item's analysis summary is **sent to that provider** — text that
@@ -414,13 +418,14 @@ switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--por
    novel.
 
    Credentials come from the credential store on the shared state volume, read at
-   call time — so a key saved in **Settings → Credentials** applies to the next
+   call time — so a key saved in its owning section applies to the next
    item in every service, with no restart and no `--force-recreate`.
    `docker compose exec dashboard next-signal doctor` reports the resolved
    embedder identity and whether its credential is present, without making a
    model request.
-2. **`next-signal doctor` exits non-zero if any check fails** — treat OMLX / Anthropic ✗
-   as expected under cloud-only; do not let it block startup.
+2. **`next-signal doctor` exits non-zero if any check fails** — treat OMLX ✗ and
+   "no engine selected" ✗ as expected under a container nobody has opened
+   Settings → Engine on yet; do not let it block startup.
 3. **Secrets stay out of the image.** Credentials live in `/state/secrets.json` on
    a named volume, written `0600` — never in a layer, and never in `.env`.
 4. **Per-page dashboard dependencies:** `/goals` and `/design` need only
@@ -475,7 +480,10 @@ switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--por
    place — `gbrain config set embedding_model` is a documented no-op on this
    engine. `next-signal doctor` reports GBrain as not initialised and names
    knowledge search as unavailable; this is expected on a fresh stack, not a
-   failure. Initialise it once, choosing whichever provider you want:
+   failure. Initialise it once, choosing whichever provider you want — either
+   from **Settings → Knowledge Embedding** in the dashboard (pick a provider
+   and model, save its credential inline if it needs one, confirm the
+   permanent-choice warning) or directly:
 
    ```bash
    docker compose exec dashboard next-signal knowledge gbrain-init \
@@ -483,13 +491,16 @@ switch the `dashboard` command to dev mode: `["next-signal", "dashboard", "--por
    ```
 
    Cloud providers (`openai:`, `voyage:`, `google:`) need that provider's
-   credential saved first in **Settings → Credentials**. Local runners
-   (`ollama:`, `lmstudio:`, `llama-server:`) need none — `gbrain-init` succeeds
-   against an empty credential store — but this deployment does not yet have a
-   way to point them at a specific address, so a local runner falls back to
-   GBrain's own default endpoint, which may not resolve inside the container.
-   The model choice is permanent: a second `gbrain-init` against an initialised
-   brain refuses rather than silently reconfiguring or destroying it.
+   credential saved first — inline in the Knowledge Embedding pane if using the
+   dashboard, or in the credential store directly if using the CLI. Local
+   runners (`ollama:`, `lmstudio:`, `llama-server:`) need none — `gbrain-init`
+   succeeds against an empty credential store — but this deployment does not
+   yet have a way to point them at a specific address, so a local runner falls
+   back to GBrain's own default endpoint, which may not resolve inside the
+   container. The model choice is permanent: a second `gbrain-init` against an
+   initialised brain refuses rather than silently reconfiguring or destroying
+   it, and the dashboard section locks accordingly the moment the first attempt
+   succeeds.
 
 ---
 

@@ -28,22 +28,54 @@ export const dictionaries = {
       subtitle:
         "What next-signal generates, when it runs, and which engine it runs on.",
       saveFailed: "Could not save. Check the dashboard logs.",
-      save: "Save",
+      // Deliberately more explicit than a bare "Save": every pane using this
+      // button sits beside a section-level commit ("Apply selection" in
+      // Engine) that is a different action on different state, and the two
+      // read as interchangeable without this distinction.
+      save: "Save configuration",
       saving: "Saving…",
       reset: "Reset",
       unsaved: "Unsaved changes",
+      apply: "Apply",
+      confirm: "Continue",
+      cancel: "Cancel",
 
       railLanguage: "Language",
       railSchedule: "Scheduled runs",
       railEngine: "Engine",
-      railEmbedding: "Embedding",
+      railRadarEmbedding: "Radar Embedding",
+      railKnowledgeEmbedding: "Knowledge Embedding",
+      railRss: "RSS",
       railCredentials: "Credentials",
 
+      // Read-only, presence-only summary. Entry happens inline in whichever
+      // section actually uses a credential — this list only says what is set.
       credentials: "Credentials",
       credentialsHint:
-        "Every API key and token next-signal uses. Saved keys take effect on the next run — no restart needed. A saved value is never shown again; replace it by entering a new one.",
+        "Every credential the sections above resolve, and whether it is set. This list is informational: enter or replace a credential in the section that uses it, not here.",
+      credentialsSummary: (set: number, total: number) => `${set}/${total} set`,
       credentialSet: "Set",
       credentialUnset: "Not set",
+      credentialPowers: {
+        DEEPSEEK_API_KEY:
+          "DeepSeek — the Engine section's cloud fallback when the local model is unreachable.",
+        RADAR_EMBEDDING_OPENAI_API_KEY:
+          "OpenAI, for the Radar Embedding section's OpenAI provider.",
+        EMBEDDING_API_KEY:
+          "The Radar Embedding section's custom OpenAI-compatible endpoint.",
+        OPENAI_API_KEY:
+          "OpenAI, for the Knowledge Embedding section's OpenAI provider — independent of the radar dedup key above, even though both are \"an OpenAI key.\"",
+        VOYAGE_API_KEY: "Voyage, for the Knowledge Embedding section's Voyage provider.",
+        GOOGLE_GENERATIVE_AI_API_KEY:
+          "Google, for the Knowledge Embedding section's Google provider.",
+        FOLO_TOKEN: "Folo — the radar's article source and the subscriptions page.",
+      } as Record<string, string>,
+
+      // RSS section: the Folo credential, moved out of the flat Credentials
+      // list into its own section, with the same sign-in assist as before.
+      rss: "RSS",
+      rssHint:
+        "The Folo credential info-radar's article source and the Subscriptions page depend on.",
       credentialEnter: "Enter value",
       credentialReplace: "Enter a new value to replace",
       credentialSave: "Save",
@@ -60,20 +92,9 @@ export const dictionaries = {
       foloTimedOut: "Folo sign-in timed out",
       foloHint:
         "Folo has no API-key page, so signing in is the easiest way to get a token. It opens Folo in a new tab and stores the result here. Pasting one manually works too.",
-      credentialPowers: {
-        ANTHROPIC_API_KEY: "Anthropic models (the claude_* profiles).",
-        OPENAI_API_KEY: "OpenAI models and the OpenAI embedder.",
-        GOOGLE_API_KEY: "Google Gemini models.",
-        DEEPSEEK_API_KEY:
-          "DeepSeek models — the default cloud fallback when the local model is unreachable.",
-        OMLX_API_KEY:
-          "Your local OMLX server, if you gave it one. Usually left empty.",
-        EMBEDDING_API_KEY:
-          "The custom embedding endpoint, if you configured one in the Embedding section.",
-        GITHUB_TOKEN:
-          "GitHub ingest. Optional — without it requests are anonymous and rate-limited to 60/hour.",
-        FOLO_TOKEN: "Folo — the radar's article source and the subscriptions page.",
-      } as Record<string, string>,
+      foloPasteManually: "Paste manually",
+      foloManualHint:
+        "For a browser that cannot reach the dashboard, or if sign-in fails: paste a Folo session token directly.",
 
       contentLanguage: "Content language",
       contentLanguageHint:
@@ -109,8 +130,13 @@ export const dictionaries = {
       scheduleLastFailed: (ago: string) => `Last run ${ago} · failed`,
 
       engine: "Engine",
-      engineHint: "Which engine next-signal calls. Pick one — its settings open below.",
+      engineHint:
+        "Which engine next-signal calls. Nothing is selected until you choose a card and apply it — its settings open below.",
+      engineUnselectedHint:
+        "No engine is selected yet, so next-signal cannot make a chat call. Pick one below and apply it.",
       engineSaved: "Engine settings saved",
+      enginePrimarySaved: "Engine selection applied",
+      engineApplySelection: "Apply selection",
       engineOmlx: "Local model",
       engineDeepseek: "DeepSeek",
       engineCodex: "Codex CLI",
@@ -143,8 +169,7 @@ export const dictionaries = {
       deepseekHigh: "High",
       deepseekHint:
         "Billed per token. Reasoning bills thinking tokens as output — Low keeps some chain-of-thought without the full cost.",
-      deepseekKeyHint:
-        "Set DEEPSEEK_API_KEY in the Credentials section above. A saved key applies to the next run.",
+      deepseekKeyHint: "Enter your DeepSeek API key below. A saved key applies to the next run.",
 
       codexModel: "Model",
       codexEffort: "Reasoning effort",
@@ -163,15 +188,17 @@ export const dictionaries = {
         "Model and effort must be selected before next-signal can call Claude Code. Available effort levels depend on the selected model.",
       claudeSaved: "Claude settings saved",
 
-      embedding: "Embedding",
+      embedding: "Radar Embedding",
       embeddingHint:
-        "Which embedder the radar's duplicate check uses. Pick one — its settings open below.",
+        "Which embedder the radar's duplicate check uses. This choice is permanent for this install once saved — pick one, save, and confirm.",
       embeddingSaved: "Embedding settings saved",
       embeddingUnselectedHint:
         "No embedder is selected, so the duplicate check is off — the radar still pulls, scores, and shows everything, you will just see repeats of the same story. Fill in one of the options below and save it to turn deduplication on.",
       embeddingIdentityNone: "none — deduplication is off",
-      embeddingSwitchConfirm:
-        "Switching the embedder parks every topic remembered under the current vector space. The radar will call some already-seen topics new until it rebuilds its memory here. Nothing is deleted, and switching back restores them. Continue?",
+      embeddingConfirmPermanent:
+        "This embedder cannot be changed once saved. A different model would produce vectors that cannot be compared against ones already stored, so this section locks after this save. Continue?",
+      embeddingLockedHint:
+        "This section is locked: an embedder has been selected and saved, and cannot be changed or reconfigured.",
       embeddingSaveToSelectHint:
         "Save to store these settings and start using this embedder.",
       embeddingOmlx: "Local model",
@@ -181,8 +208,6 @@ export const dictionaries = {
       embeddingIdentity: "Active vector space",
       embeddingIdentityHint:
         "The identity stamped on every new vector. The duplicate check only compares vectors carrying this exact value.",
-      embeddingSwitchHint:
-        "Switching parks the topics remembered under the previous identity rather than translating them, so the radar calls some already-seen topics new until it rebuilds memory here. Switching back restores them — nothing is deleted.",
       embeddingLegacyHint:
         "Topics stored before this setting existed are labelled legacy:unknown and stay parked: the old schema never recorded which model produced them, and guessing would compare unrelated vectors. Relabelling them is a deliberate manual SQL step — see docs/operations.md.",
       embeddingOmlxHint:
@@ -192,19 +217,55 @@ export const dictionaries = {
       embeddingHostedHint:
         "Hosted: each radar summary is sent to this endpoint, and every item can be billed — including unattended scheduled runs.",
       embeddingOpenaiKeyHint:
-        "Set OPENAI_API_KEY in the Credentials section above. A saved key applies to the next item — no restart or service recreation needed.",
+        "Enter your OpenAI key below — this is separate from the Knowledge Embedding section's OpenAI key. A saved key applies to the next item.",
       embeddingWidthHint:
         "The request asks for 1024 values. A model that cannot return exactly 1024 is rejected at call time rather than reshaped.",
       embeddingBaseUrl: "API root",
       embeddingBaseUrlHint:
         "A plain API root such as https://host.example/v1 — the /embeddings route is appended for you. A key or parameter inside the URL is rejected.",
       embeddingCompatibleKeyHint:
-        "Set EMBEDDING_API_KEY in the Credentials section above. A saved key applies to the next item — no restart or service recreation needed.",
+        "Enter your endpoint's key below. A saved key applies to the next item.",
       embeddingSpaceId: "Vector space id",
       embeddingSpaceIdHint:
         "Your own name for the vectors this endpoint produces. Change it whenever the weights, tokenizer, pooling, or quantization change; moving the same service to a new URL does not need a new id.",
       embeddingCompatibleSaveHint:
-        "This endpoint is not in use yet. Save all four fields to store it and switch to it.",
+        "This endpoint is not in use yet. Save all fields, including the key, to store it and switch to it.",
+
+      knowledgeEmbedding: "Knowledge Embedding",
+      knowledgeEmbeddingHint:
+        "GBrain's embedding provider for knowledge-base search — independent of the Radar Embedding section above. Nothing is selected until GBrain is initialized, and the choice is permanent once it is.",
+      knowledgeEmbeddingUnselectedHint:
+        "GBrain is not initialized, so knowledge search is unavailable. Choose a provider and model below and initialize it.",
+      knowledgeEmbeddingSaved: "GBrain initialized",
+      knowledgeEmbeddingOpenai: "OpenAI",
+      knowledgeEmbeddingVoyage: "Voyage",
+      knowledgeEmbeddingGoogle: "Google",
+      knowledgeEmbeddingOllama: "Ollama",
+      knowledgeEmbeddingLmstudio: "LM Studio",
+      knowledgeEmbeddingLlamaServer: "llama-server",
+      knowledgeEmbeddingKindLocal: "local runner",
+      knowledgeEmbeddingKindHosted: "cloud API",
+      knowledgeEmbeddingModel: "Model",
+      knowledgeEmbeddingModelHint: "GBrain's model identifier, e.g. text-embedding-3-large.",
+      knowledgeEmbeddingStatusNotInitialized: "Not initialized",
+      knowledgeEmbeddingStatusCredentialMissing: "Credential missing",
+      knowledgeEmbeddingStatusReady: "Ready",
+      knowledgeEmbeddingStatusIndeterminate:
+        "Cannot determine GBrain's state right now",
+      knowledgeEmbeddingConfirmPermanent:
+        "This initializes GBrain with this embedding model. The model sizes GBrain's database schema permanently — it cannot be changed afterward without a destructive migration outside this dashboard. Continue?",
+      knowledgeEmbeddingInitializing: "Initializing GBrain…",
+      knowledgeEmbeddingInitFailed: "GBrain initialization failed",
+      knowledgeEmbeddingAlreadyInitialized:
+        "GBrain is already initialized with a different model and cannot be reinitialized here.",
+      knowledgeEmbeddingLockedHint:
+        "This section is locked: GBrain has been initialized and its embedding model cannot be changed.",
+      knowledgeEmbeddingSaveToInitHint:
+        "Save to initialize GBrain with this provider and model. This runs next-signal knowledge gbrain-init and can take a moment.",
+      knowledgeEmbeddingCredentialHint:
+        "Enter the provider's key below. GBrain cannot be initialized with this provider until it is saved.",
+      knowledgeEmbeddingLocalHint:
+        "Local runners need no credential — GBrain reaches this provider directly.",
 
       authAccount: "CLI account",
       authConnected: "Connected",
@@ -610,22 +671,46 @@ export const dictionaries = {
       heading: "设置",
       subtitle: "next-signal 生成什么、什么时候跑、用哪个引擎跑。",
       saveFailed: "保存失败，请查看 dashboard 日志。",
-      save: "保存",
+      save: "保存配置",
       saving: "保存中…",
       reset: "还原",
       unsaved: "有未保存的改动",
+      apply: "应用",
+      confirm: "继续",
+      cancel: "取消",
 
       railLanguage: "语言",
       railSchedule: "定时运行",
       railEngine: "模型引擎",
-      railEmbedding: "向量嵌入",
+      railRadarEmbedding: "雷达向量嵌入",
+      railKnowledgeEmbedding: "知识库向量嵌入",
+      railRss: "RSS",
       railCredentials: "凭据",
 
+      // 只读、只显示是否配置的汇总。填写凭据的地方在用到它的那个功能区块里，
+      // 不在这里。
       credentials: "凭据",
       credentialsHint:
-        "next-signal 用到的全部 API key 和 token。保存后下次运行即生效，不用重启。已保存的值不会再显示；要换就直接填新的。",
+        "上面各区块会用到的每个凭据，以及是否已配置。这个列表只做展示——要填写或替换凭据，去用到它的那个区块，不在这里填。",
+      credentialsSummary: (set: number, total: number) => `已配置 ${set}/${total}`,
       credentialSet: "已配置",
       credentialUnset: "未配置",
+      credentialPowers: {
+        DEEPSEEK_API_KEY: "DeepSeek——「模型引擎」一节本地模型不可达时的云端回落。",
+        RADAR_EMBEDDING_OPENAI_API_KEY: "OpenAI，供「雷达向量嵌入」一节的 OpenAI provider 使用。",
+        EMBEDDING_API_KEY: "「雷达向量嵌入」一节的自定义 OpenAI 兼容端点。",
+        OPENAI_API_KEY:
+          "OpenAI，供「知识库向量嵌入」一节的 OpenAI provider 使用——虽然都叫「OpenAI key」，但和上面雷达去重用的那把是两回事。",
+        VOYAGE_API_KEY: "Voyage，供「知识库向量嵌入」一节的 Voyage provider 使用。",
+        GOOGLE_GENERATIVE_AI_API_KEY:
+          "Google，供「知识库向量嵌入」一节的 Google provider 使用。",
+        FOLO_TOKEN: "Folo——雷达的文章来源，以及订阅页。",
+      } as Record<string, string>,
+
+      // RSS 一节：Folo 凭据从原来那个扁平「凭据」列表挪到了自己的区块，登录
+      // 辅助流程不变。
+      rss: "RSS",
+      rssHint: "info-radar 的文章来源和订阅页都要用的 Folo 凭据。",
       credentialEnter: "填入值",
       credentialReplace: "填入新值以替换",
       credentialSave: "保存",
@@ -642,17 +727,8 @@ export const dictionaries = {
       foloTimedOut: "Folo 登录超时",
       foloHint:
         "Folo 没有 API key 页面，所以登录是拿 token 最省事的方式。会新开一个标签页打开 Folo，拿到后直接存到这里。手动粘贴也行。",
-      credentialPowers: {
-        ANTHROPIC_API_KEY: "Anthropic 模型（claude_* profile）。",
-        OPENAI_API_KEY: "OpenAI 模型，以及 OpenAI embedder。",
-        GOOGLE_API_KEY: "Google Gemini 模型。",
-        DEEPSEEK_API_KEY: "DeepSeek 模型——本地模型不可达时默认的云端回落。",
-        OMLX_API_KEY: "你自己的 OMLX server，如果设了 key 的话。一般留空。",
-        EMBEDDING_API_KEY:
-          "自定义嵌入端点——如果你在「向量嵌入」一节配了一个的话。",
-        GITHUB_TOKEN: "GitHub 入库。可选——不填就走匿名，限流 60 次/小时。",
-        FOLO_TOKEN: "Folo——雷达的文章来源，以及订阅页。",
-      } as Record<string, string>,
+      foloPasteManually: "手动粘贴",
+      foloManualHint: "浏览器连不上 dashboard，或登录失败时：直接粘贴一个 Folo session token。",
 
       contentLanguage: "内容语言",
       contentLanguageHint:
@@ -684,8 +760,12 @@ export const dictionaries = {
       scheduleLastFailed: (ago: string) => `上次运行 ${ago}·失败`,
 
       engine: "模型引擎",
-      engineHint: "next-signal 调用哪个引擎。选一个，它的设置会在下面展开。",
+      engineHint:
+        "next-signal 调用哪个引擎。没选之前什么都不会生效——选一张卡片并应用，它的设置会在下面展开。",
+      engineUnselectedHint: "还没选引擎，next-signal 没法发起对话调用。选一个并应用。",
       engineSaved: "引擎设置已保存",
+      enginePrimarySaved: "引擎选择已应用",
+      engineApplySelection: "应用选择",
       engineOmlx: "本地模型",
       engineDeepseek: "DeepSeek",
       engineCodex: "Codex CLI",
@@ -717,8 +797,7 @@ export const dictionaries = {
       deepseekHigh: "高",
       deepseekHint:
         "按 token 计费。推理会把思考 token 算进输出——「低」保留一部分思考链但不吃满成本。",
-      deepseekKeyHint:
-        "在上面的「凭据」里填 DEEPSEEK_API_KEY。保存后下次运行即生效。",
+      deepseekKeyHint: "在下面填入你的 DeepSeek API key。保存后下次运行即生效。",
 
       codexModel: "模型",
       codexEffort: "推理强度",
@@ -737,14 +816,16 @@ export const dictionaries = {
         "必须先选择模型和思考强度，next-signal 才能调用 Claude Code；可用的思考强度取决于所选模型。",
       claudeSaved: "Claude 设置已保存",
 
-      embedding: "向量嵌入",
-      embeddingHint: "雷达的去重判断用哪个嵌入模型。选一个，它的设置会在下面展开。",
+      embedding: "雷达向量嵌入",
+      embeddingHint:
+        "雷达的去重判断用哪个嵌入模型。保存后这个选择对本次部署是永久的——选一个，保存，并确认。",
       embeddingSaved: "嵌入设置已保存",
       embeddingUnselectedHint:
         "还没有选嵌入模型，所以去重是关着的——雷达照常抓取、打分、展示，只是同一件事会重复出现。在下面任选一项填好并保存，去重就会打开。",
       embeddingIdentityNone: "无 —— 去重已关闭",
-      embeddingSwitchConfirm:
-        "切换嵌入模型会把当前向量空间下记住的所有主题搁置起来。在这边重新积累记忆之前，雷达会把一些见过的主题当成新的。数据不会被删除，切回去就能恢复。要继续吗？",
+      embeddingConfirmPermanent:
+        "这个嵌入模型一旦保存就无法更改——换一个模型会产生和已存向量不可比较的新向量，所以这一节在保存后就会锁定。要继续吗？",
+      embeddingLockedHint: "这一节已锁定：嵌入模型已选定并保存，无法再更改或重新配置。",
       embeddingSaveToSelectHint: "保存后即存下这些设置，并开始使用这个嵌入模型。",
       embeddingOmlx: "本地模型",
       embeddingOpenai: "OpenAI",
@@ -753,8 +834,6 @@ export const dictionaries = {
       embeddingIdentity: "当前向量空间",
       embeddingIdentityHint:
         "打在每条新向量上的身份标识。去重只会比较带着这个完全相同取值的向量。",
-      embeddingSwitchHint:
-        "切换会把上一个身份下记住的主题搁置起来，而不是翻译过去——在这边重新积累记忆之前，雷达会把一些见过的主题当成新的。切回去它们就回来了，不会删任何数据。",
       embeddingLegacyHint:
         "这个设置出现之前存下的主题标为 legacy:unknown 并保持搁置：旧表结构没记录是哪个模型产生的，猜一个就等于去比较毫不相干的向量。要重新打标是一步刻意的手工 SQL——见 docs/operations.md。",
       embeddingOmlxHint:
@@ -764,19 +843,50 @@ export const dictionaries = {
       embeddingHostedHint:
         "云端：每条雷达摘要都会发到这个端点，每个条目都可能计费——包括无人值守的定时运行。",
       embeddingOpenaiKeyHint:
-        "在上面的「凭据」里填 OPENAI_API_KEY。保存后下一条就生效，不用重启，也不用重建服务。",
+        "在下面填入你的 OpenAI key——和「知识库向量嵌入」一节的 OpenAI key 是两回事。保存后下一条就生效。",
       embeddingWidthHint:
         "请求会要 1024 个值。返回不是正好 1024 的模型会在调用时被拒绝，而不是被截断或补齐。",
       embeddingBaseUrl: "API 根地址",
       embeddingBaseUrlHint:
         "填 API 根地址，例如 https://host.example/v1——/embeddings 这段由程序自己拼。URL 里带密钥或参数会被拒绝。",
-      embeddingCompatibleKeyHint:
-        "在上面的「凭据」里填 EMBEDDING_API_KEY。保存后下一条就生效，不用重启，也不用重建服务。",
+      embeddingCompatibleKeyHint: "在下面填入这个端点的 key。保存后下一条就生效。",
       embeddingSpaceId: "向量空间 id",
       embeddingSpaceIdHint:
         "你自己给这个端点产出的向量起的名字。权重、分词器、pooling 或量化变了就换一个；同一个服务换个 URL 不需要换 id。",
       embeddingCompatibleSaveHint:
-        "这个端点还没启用。四个字段都填好并保存，才会存下来并切过去。",
+        "这个端点还没启用。所有字段（含 key）都填好并保存，才会存下来并切过去。",
+
+      knowledgeEmbedding: "知识库向量嵌入",
+      knowledgeEmbeddingHint:
+        "GBrain 知识库搜索用的嵌入 provider——和上面「雷达向量嵌入」一节相互独立。GBrain 初始化之前什么都不会选中，一旦初始化，这个选择就是永久的。",
+      knowledgeEmbeddingUnselectedHint:
+        "GBrain 还没初始化，知识库搜索用不了。在下面选一个 provider 和模型并初始化。",
+      knowledgeEmbeddingSaved: "GBrain 已初始化",
+      knowledgeEmbeddingOpenai: "OpenAI",
+      knowledgeEmbeddingVoyage: "Voyage",
+      knowledgeEmbeddingGoogle: "Google",
+      knowledgeEmbeddingOllama: "Ollama",
+      knowledgeEmbeddingLmstudio: "LM Studio",
+      knowledgeEmbeddingLlamaServer: "llama-server",
+      knowledgeEmbeddingKindLocal: "本地运行",
+      knowledgeEmbeddingKindHosted: "云端 API",
+      knowledgeEmbeddingModel: "模型",
+      knowledgeEmbeddingModelHint: "GBrain 的模型标识符，例如 text-embedding-3-large。",
+      knowledgeEmbeddingStatusNotInitialized: "未初始化",
+      knowledgeEmbeddingStatusCredentialMissing: "缺少凭据",
+      knowledgeEmbeddingStatusReady: "已就绪",
+      knowledgeEmbeddingStatusIndeterminate: "暂时无法判断 GBrain 的状态",
+      knowledgeEmbeddingConfirmPermanent:
+        "这会用这个嵌入模型初始化 GBrain。模型会永久决定 GBrain 数据库表结构的大小——之后不能改，除非在这个 dashboard 之外做一次破坏性迁移。要继续吗？",
+      knowledgeEmbeddingInitializing: "正在初始化 GBrain…",
+      knowledgeEmbeddingInitFailed: "GBrain 初始化失败",
+      knowledgeEmbeddingAlreadyInitialized: "GBrain 已经用别的模型初始化过，这里没法重新初始化。",
+      knowledgeEmbeddingLockedHint: "这一节已锁定：GBrain 已初始化，嵌入模型无法更改。",
+      knowledgeEmbeddingSaveToInitHint:
+        "保存后会用这个 provider 和模型初始化 GBrain。这一步会跑 next-signal knowledge gbrain-init，可能要等一会儿。",
+      knowledgeEmbeddingCredentialHint:
+        "在下面填入这个 provider 的 key。key 存好之前没法用这个 provider 初始化 GBrain。",
+      knowledgeEmbeddingLocalHint: "本地运行的 provider 不需要凭据，GBrain 直接连它。",
 
       authAccount: "CLI 账号",
       authConnected: "已连接",

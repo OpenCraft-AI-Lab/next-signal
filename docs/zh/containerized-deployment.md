@@ -334,8 +334,8 @@ docker compose exec dashboard next-signal coding-agent auth-status claude
 
 **本地 LLM（可选）。** 纯云部署应在设置中选择 DeepSeek 或已登录的 CLI（也可以把它设为
 首次响应前的回落）。要启用本地模型，在**宿主机**上跑一个 OMLX server，然后在 dashboard 里填
-`http://host.docker.internal:<port>/v1`——对话模型填**设置 → 引擎**，嵌入模型填
-**设置 → 向量嵌入**。这是两个独立的字段，因为一个 mlx-lm 进程只挂一个模型，
+`http://host.docker.internal:<port>/v1`——对话模型填**设置 → 引擎**，去重 embedder 填
+**设置 → 雷达向量嵌入**。这是两个独立的字段，因为一个 mlx-lm 进程只挂一个模型，
 对话模型和嵌入模型是两个端口。`host.docker.internal` 已经通过
 `extra_hosts: host-gateway` 为 Linux 接好。这些都不该写进 `.env`。
 
@@ -352,12 +352,13 @@ docker compose exec dashboard next-signal coding-agent auth-status claude
 1. **不选就没有 embedder，而且它自己永远不回落。** 所以全新容器跑 info-radar
    `analyze` 时 dedup 是**关着的**——每个条目都会被当成新的，`next-signal doctor`
    会把这件事报出来。对话、agent 和 dashboard 页面都正常。两条出路，都在
-   **设置 → 向量嵌入**里：
+   **设置 → 雷达向量嵌入**里——保存后这一节永久锁定，之后没法再换 provider：
 
    - 把本地那项指向宿主机/远程 OMLX 端点，一般是
      `http://host.docker.internal:<port>/v1`；或者
-   - 选 OpenAI（需要在**设置 → 凭据**里填 `OPENAI_API_KEY`）或者你自己的
-     OpenAI 兼容端点（需要 `EMBEDDING_API_KEY`）。
+   - 选 OpenAI（需要在同一个面板里填 `RADAR_EMBEDDING_OPENAI_API_KEY`——和「设置 →
+     知识库向量嵌入」里 GBrain 自己的 `OPENAI_API_KEY` 是两回事，虽然都叫「OpenAI
+     key」）或者你自己的 OpenAI 兼容端点（同样在面板里填 `EMBEDDING_API_KEY`）。
 
    选云端 embedder 有两个后果，值得刻意决定一下。每条留下来的条目，它的分析摘要都会
    **发给那个服务商**——而 OMLX 同时承担两半时这些文本根本不出本机——并且每个条目都
@@ -365,12 +366,12 @@ docker compose exec dashboard next-signal coding-agent auth-status claude
    悄悄换一个就等于换了向量空间，会把当前 provider 的 dedup 记忆搁置掉，所以失败保持
    loud，条目按 novel 处理。
 
-   凭据来自共享 state 卷上的凭据库，call time 才读——所以在**设置 → 凭据**里存的 key
+   凭据来自共享 state 卷上的凭据库，call time 才读——所以在其所属区块里存的 key
    下一条 item 就在所有服务里生效，不用重启，也不用 `--force-recreate`。
    `docker compose exec dashboard next-signal doctor` 会报告解析出来的 embedder 身份以及
    它的凭据在不在，全程不发模型请求。
-2. **`next-signal doctor` 只要有任何一项失败就退出非零** —— 纯云环境下把 OMLX / Anthropic
-   的 ✗ 当作预期，别让它阻断启动。
+2. **`next-signal doctor` 只要有任何一项失败就退出非零** —— 在还没打开「设置 → 引擎」
+   选过引擎的容器上，把 OMLX 的 ✗ 和「没有选中引擎」的 ✗ 当作预期，别让它阻断启动。
 3. **密钥不进镜像。** 凭据存在具名卷上的 `/state/secrets.json`，权限 `0600`——不进任何
    镜像层，也不在 `.env` 里。
 4. **各页面的依赖不同：** `/goals` 和 `/design` 只需要 Postgres/文件系统；`/radar`
@@ -415,19 +416,22 @@ docker compose exec dashboard next-signal coding-agent auth-status claude
    可能存在任何凭据，而且用 `--no-embedding` 初始化过的 brain 事后无法升级 ——
    `gbrain config set embedding_model` 在这个引擎上是文档写明的空操作。
    `next-signal doctor` 会把 gbrain 报告为未初始化，并指出 knowledge search
-   不可用；这在全新的栈上是预期状态，不是故障。自己选一个 provider，初始化一次：
+   不可用；这在全新的栈上是预期状态，不是故障。自己选一个 provider，初始化一次——
+   可以在 dashboard 的**设置 → 知识库向量嵌入**里做（选 provider 和模型，需要凭据
+   的话就在面板里填，确认永久锁定的警告），也可以直接跑命令：
 
    ```bash
    docker compose exec dashboard next-signal knowledge gbrain-init \
      --embedding-model openai:text-embedding-3-large
    ```
 
-   云端 provider（`openai:`、`voyage:`、`google:`）需要先在**设置 → 凭据**里存好
-   对应的凭据。本地 runner（`ollama:`、`lmstudio:`、`llama-server:`）不需要任何
-   凭据 —— `gbrain-init` 在空凭据库下也能成功 —— 但这套部署目前还没有办法指定它的
-   具体地址，所以本地 runner 会落到 gbrain 自己的默认端点，在容器里未必能连上。
-   模型的选择是永久的：对一个已初始化的 brain 再跑一次 `gbrain-init` 会拒绝，
-   而不是悄悄重新配置或销毁它。
+   云端 provider（`openai:`、`voyage:`、`google:`）需要先存好对应的凭据——用
+   dashboard 就在知识库向量嵌入的面板里填，用 CLI 就直接存进凭据库。本地 runner
+   （`ollama:`、`lmstudio:`、`llama-server:`）不需要任何凭据 —— `gbrain-init` 在空
+   凭据库下也能成功 —— 但这套部署目前还没有办法指定它的具体地址，所以本地 runner
+   会落到 gbrain 自己的默认端点，在容器里未必能连上。模型的选择是永久的：对一个
+   已初始化的 brain 再跑一次 `gbrain-init` 会拒绝，而不是悄悄重新配置或销毁它；
+   dashboard 那一节也会在第一次成功后跟着永久锁定。
 
 ---
 

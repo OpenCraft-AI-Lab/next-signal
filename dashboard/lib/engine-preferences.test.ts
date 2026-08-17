@@ -57,6 +57,19 @@ test("an empty file is the baseline", () => {
   assert.deepEqual(parseEnginePreferences("{}", BASE), BASE);
 });
 
+test("no engine selected is a valid, storable state", () => {
+  const unselected: EnginePreferences = { ...BASE, primary: null, fallback: "none" };
+  // A fresh install's baseline is unselected, and a saved `"primary": null`
+  // round-trips the same way — both mean "nobody has chosen one yet", not a
+  // type error the way a JSON `null` for any other field would be.
+  assert.deepEqual(parseEnginePreferences("{}", unselected), unselected);
+  assert.deepEqual(
+    parseEnginePreferences(JSON.stringify({ primary: null }), unselected),
+    unselected,
+  );
+  assert.deepEqual(JSON.parse(serializeEnginePreferences(unselected)).primary, null);
+});
+
 test("rejects an engine that falls back to itself", () => {
   assert.throws(
     () => parseEnginePreferences(JSON.stringify({ fallback: "omlx" }), BASE),

@@ -17,8 +17,11 @@ def defaults() -> EnginePreferences:
 
 
 def test_configured_defaults_follow_models_yaml(defaults: EnginePreferences) -> None:
-    assert defaults.primary == "omlx"
-    assert defaults.fallback == "deepseek"
+    # No engine is chosen on a fresh install — `models.yaml` only prefills the
+    # omlx/deepseek panes' own fields, the same way `embedders` prefills Radar
+    # Embedding's panes without selecting a provider.
+    assert defaults.primary is None
+    assert defaults.fallback == "none"
     # The local server's address is the one thing the repo cannot know, so a
     # fresh install reads as unset rather than borrowing an environment value.
     assert defaults.omlx.base_url is None

@@ -37,12 +37,18 @@ Operator tasks (listing components, starting the server, running an agent once, 
 ### Requirement: `next-signal doctor` self-checks the environment
 
 `next-signal doctor` SHALL verify `.env` system connection configuration, the
-presence of each required credential in the credential store, the local model
-endpoints recorded in user state (checking that they are configured, not that
-they are reachable), Postgres reachability, the presence of every registered
-tool, the GBrain CLI / service health **and whether GBrain is initialised and
-able to embed**, and the folocli authentication (`FOLO_TOKEN` present in the
-store and `folocli whoami` returns `ok: true`), reporting each check as ✓ or ✗.
+presence of each required credential in the credential store, **which engine
+production stage jobs will resolve**, the local model endpoints recorded in
+user state (checking that they are configured, not that they are reachable),
+Postgres reachability, the presence of every registered tool, the GBrain CLI /
+service health **and whether GBrain is initialised and able to embed**, and
+the folocli authentication (`FOLO_TOKEN` present in the store and `folocli
+whoami` returns `ok: true`), reporting each check as ✓ or ✗.
+
+The engine check SHALL report an unselected engine distinctly from a selected
+one, and its message SHALL state the consequence — every production stage job
+(info-radar analyze, info-radar recap, knowledge ingest) will fail to start —
+rather than describing it only as an error in the system.
 
 `OMLX_BASE_URL` SHALL NOT be checked, because no part of the system reads it.
 The local chat endpoint SHALL be reported from engine preferences and the
@@ -73,9 +79,21 @@ Endpoint checks SHALL do the same.
 
 #### Scenario: missing key reported
 
-- **WHEN** `ANTHROPIC_API_KEY` is absent from the credential store
+- **WHEN** `DEEPSEEK_API_KEY` is absent from the credential store
 - **THEN** `next-signal doctor` reports a ✗ for the corresponding check, points
   at the settings page, and exits non-zero
+
+#### Scenario: no engine selected is reported
+
+- **WHEN** `engine.json` records no primary engine
+- **THEN** `next-signal doctor` reports a ✗ stating that production stage jobs
+  cannot run, points at the settings page, and exits non-zero
+
+#### Scenario: a selected engine is reported without a request
+
+- **WHEN** `engine.json` records a primary engine
+- **THEN** `next-signal doctor` reports it and its fallback, performing no
+  provider call
 
 #### Scenario: endpoints are read from user state
 

@@ -110,9 +110,21 @@ export async function getEmbeddingPreferences(): Promise<EmbeddingPreferences> {
  *
  * Writes only `embedding.json`: engine, coding-agent, schedule, and language
  * state are separate files owned by separate sections.
+ *
+ * Once a provider has been selected, this section is permanent: a changed
+ * embedding model produces vectors that cannot be compared against ones
+ * already stored. This check is defense in depth behind the disabled UI — the
+ * section renders read-only once locked, but a stale client or a direct call
+ * must not be able to smuggle a second write past that.
  */
 export async function setEmbeddingPreferences(
   next: EmbeddingPreferences,
 ): Promise<void> {
+  const current = await getEmbeddingPreferences();
+  if (current.provider !== null) {
+    throw new Error(
+      "Radar Embedding is locked: an embedder has already been selected and cannot be changed.",
+    );
+  }
   await writeStateFile(embeddingStateFile(), serializeEmbeddingPreferences(next));
 }

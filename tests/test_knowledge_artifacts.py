@@ -10,7 +10,9 @@ import next_signal.workflows.stages.knowledge_ingest.artifact_editor as artifact
 import next_signal.workflows.stages.knowledge_ingest.classify as classify_mod
 import next_signal.workflows.stages.knowledge_ingest.fetch as pipeline_fetch
 import next_signal.workflows.stages.knowledge_ingest.persist as persist_mod
+from next_signal.agents import stage
 from next_signal.core import paths
+from next_signal.core.engine_preferences import configured_engine_defaults
 from next_signal.workflows.stages.knowledge_ingest.classify import detect_source_type
 from next_signal.workflows.knowledge_ingest import ingest_one
 
@@ -23,6 +25,13 @@ def wiki_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(persist_mod, "gbrain_ingest", lambda path, slug=None: {"ok": True})
     monkeypatch.setattr(
         "next_signal.workflows.knowledge_ingest._MANIFEST", tmp_path / "knowledge_ingest_manifest.json"
+    )
+    # Every stage is stubbed below, so which engine is pinned doesn't matter —
+    # but one still has to be selected now that nothing is by default.
+    monkeypatch.setattr(
+        stage,
+        "load_engine_preferences",
+        lambda: configured_engine_defaults().model_copy(update={"primary": "omlx"}),
     )
 
     def fake_classifier(name, agent_input, output_schema, **kwargs):  # noqa: ARG001

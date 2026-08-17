@@ -95,3 +95,15 @@ export function embeddingStateFile(): string {
 export function secretsStateFile(): string {
   return path.join(stateRoot(), "secrets.json");
 }
+
+/**
+ * GBrain's own config file, mirroring `next_signal.integrations.gbrain.resolve_gbrain_home()`
+ * + `brain_config()`. An unset `GBRAIN_HOME` resolves to `null` — indeterminate,
+ * not "not initialised" — the same distinction the Python side keeps.
+ */
+export function gbrainConfigFile(): string | null {
+  const raw = process.env.GBRAIN_HOME?.trim();
+  if (!raw) return null;
+  const home = path.isAbsolute(raw) ? raw : path.resolve(REPO_ROOT, raw);
+  return path.join(home, ".gbrain", "config.json");
+}

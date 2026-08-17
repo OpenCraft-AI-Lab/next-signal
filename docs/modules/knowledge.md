@@ -75,8 +75,11 @@ Agents in any module can reference these tools by name.
   cross-cutting GBrain bridge (`next_signal/integrations/gbrain.py`); it is not owned by
   this module. Container bootstrap deliberately does not initialise it — the
   embedding model sizes GBrain's Postgres schema permanently, so the choice is
-  an explicit one-time operator step, `next-signal knowledge gbrain-init
-  --embedding-model <provider>:<model>` (see
+  an explicit one-time operator step: either the dashboard's **Settings →
+  Knowledge Embedding** section (pick a provider and model, save its
+  credential inline if it needs one, confirm the permanent-choice warning) or
+  `next-signal knowledge gbrain-init --embedding-model <provider>:<model>`
+  directly (see
   [containerized-deployment.md §8](../containerized-deployment.md#8-caveats-specific-to-a-cloud-only-container)).
   `search_knowledge` raises rather than returning an empty list when GBrain is
   not initialised, because GBrain's own `search`/`query` print "No results." and
@@ -301,9 +304,11 @@ in its source languages until each source is ingested again.
   index.
 - GBrain's embedding model is locked once `gbrain-init` runs: it sizes the
   Postgres schema, so a second `gbrain-init` refuses rather than reconfiguring
-  or destroying the brain. There is no dashboard control for it and no
-  automatic initialisation once a credential is saved — it is always an
-  explicit CLI step.
+  or destroying the brain. The dashboard's **Settings → Knowledge Embedding**
+  section wraps this same command and locks itself in step — no editable
+  field remains once it succeeds — but nothing initialises automatically just
+  because a credential was saved; the operator still confirms an explicit
+  permanent-choice warning before either path runs.
 - The re-ingest manifest advances only after a successful index — otherwise later
   runs skip the file and KB search goes stale.
 - Direct ingest and re-ingest must derive the same GBrain-safe slug from the

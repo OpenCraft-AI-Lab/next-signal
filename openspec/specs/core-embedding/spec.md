@@ -48,11 +48,11 @@ identity or endpoint of the current item.
 snapshot:
 
 - `omlx` — POST to the `/embeddings` route of the API root recorded in the
-  embedding state's own OMLX section, with the optional `OMLX_API_KEY`
-  credential from the credential store; do not send `dimensions`.
+  embedding state's own OMLX section, with no credential; do not send
+  `dimensions`.
 - `openai` — POST to `https://api.openai.com/v1/embeddings` with the
-  `OPENAI_API_KEY` credential from the credential store, sending
-  `dimensions: 1024`.
+  `RADAR_EMBEDDING_OPENAI_API_KEY` credential from the credential store,
+  sending `dimensions: 1024`.
 - `openai_compatible` — append `/embeddings` to the configured API root, use the
   `EMBEDDING_API_KEY` credential from the credential store, and send
   `dimensions: 1024`.
@@ -87,6 +87,13 @@ a degraded value.
 - **WHEN** the captured endpoint refuses the connection or returns non-2xx
 - **THEN** `embed()` raises `RuntimeError` and returns no vector
 
+#### Scenario: the radar OpenAI credential is independent of GBrain's
+
+- **WHEN** the `openai` provider embeds text
+- **THEN** it resolves `RADAR_EMBEDDING_OPENAI_API_KEY`, never `OPENAI_API_KEY`
+  — the name GBrain's own OpenAI embedding provider reads from its own
+  environment
+
 ### Requirement: Embedding state is strict and cannot carry a secret value
 
 `~/.next-signal/embedding.json` SHALL reject unknown top-level or section keys,
@@ -97,8 +104,10 @@ contain `model`. The compatible section SHALL contain `base_url`, `model`, and
 `space_id`. `space_id` SHALL match `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`.
 
 No section SHALL name a credential. Credentials are resolved by fixed name —
-`OMLX_API_KEY`, `OPENAI_API_KEY`, and `EMBEDDING_API_KEY` respectively — so
-embedding state carries neither a credential value nor a credential name.
+`RADAR_EMBEDDING_OPENAI_API_KEY` and `EMBEDDING_API_KEY` respectively for the
+`openai` and `openai_compatible` sections; the `omlx` section resolves no
+credential at all — so embedding state carries neither a credential value nor a
+credential name.
 
 Every `base_url` SHALL be an `http` or `https` API root with a host. URL
 username, password, query, and fragment components SHALL be rejected so a
@@ -121,7 +130,8 @@ item without restarting a host process or recreating a Compose service.
 
 - **WHEN** any embedding section is saved
 - **THEN** the stored object contains neither a credential value nor a
-  credential name, because each provider's credential is located by a fixed name
+  credential name, because each provider's credential (if any) is located by a
+  fixed name
 
 #### Scenario: process environment is read for the next item
 
@@ -233,9 +243,9 @@ whose credential or endpoint is missing, and its message SHALL state the
 consequence — deduplication is inactive — rather than describing it as an error
 in the system.
 
-For OMLX, the API root recorded in embedding state is required and
-`OMLX_API_KEY` remains optional; an absent optional key SHALL NOT fail the
-embedder check. OpenAI and OpenAI-compatible credentials are required.
+For OMLX, the API root recorded in embedding state is required and the provider
+resolves no credential at all. OpenAI (`RADAR_EMBEDDING_OPENAI_API_KEY`) and
+OpenAI-compatible (`EMBEDDING_API_KEY`) credentials are required.
 
 When a credential or endpoint is absent, the message SHALL direct the operator to
 the dashboard settings page. It SHALL NOT instruct them to edit `.env`, restart
@@ -250,9 +260,10 @@ a host process, or recreate a Compose service, none of which affect resolution.
 
 #### Scenario: hosted selection has no key
 
-- **WHEN** OpenAI is selected and `OPENAI_API_KEY` is absent from the store
-- **THEN** doctor reports a failed embedder check naming the credential, points
-  at the settings page, and exits non-zero
+- **WHEN** OpenAI is selected and `RADAR_EMBEDDING_OPENAI_API_KEY` is absent
+  from the store
+- **THEN** doctor reports a failed embedder check naming that credential,
+  points at the settings page, and exits non-zero
 
 #### Scenario: valid selection is reported without a request
 

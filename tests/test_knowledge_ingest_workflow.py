@@ -28,6 +28,14 @@ def wiki_paths(tmp_path, monkeypatch):
     # on a real gbrain binary or a real wiki to scan.
     monkeypatch.setattr(persist_mod, "gbrain_query", lambda q, limit=None: {"ok": True, "stdout": ""})
     monkeypatch.setattr(persist_mod, "write_related_section", lambda md_path, paths: None)
+    # These tests stub every stage's `run_stage` directly, so which engine
+    # `stage_job()` pins is irrelevant to what's under test — but an engine
+    # still has to be selected at all, now that nothing is by default.
+    monkeypatch.setattr(
+        stage,
+        "load_engine_preferences",
+        lambda: configured_engine_defaults().model_copy(update={"primary": "omlx"}),
+    )
     return tmp_path
 
 

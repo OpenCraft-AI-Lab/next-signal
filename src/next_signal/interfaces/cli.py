@@ -92,19 +92,19 @@ def _check_embedder() -> tuple[str, bool, str]:
             "embedder",
             False,
             "no embedder selected — deduplication is inactive; choose one on "
-            "the dashboard settings page (Settings → Embedding)",
+            "the dashboard settings page (Settings → Radar Embedding)",
         )
 
     identity = embedder_identity(prefs)
 
     if prefs.provider == "omlx":
-        # OMLX_API_KEY stays optional — the local server usually has none — and
-        # a selected OMLX section always carries its own endpoint, so there is
-        # nothing left for this branch to fail on.
+        # The omlx provider resolves no credential — a selected OMLX section
+        # always carries its own endpoint, so there is nothing left for this
+        # branch to fail on.
         return ("embedder", True, f"{identity} at {prefs.omlx.base_url}")
 
     if prefs.provider == "openai":
-        variable, where = "OPENAI_API_KEY", "https://api.openai.com/v1"
+        variable, where = "RADAR_EMBEDDING_OPENAI_API_KEY", "https://api.openai.com/v1"
     else:
         variable = "EMBEDDING_API_KEY"
         where = prefs.openai_compatible.base_url
@@ -113,9 +113,34 @@ def _check_embedder() -> tuple[str, bool, str]:
             "embedder",
             False,
             f"{identity} — {variable} is not configured; set it on the dashboard "
-            "settings page (Settings → Credentials)",
+            "settings page (Settings → Radar Embedding)",
         )
     return ("embedder", True, f"{identity} at {where} ({variable} set)")
+
+
+def _check_engine() -> tuple[str, bool, str]:
+    """Report whether a production-job engine is selected.
+
+    Mirrors `_check_embedder()`: an unselected engine is reported distinctly
+    from a broken one, since `stage_job()` raises `EngineNotSelected` before
+    any provider call rather than returning a degraded result.
+    """
+    from next_signal.core.engine_preferences import load_engine_preferences
+
+    try:
+        prefs = load_engine_preferences()
+    except RuntimeError as e:
+        return ("engine", False, str(e))
+
+    if prefs.primary is None:
+        return (
+            "engine",
+            False,
+            "no engine selected — production stage jobs (info-radar analyze, "
+            "knowledge ingest) cannot run; choose one on the dashboard "
+            "settings page (Settings → Engine)",
+        )
+    return ("engine", True, f"{prefs.primary} (fallback: {prefs.fallback})")
 
 
 def _check_gbrain() -> tuple[str, bool, str]:
@@ -154,7 +179,7 @@ def _check_gbrain() -> tuple[str, bool, str]:
             False,
             f"initialised with {model} but {credential} is not configured — knowledge "
             "search is unavailable; set it on the dashboard settings page "
-            "(Settings → Credentials)",
+            "(Settings → Knowledge Embedding)",
         )
 
     try:
@@ -421,15 +446,19 @@ def doctor() -> None:
     checks.append(("DATABASE_URL", bool(db), db or "not set"))
 
     # 1b. Credentials, from the store. Presence only — a value is never printed.
-    # Only the two the default configuration depends on are hard checks; the
-    # rest are covered by the feature checks that actually need them (embedder,
-    # folocli) or are optional by contract (GITHUB_TOKEN, OMLX_API_KEY).
+    # DEEPSEEK_API_KEY is the only one the default configuration hard-depends
+    # on as a standalone check; the rest are covered by the feature checks
+    # that actually need them (engine, embedder, GBrain, folocli).
     for name, consequence in (
-        ("ANTHROPIC_API_KEY", "claude_* profiles will fail"),
         ("DEEPSEEK_API_KEY", "local* fallback to deepseek will fail"),
     ):
         present = bool(get_secret(name))
         checks.append((name, present, "set" if present else f"not configured ({consequence})"))
+
+    # 1c. Which engine production stage jobs will resolve. An unselected
+    # engine blocks every stage job outright (`stage_job()` raises before any
+    # provider call), the scheduler included, with nobody reading logs live.
+    checks.append(_check_engine())
 
     # 2. Local chat endpoint, from engine preferences — configured, not reachable.
     from next_signal.core.models import omlx_endpoint

@@ -39,20 +39,33 @@ and data pages read Postgres directly.
 
 ## Credentials
 
-Every provider API key and token is entered on the dashboard settings page
-(**Settings → Credentials**) and stored in one file,
-`~/.next-signal/secrets.json` (`/state/secrets.json` in a container): a flat
-`NAME → value` object, written atomically at mode `0600`.
+Every provider API key and token is entered inline, on the dashboard settings
+page, inside the functional section that uses it — Engine, Radar Embedding,
+Knowledge Embedding, RSS — rather than in one shared list. All of them still
+land in one file, `~/.next-signal/secrets.json` (`/state/secrets.json` in a
+container): a flat `NAME → value` object, written atomically at mode `0600`. A
+read-only, presence-only summary at the bottom of the settings page shows the
+whole configured surface at a glance.
 
-Ten credentials: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`,
-`DEEPSEEK_API_KEY`, `OMLX_API_KEY`, `EMBEDDING_API_KEY`, `VOYAGE_API_KEY`,
-`GOOGLE_GENERATIVE_AI_API_KEY`, `GITHUB_TOKEN`, `FOLO_TOKEN`. The set is
-closed — every credential the system can require has a control on that page.
+Seven credentials: `DEEPSEEK_API_KEY` (Engine), `RADAR_EMBEDDING_OPENAI_API_KEY`
+and `EMBEDDING_API_KEY` (Radar Embedding), `OPENAI_API_KEY`, `VOYAGE_API_KEY`,
+and `GOOGLE_GENERATIVE_AI_API_KEY` (Knowledge Embedding), `FOLO_TOKEN` (RSS).
+The set is closed — every credential the system can require has a control
+somewhere on that page. `RADAR_EMBEDDING_OPENAI_API_KEY` and `OPENAI_API_KEY`
+are deliberately two different stored credentials even though both are "an
+OpenAI key": the radar dedup embedder and GBrain's OpenAI provider are
+independent embedding flows that happened to share one name in the past.
 `EMBEDDING_API_KEY` is the one an OpenAI-compatible embedding endpoint (the
 radar dedup embedder) uses; `VOYAGE_API_KEY` and `GOOGLE_GENERATIVE_AI_API_KEY`
-are read by GBrain itself when you choose that provider at
-`next-signal knowledge gbrain-init` — see [containerized-deployment.md
+are read by GBrain itself when you choose that provider, either from the
+Knowledge Embedding section or at `next-signal knowledge gbrain-init` directly
+— see [containerized-deployment.md
 §8](./containerized-deployment.md#8-caveats-specific-to-a-cloud-only-container).
+`ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `GITHUB_TOKEN`, and `OMLX_API_KEY` are
+not part of this set — the first two have no feature in this system that
+resolves them, and the latter two are read with graceful-degradation
+semantics only (anonymous GitHub access, unauthenticated local-server
+requests) and are not required by anything the settings page exposes.
 
 Three properties worth knowing:
 
@@ -74,7 +87,7 @@ real secret manager touches one file.
 ### Getting a Folo token
 
 Folo issues no API key: its token is a session value, so there is no page that
-mints one. **Settings → Credentials → Sign in to Folo** opens Folo in a new tab,
+mints one. **Settings → RSS → Sign in to Folo** opens Folo in a new tab,
 receives the returned one-time token on a dashboard callback route, exchanges it
 for a session token, and stores it. Pasting a token manually works too and is the
 fallback if the sign-in fails.
@@ -88,7 +101,7 @@ reach — and accepting it would give one credential two sources of truth.
 
 No credential belongs here, and neither does a local model endpoint — those are
 entered on the settings page (**Settings → Engine** for the chat model,
-**Settings → Embedding** for the embedder). Key values in the repo-local `.env`:
+**Settings → Radar Embedding** for the dedup embedder). Key values in the repo-local `.env`:
 
 - `DATABASE_URL`
 - `GBRAIN_BIN` (when `gbrain` is not on `PATH`; the dashboard and backend resolve
@@ -114,12 +127,13 @@ among them.
 
 | Integration | Env var |
 |---|---|
-| LLM: Anthropic / OpenAI / Google / DeepSeek | **Settings → Credentials** (optional `DEEPSEEK_BASE_URL` stays in `.env`, default `https://api.deepseek.com`) |
-| Folo (info-radar) | **Settings → Credentials** — required; use "Sign in to Folo" or paste a token. `~/.folo/config.json` is no longer consulted. Optional `FOLO_CLI_ARGV` stays in `.env` |
+| LLM: DeepSeek (Engine cloud fallback) | **Settings → Engine** (optional `DEEPSEEK_BASE_URL` stays in `.env`, default `https://api.deepseek.com`) |
+| Folo (info-radar) | **Settings → RSS** — required; use "Sign in to Folo" or paste a token. `~/.folo/config.json` is no longer consulted. Optional `FOLO_CLI_ARGV` stays in `.env` |
 | GBrain / OpenCLI (knowledge) | `GBRAIN_BIN` (when `gbrain` is not on `PATH`) / `OPENCLI_BIN` (WeChat download — path to `main.js` or a wrapper) |
 | Coding agents | `CODEX_BIN` / `CLAUDE_BIN` (optional executable overrides; saved CLI login remains provider-owned) |
-| GitHub (knowledge bookmarking) | **Settings → Credentials** (optional; anonymous is 60 req/h) |
-| Embedder (info-radar analysis dedup) | Depends on the provider selected in **Settings → Embedding** — see below |
+| GitHub (knowledge bookmarking) | Anonymous only (60 req/h) — `GITHUB_TOKEN` is not part of the settings page's resolved credential set |
+| Radar embedder (info-radar analysis dedup) | Depends on the provider selected in **Settings → Radar Embedding** — see below |
+| Knowledge embedder (GBrain search) | Depends on the provider chosen in **Settings → Knowledge Embedding**, or at `next-signal knowledge gbrain-init` — see below |
 
 Every cloud integration reads its credential from the store at call time. A
 missing credential fails only the corresponding tool — it never blocks startup —
@@ -146,14 +160,15 @@ Three providers:
 
 | Provider | Configuration | Notes |
 |---|---|---|
-| `omlx` | Its own API root (**Settings → Embedding**), plus a model the server has loaded; `configs/models.yaml::embedders.local.model_id` prefills `Qwen3-Embedding-0.6B-8bit` | Separate endpoint from **Settings → Engine**: one mlx-lm process serves one model, so chat and embedding are two ports. `OMLX_API_KEY` stays optional. Nothing leaves the machine |
-| `openai` | `OPENAI_API_KEY` in **Settings → Credentials**; model prefilled from `embedders.openai` (`text-embedding-3-small`) | Billed per item; summaries leave the machine |
-| `openai_compatible` | An API **root** (e.g. `https://host.example/v1` — the client appends `/embeddings`), a model, and a vector-space id, plus `EMBEDDING_API_KEY` in **Settings → Credentials** | No shipped default; all three fields must be saved before it can be selected |
+| `omlx` | Its own API root (**Settings → Radar Embedding**), plus a model the server has loaded; `configs/models.yaml::embedders.local.model_id` prefills `Qwen3-Embedding-0.6B-8bit` | Separate endpoint from **Settings → Engine**: one mlx-lm process serves one model, so chat and embedding are two ports. Resolves no credential. Nothing leaves the machine |
+| `openai` | `RADAR_EMBEDDING_OPENAI_API_KEY`, entered inline in **Settings → Radar Embedding**'s OpenAI pane; model prefilled from `embedders.openai` (`text-embedding-3-small`) | Billed per item; summaries leave the machine. Distinct from GBrain's own `OPENAI_API_KEY` (Knowledge Embedding) |
+| `openai_compatible` | An API **root** (e.g. `https://host.example/v1` — the client appends `/embeddings`), a model, and a vector-space id, plus `EMBEDDING_API_KEY` entered inline in the same pane | No shipped default; all fields, including the key, must be saved before it can be selected — and once selected, the section locks permanently |
 
 Values from `configs/models.yaml` are **form prefill, not defaults** — they fill
 an empty pane and nothing more. Only what you save runs.
 
-Three properties are worth internalising before switching:
+Three properties are worth internalising before saving — this choice locks the
+section permanently once made, so there is no switching afterward:
 
 - **Every embedder must return exactly 1024 finite values.** The hosted paths
   request `dimensions: 1024`; anything else raises at call time rather than
@@ -173,15 +188,18 @@ separate from the model name because two endpoints can advertise the same name
 while producing incomparable vectors, and a false match suppresses a genuinely
 novel item.
 
-### Switching embedder, and the `legacy:unknown` rows
+### The embedder choice is permanent, and the `legacy:unknown` rows
 
 Each stored vector records the identity that produced it in
 `radar_pushed_topics.embedder` (`omlx:<model>`, `openai:<model>`, or
 `openai_compatible:<space_id>`), and the dedup search only ever compares within
-one identity. So switching provider **parks** the previous identity's memory
-rather than translating it: expect already-seen topics to be reported as novel
-until memory rebuilds under the new identity. Switching back restores the earlier
-rows exactly, with no re-embedding — nothing is deleted at any point.
+one identity. **Settings → Radar Embedding locks in full the moment a provider
+is saved** — every card and pane renders read-only afterward, with no way back
+through the UI. This is deliberate, not a missing feature: a different model
+produces vectors that cannot be compared against ones already stored, so
+allowing a later switch would silently degrade dedup quality behind a
+`window.confirm()` nobody reads carefully. Choose deliberately before saving;
+the settings page shows an explicit warning at that moment.
 
 Rows written before the column existed are labelled `legacy:unknown` and stay
 parked permanently. Bootstrap does not guess their provenance:
@@ -277,11 +295,14 @@ uv run next-signal doctor                            # host-native
 docker compose exec dashboard next-signal doctor     # in the container
 ```
 
-It checks `DATABASE_URL`, the local chat endpoint recorded in `engine.json`
-(configured, not reachable), the presence of `ANTHROPIC_API_KEY`
-and `DEEPSEEK_API_KEY` **in the credential store**, the resolved content language (reports the `global` policy's
-value and whether it came from the preference file or the hardcoded default,
-or flags a corrupt/unrecognized preference-file value), the resolved embedder
+It checks `DATABASE_URL`, the presence of `DEEPSEEK_API_KEY` **in the
+credential store**, which engine is selected for production stage jobs (info-radar
+analyze, info-radar recap, knowledge ingest) — reported distinctly when
+unselected, since `stage_job()` refuses to start any such job without one — the
+local chat endpoint recorded in `engine.json` (configured, not reachable), the
+resolved content language (reports the `global` policy's value and whether it
+came from the preference file or the hardcoded default, or flags a
+corrupt/unrecognized preference-file value), the resolved radar dedup embedder
 (prints the active vector-space identity and whether its required configuration
 is present, or reports that none is selected and deduplication is inactive — no
 embedding request is made, and unusable `embedding.json` is
@@ -300,11 +321,13 @@ required/optional split above only means "if this machine will not use that
 feature, you can ignore its ✗".
 
 A missing `DEEPSEEK_API_KEY` counts as a failure — the default fallback profile
-for `local*` uses DeepSeek when OMLX is unreachable. A missing
-`ANTHROPIC_API_KEY` counts too, since the `claude_*` profiles need it. Both are
-read from the credential store; setting them in the environment does not satisfy
-the check. Credential checks report presence only and never print a value. If you
-deliberately run local-only, understand that those cloud fallbacks will fail.
+for `local*` uses DeepSeek when OMLX is unreachable. It is read from the
+credential store; setting it in the environment does not satisfy the check.
+Credential checks report presence only and never print a value. No engine
+selected also counts as a failure and exits non-zero — a fresh install has none
+by default, so this is expected until you open **Settings → Engine** and apply
+a choice. If you deliberately run local-only, understand that the DeepSeek
+fallback will fail if OMLX becomes unreachable.
 
 GBrain readiness is three distinct states, not a pass/fail: **not
 initialised** (the expected state of a first-time stack — bootstrap
@@ -531,22 +554,28 @@ docker compose logs -f scheduler
 
 - **`DATABASE_URL not set`** → copy `.env.example` to `.env` and fill it in.
 - **`<NAME> is not configured`** → the credential is missing from the store; set
-  it in **Settings → Credentials**. Setting it in `.env` has no effect.
+  it inline in the settings section that uses it (Engine, Radar Embedding,
+  Knowledge Embedding, or RSS). Setting it in `.env` has no effect.
+- **No engine selected** → open **Settings → Engine**, pick a card, and apply
+  the selection. Every production stage job (info-radar analyze, info-radar
+  recap, knowledge ingest) refuses to start until one is chosen.
 - **Postgres unreachable** → start Postgres.app or the Homebrew service, then
   rerun `next-signal doctor`.
 - **An OMLX profile fell back to DeepSeek** → check the endpoint in
-  **Settings → Engine**, the optional `OMLX_API_KEY` in Settings → Credentials,
-  and the endpoint's `/v1/models`. Models are not cached, so once OMLX is back
-  the next call retries local on its own. The exception is AgentOS, which builds
-  its interactive agents once at startup: restart that process to pick up a new
-  endpoint.
+  **Settings → Engine** and the endpoint's `/v1/models`. Models are not
+  cached, so once OMLX is back the next call retries local on its own. The
+  exception is AgentOS, which builds its interactive agents once at startup:
+  restart that process to pick up a new endpoint.
 - **The radar shows the same story repeatedly** → no embedder is selected, so
-  deduplication is off. Choose one in **Settings → Embedding**;
-  `next-signal doctor` reports this as a failed embedder check.
+  deduplication is off. Choose one in **Settings → Radar Embedding**, save it,
+  and confirm the permanent-choice warning; `next-signal doctor` reports this
+  as a failed embedder check. This choice cannot be changed afterward.
 - **GBrain search / re-index fails** → run `next-signal doctor` first: on a
   fresh stack it is expected to report GBrain as not initialised, in which case
-  run `next-signal knowledge gbrain-init --embedding-model <provider>:<model>`
-  (see [containerized-deployment.md
+  initialize it from **Settings → Knowledge Embedding** (same permanent-choice
+  confirmation as Radar Embedding) or run
+  `next-signal knowledge gbrain-init --embedding-model <provider>:<model>`
+  directly (see [containerized-deployment.md
   §8](./containerized-deployment.md#8-caveats-specific-to-a-cloud-only-container)).
   If it reports ready but a call still fails, check `gbrain doctor --fast`.
   When embedding fails, ingest should fail loud *after* writing the wiki
