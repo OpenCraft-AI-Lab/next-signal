@@ -2,8 +2,8 @@
 
 The design promise (CLAUDE.md / docs): when the local OMLX endpoint is
 unreachable the factory catches RuntimeError and builds the profile named in
-``fallback_profile``; after recovery, ``reset_cache()`` is required before
-OMLX is retried (the fallback result is lru-cached).
+``fallback_profile``. Models are not cached, so recovery needs no manual step —
+the next call retries OMLX on its own.
 """
 
 from __future__ import annotations
@@ -16,13 +16,6 @@ from next_signal.core.secrets import save_secret
 
 from next_signal.core import models as models_mod
 from next_signal.core.config import ModelProfile
-
-
-@pytest.fixture(autouse=True)
-def _fresh_cache():
-    models_mod.reset_cache()
-    yield
-    models_mod.reset_cache()
 
 
 class _Marker:
@@ -77,7 +70,8 @@ def test_no_fallback_propagates_runtime_error(monkeypatch) -> None:
         models_mod.get_model("local")
 
 
-def test_recovery_needs_reset_cache_before_omlx_is_retried(monkeypatch) -> None:
+def test_recovery_retries_omlx_with_no_manual_reset(monkeypatch) -> None:
+    """Nothing is cached, so the profile follows the endpoint back up."""
     _patch_profiles(
         monkeypatch,
         {
@@ -97,10 +91,6 @@ def test_recovery_needs_reset_cache_before_omlx_is_retried(monkeypatch) -> None:
     assert models_mod.get_model("local").provider == "claude"
 
     omlx_up["v"] = True
-    # Still the cached fallback — recovery alone must not flip the profile.
-    assert models_mod.get_model("local").provider == "claude"
-
-    models_mod.reset_cache()
     assert models_mod.get_model("local").provider == "omlx"
 
 

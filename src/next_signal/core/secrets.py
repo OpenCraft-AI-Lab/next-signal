@@ -31,23 +31,52 @@ from next_signal.core.paths import STATE_ROOT
 
 SECRETS_FILE = STATE_ROOT / "secrets.json"
 
-# The credentials this system resolves by name. The settings page renders one
-# control per entry and `doctor` reports on them. The store is not limited to
-# these: an operator-defined OpenAI-compatible embedding endpoint names its own
-# credential through `embedding.json::api_key_env`, so any well-formed name may
-# be stored. See `_VALID_NAME`.
+# Every credential this system resolves, by name. The set is closed: the
+# settings page renders one control per entry, so a credential absent from here
+# would be one no operator could enter. `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`,
+# `GITHUB_TOKEN`, and `OMLX_API_KEY` are deliberately absent: the first two have
+# no feature in this system that resolves them, and the latter two are read
+# with graceful-degradation semantics only (anonymous GitHub access,
+# unauthenticated local-server requests) and are required by nothing this
+# system exposes through configuration. `EMBEDDING_API_KEY` replaces no
+# environment variable — it is the fixed name for whatever OpenAI-compatible
+# embedding endpoint an operator configures for radar dedup.
+#
+# `RADAR_EMBEDDING_OPENAI_API_KEY` is the radar dedup embedder's OpenAI
+# credential, named separately from GBrain's `OPENAI_API_KEY` below even though
+# both are "an OpenAI key" — they coincidentally shared one name in the past,
+# which conflated two independent embedding flows under one stored value. This
+# name is next-signal's own choice; renaming it costs nothing external.
+#
+# `OPENAI_API_KEY`, `VOYAGE_API_KEY`, and `GOOGLE_GENERATIVE_AI_API_KEY` exist
+# for GBrain's embedding providers, which are chosen at `gbrain-init` and read
+# these exact names from their own environment — an external contract this
+# module does not choose and must not rename. `GOOGLE_GENERATIVE_AI_API_KEY` is
+# separate from `GOOGLE_API_KEY` rather than aliased to it because the two are
+# read by different programs and need not be the same key.
 CREDENTIAL_NAMES: tuple[str, ...] = (
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "GOOGLE_API_KEY",
     "DEEPSEEK_API_KEY",
-    "OMLX_API_KEY",
-    "GITHUB_TOKEN",
+    "RADAR_EMBEDDING_OPENAI_API_KEY",
+    "EMBEDDING_API_KEY",
+    "OPENAI_API_KEY",
+    "VOYAGE_API_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY",
     "FOLO_TOKEN",
 )
 
-# Same shape `embedding.json::api_key_env` already validates against, so a name
-# that file accepts is a name this store accepts.
+# Credential-shaped names that used to be resolved and are not anymore, kept
+# here *only* so `child_env()` keeps stripping them from a copied environment.
+# Dropping a name from `CREDENTIAL_NAMES` removes its settings-page control; it
+# must not also remove it from the strip list `child_env()` builds, or a stale
+# `.env` value for one of these reaches a spawned child (gbrain, folocli)
+# unfiltered — the exact leak `child_env()`'s docstring exists to prevent.
+_RETIRED_ENV_NAMES: tuple[str, ...] = (
+    "ANTHROPIC_API_KEY",
+    "GOOGLE_API_KEY",
+    "GITHUB_TOKEN",
+    "OMLX_API_KEY",
+)
+
 _VALID_NAME = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
 
@@ -107,13 +136,16 @@ def get_secret(name: str, path: Path | None = None) -> str:
 
 
 def require_secret(name: str, path: Path | None = None) -> str:
-    """Return a credential, or raise naming it and where to set it."""
+    """Return a credential, or raise naming it and where to set it.
+
+    Points at "the dashboard settings page" generically rather than naming a
+    section: each credential now lives inline in whichever functional section
+    uses it (Engine, Radar Embedding, Knowledge Embedding, RSS), and this
+    function has no way to know which one `name` belongs to.
+    """
     value = get_secret(name, path)
     if not value:
-        raise RuntimeError(
-            f"{name} is not configured. Set it on the dashboard settings page "
-            "(Settings -> Credentials)."
-        )
+        raise RuntimeError(f"{name} is not configured. Set it on the dashboard settings page.")
     return value
 
 
@@ -161,13 +193,6 @@ def _write(secrets: dict[str, str], path: Path) -> None:
         tmp.unlink(missing_ok=True)
         raise
 
-    # Model instances hold whatever credential they were built with, so a
-    # corrected key would otherwise stay dead until the process restarts.
-    # Imported here rather than at module scope: `core.models` reads this module.
-    from next_signal.core.models import reset_cache
-
-    reset_cache()
-
 
 def child_env(names: list[str], path: Path | None = None) -> dict[str, str]:
     """Build the environment for one subprocess that needs credentials.
@@ -193,7 +218,7 @@ def child_env(names: list[str], path: Path | None = None) -> dict[str, str]:
     """
     env = os.environ.copy()
     secrets = load_secrets(path)
-    for name in set(CREDENTIAL_NAMES) | set(secrets):
+    for name in set(CREDENTIAL_NAMES) | set(_RETIRED_ENV_NAMES) | set(secrets):
         env.pop(name, None)
     for name in names:
         value = secrets.get(_validated_name(name), "").strip()

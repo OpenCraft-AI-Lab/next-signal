@@ -6,6 +6,7 @@ The contract the containerized stack offers to anything verifying against it: wh
 
 Runtime and end-to-end verification happens in containers, not on the host. That only produces trustworthy results if the verifier can tell whether the container is running the code under test — `/app` is image-baked, so an edit to `src/` followed by an immediate `docker compose exec` silently verifies the previous code. These requirements pin the facts a verifier depends on, so a pass means what it claims and so verifying plumbing does not incur model cost.
 ## Requirements
+
 ### Requirement: Source visibility contract
 
 The containerized stack SHALL make explicit which host paths are live inside a
@@ -88,6 +89,18 @@ This completes the first-run contract: the previous requirement is that the
 stack starts against an *unedited* `.env`; this one is that it starts against no
 `.env` at all, which is what a user who never opens a text editor actually has.
 
+The contract SHALL hold on a **first-time state volume with an empty credential
+store**, not only on a volume that a previous run already initialised. No
+bootstrap step SHALL require a credential to be present, because the store is
+written by the dashboard and the dashboard cannot start until bootstrap has
+completed — a bootstrap that needs a credential makes the first run
+unreachable by construction.
+
+A bootstrap step whose initialisation needs a credential SHALL be skipped
+entirely, leaving that capability uninitialised and reported as unavailable,
+rather than failing or substituting a reduced initialisation that cannot
+afterwards be completed.
+
 Credentials SHALL reach the containers through the shared state volume rather
 than through the container environment, so adding one SHALL NOT require
 `docker compose up -d --force-recreate`.
@@ -97,6 +110,13 @@ than through the container environment, so adding one SHALL NOT require
 - **WHEN** `docker compose up` runs in a working tree containing no `.env` file
 - **THEN** the stack starts, with wiki mounts and Postgres settings resolving to
   their defaults
+
+#### Scenario: First-time volume with an empty credential store
+
+- **WHEN** `docker compose up` runs against a state volume that has never been
+  initialised and a credential store that holds nothing
+- **THEN** bootstrap completes successfully, and the dashboard and scheduler
+  both start
 
 #### Scenario: Credentials cross containers without a recreate
 
@@ -204,14 +224,34 @@ that project executables resolve. Invocations MUST NOT use a login shell.
 
 `next-signal doctor` SHALL report per-check status independently of its exit code. A
 non-zero exit MUST NOT be read as stack failure when the failing checks are
-optional under the active deployment profile.
+optional under the active deployment profile, or when they report configuration
+an operator has not completed yet.
+
+A freshly started stack that nobody has configured SHALL be expected to exit
+non-zero. Unset model credentials, an unselected embedder, and an uninitialised
+GBrain are the normal first-run state, not defects in the stack.
 
 #### Scenario: Cloud-only profile
 
-- **WHEN** `next-signal doctor` runs in a container with no OMLX endpoint configured
-- **THEN** it exits non-zero because `OMLX_BASE_URL` and unset model keys report ✗
+- **WHEN** `next-signal doctor` runs in a container with no local endpoint
+  configured and no embedder selected
+- **THEN** it exits non-zero because unset model keys and the unselected
+  embedder report ✗
 - **AND** the stack is nonetheless healthy if `DATABASE_URL`, Postgres,
   configured agents, and registered tools all report ✔
+
+#### Scenario: An unselected embedder is a first-run state
+
+- **WHEN** a fresh stack has never had an embedder selected
+- **THEN** the embedder check reports ✗ naming the unselected state and the
+  stack is still considered correctly started
+
+#### Scenario: An uninitialised GBrain is a first-run state
+
+- **WHEN** a first-time stack has started and no GBrain brain has been
+  initialised
+- **THEN** the GBrain check reports it as uninitialised and names knowledge
+  search as unavailable, and the stack is still considered correctly started
 
 ### Requirement: Dashboard action observability
 
@@ -243,4 +283,3 @@ only.
 - **WHEN** `pytest` is invoked inside the app container
 - **THEN** it fails because neither the runner nor `tests/` is present
 - **AND** the suite must be run on the host via `uv run pytest`
-

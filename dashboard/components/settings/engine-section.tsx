@@ -22,6 +22,8 @@ import {
 import { toast } from "sonner";
 
 import { useI18n } from "@/components/i18n-provider";
+import { InlineCredential } from "@/components/settings/inline-credential";
+import { SettingsSectionShell } from "@/components/settings/section-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
@@ -106,16 +108,26 @@ export function EngineSection({
   initial,
   codingAgents,
   codingAgentAuth,
-  deepSeekKey,
+  credentialPresence,
+  onCredentialChange,
 }: {
   initial: EnginePreferences;
   codingAgents: CodingAgentSettings;
   codingAgentAuth: Record<CodingAgentAuthProvider, CodingAgentAuthView>;
-  deepSeekKey: boolean;
+  /** Owned by the settings page, shared with every other section and the
+   * read-only summary — a save here is visible everywhere immediately. */
+  credentialPresence: Record<string, boolean>;
+  onCredentialChange: (name: string, present: boolean) => void;
 }) {
+  const deepSeekKey = Boolean(credentialPresence.DEEPSEEK_API_KEY);
   const { t } = useI18n();
   const [saved, setSaved] = useState<EnginePreferences>(initial);
-  const [selected, setSelected] = useState<Engine>(initial.primary);
+  // Staged, not committed: clicking a card only opens its pane and proposes it
+  // as primary. Nothing writes until "Apply selection" is clicked, matching
+  // every other section's explicit-commit rule.
+  const [selected, setSelected] = useState<Engine>(initial.primary ?? "omlx");
+  const [pendingFallback, setPendingFallback] = useState<Fallback>(initial.fallback);
+  const [applying, setApplying] = useState(false);
   const [codex, setCodex] = useState(codingAgents.codex);
   const [claude, setClaude] = useState(codingAgents.claude);
   const [auth, setAuth] = useState(codingAgentAuth);
@@ -140,12 +152,16 @@ export function EngineSection({
    */
   const cardState = (engine: Engine): CardState => {
     switch (engine) {
-      case "omlx":
+      case "omlx": {
+        const hasEndpoint = Boolean(saved.omlx.baseUrl?.trim());
         return {
-          tone: "ok",
-          label: t.settings.engineStatusConfigured,
+          tone: hasEndpoint ? "ok" : "warn",
+          label: hasEndpoint
+            ? t.settings.engineStatusConfigured
+            : t.settings.engineStatusUnset,
           meta: saved.omlx.model,
         };
+      }
       case "deepseek":
         return {
           tone: deepSeekKey ? "ok" : "warn",
@@ -185,38 +201,67 @@ export function EngineSection({
     }
   };
 
-  /** Persist selection and fallback. Both are single, complete intents. */
-  const commitSelection = async (next: Partial<EnginePreferences>) => {
-    const merged = { ...saved, ...next };
+  /**
+   * Persist the staged primary/fallback together. A discrete choice on this
+   * page used to commit on click; this section's own selection no longer
+   * does — the click only proposes a card, and this is the one explicit
+   * commit that applies it.
+   */
+  const applySelection = async () => {
+    let fallback = pendingFallback;
     // The primary can never also be the fallback — picking one that already
     // held the fallback slot empties it rather than writing a loop.
-    if (merged.fallback === merged.primary) merged.fallback = "none";
-    const previous = saved;
-    setSaved(merged); // optimistic
+    if (fallback === selected) fallback = "none";
+    const next = { ...saved, primary: selected, fallback };
+    setApplying(true);
     try {
-      await setEnginePreferences(merged);
-      toast.success(t.settings.engineSaved);
+      await setEnginePreferences(next);
+      setSaved(next);
+      setPendingFallback(fallback);
+      toast.success(t.settings.enginePrimarySaved);
     } catch (err) {
       console.error("failed to update engine preferences", err);
-      setSaved(previous);
       toast.error(t.settings.saveFailed);
+    } finally {
+      setApplying(false);
     }
   };
 
-  const choose = (engine: Engine) => {
-    setSelected(engine);
-    if (engine !== saved.primary) void commitSelection({ primary: engine });
-  };
+  const applyDirty = selected !== saved.primary || pendingFallback !== saved.fallback;
+  // Rendered beside whichever pane's own Save/Reset row is currently showing
+  // — not in a separate block above the cards, which read as two disconnected
+  // controls for what an operator experiences as one decision.
+  const applyControl = applyDirty ? (
+    <Button
+      type="button"
+      size="sm"
+      variant="primary"
+      disabled={applying}
+      onClick={() => void applySelection()}
+    >
+      {applying ? t.settings.saving : t.settings.engineApplySelection}
+    </Button>
+  ) : null;
+  const summary =
+    saved.primary === null ? (
+      <span className="set-status idle">{t.settings.engineStatusUnset}</span>
+    ) : (
+      <span className="set-status ok">
+        <span className="dot" />
+        {NAMES[saved.primary]}
+      </span>
+    );
 
   return (
-    <section className="card pad set-card" id="engine">
-      <div className="set-row" style={{ marginBottom: 12 }}>
-        <div className="set-rowtext">
-          <span className="set-label">{t.settings.engine}</span>
-          <span className="set-hint">{t.settings.engineHint}</span>
-        </div>
-      </div>
-
+    <SettingsSectionShell
+      id="engine"
+      label={t.settings.engine}
+      hint={t.settings.engineHint}
+      summary={summary}
+    >
+      {saved.primary === null && (
+        <p className="set-note">{t.settings.engineUnselectedHint}</p>
+      )}
       <div className="set-engines">
         {ENGINES.map((engine) => {
           const Glyph = GLYPHS[engine];
@@ -227,7 +272,7 @@ export function EngineSection({
               type="button"
               aria-pressed={selected === engine}
               className={cn("set-engine", selected === engine && "on")}
-              onClick={() => choose(engine)}
+              onClick={() => setSelected(engine)}
             >
               <div className="set-enginetop">
                 <div className="set-engineid">
@@ -266,6 +311,7 @@ export function EngineSection({
         {selected === "omlx" && (
           <OmlxPane
             initial={saved.omlx}
+            extraActions={applyControl}
             onSave={async (omlx) => {
               const next = { ...saved, omlx };
               await setEnginePreferences(next);
@@ -277,6 +323,8 @@ export function EngineSection({
           <DeepSeekPane
             initial={saved.deepseek}
             hasKey={deepSeekKey}
+            onKeyChange={(present) => onCredentialChange("DEEPSEEK_API_KEY", present)}
+            extraActions={applyControl}
             onSave={async (deepseek) => {
               const next = { ...saved, deepseek };
               await setEnginePreferences(next);
@@ -291,6 +339,7 @@ export function EngineSection({
             onAuthChange={(next) =>
               setAuth((current) => ({ ...current, codex: next }))
             }
+            extraActions={applyControl}
             onSave={async (next) => {
               await setCodexSettings(next);
               setCodex(next);
@@ -304,6 +353,7 @@ export function EngineSection({
             onAuthChange={(next) =>
               setAuth((current) => ({ ...current, claude: next }))
             }
+            extraActions={applyControl}
             onSave={async (next) => {
               await setClaudeSettings(next);
               setClaude(next);
@@ -321,24 +371,22 @@ export function EngineSection({
           <select
             className="input mono"
             style={{ width: 210 }}
-            value={saved.fallback}
-            onChange={(e) =>
-              void commitSelection({ fallback: e.target.value as Fallback })
-            }
+            value={pendingFallback}
+            onChange={(e) => setPendingFallback(e.target.value as Fallback)}
           >
             <option value="none">{t.settings.engineFallbackNone}</option>
-            {/* The primary is removed rather than shown and rejected on save. */}
-            {ENGINES.filter((engine) => engine !== saved.primary).map(
-              (engine) => (
-                <option key={engine} value={engine}>
-                  {NAMES[engine]}
-                </option>
-              ),
-            )}
+            {/* The staged primary is removed rather than shown and rejected on
+                apply — it tracks `selected`, not the last saved primary, so a
+                pending card change doesn't leave a stale option selectable. */}
+            {ENGINES.filter((engine) => engine !== selected).map((engine) => (
+              <option key={engine} value={engine}>
+                {NAMES[engine]}
+              </option>
+            ))}
           </select>
         </div>
       </div>
-    </section>
+    </SettingsSectionShell>
   );
 }
 
@@ -356,12 +404,17 @@ export function PaneActions({
   canSave = true,
   onSave,
   onReset,
+  extra,
 }: {
   dirty: boolean;
   saving: boolean;
   canSave?: boolean;
   onSave: () => void;
   onReset: () => void;
+  /** An extra control for the same row — e.g. Engine's "Apply selection",
+   * which is a different commit than this pane's own Save but was confusing
+   * operators when it rendered in a disconnected block elsewhere on the page. */
+  extra?: ReactNode;
 }) {
   const { t } = useI18n();
   return (
@@ -384,6 +437,7 @@ export function PaneActions({
       >
         {saving ? t.settings.saving : t.settings.save}
       </Button>
+      {extra}
     </div>
   );
 }
@@ -427,9 +481,11 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 function OmlxPane({
   initial,
+  extraActions,
   onSave,
 }: {
   initial: OmlxSettings;
+  extraActions?: ReactNode;
   onSave: (value: OmlxSettings) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -451,6 +507,7 @@ function OmlxPane({
           id="omlx-endpoint"
           className="mono"
           value={value.baseUrl}
+          placeholder="http://host.docker.internal:8000/v1"
           onChange={(e) => setValue({ ...value, baseUrl: e.target.value })}
           autoCapitalize="none"
           autoCorrect="off"
@@ -483,12 +540,16 @@ function OmlxPane({
         </Field>
       </div>
       <p className="set-note">{t.settings.omlxHint}</p>
+      <p className="set-note">{t.settings.omlxEndpointHint}</p>
       <PaneActions
         dirty={dirty}
         saving={saving}
-        canSave={Boolean(value.baseUrl.trim() && value.model.trim())}
+        // An empty endpoint is savable: it is how an operator says they have no
+        // local server, which sends OMLX profiles to their cloud fallback.
+        canSave={Boolean(value.model.trim())}
         onSave={() => void save()}
         onReset={reset}
+        extra={extraActions}
       />
     </>
   );
@@ -497,10 +558,14 @@ function OmlxPane({
 function DeepSeekPane({
   initial,
   hasKey,
+  onKeyChange,
+  extraActions,
   onSave,
 }: {
   initial: DeepSeekSettings;
   hasKey: boolean;
+  onKeyChange: (present: boolean) => void;
+  extraActions?: ReactNode;
   onSave: (value: DeepSeekSettings) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -543,14 +608,12 @@ function DeepSeekPane({
             ))}
           </Segmented>
         </Field>
-        {!hasKey && (
-          <div className="set-formwide">
-            <span className="badge amber">
-              <span className="dot" />
-              {t.settings.engineStatusNoKey}
-            </span>
-          </div>
-        )}
+        <InlineCredential
+          name="DEEPSEEK_API_KEY"
+          label="DEEPSEEK_API_KEY"
+          present={hasKey}
+          onChange={onKeyChange}
+        />
       </div>
       <p className="set-note">{t.settings.deepseekHint}</p>
       <p className="set-note">{t.settings.deepseekKeyHint}</p>
@@ -560,6 +623,7 @@ function DeepSeekPane({
         canSave={Boolean(value.model.trim())}
         onSave={() => void save()}
         onReset={reset}
+        extra={extraActions}
       />
     </>
   );
@@ -569,11 +633,13 @@ function CodexPane({
   initial,
   auth,
   onAuthChange,
+  extraActions,
   onSave,
 }: {
   initial: CodexSettings;
   auth: CodingAgentAuthView;
   onAuthChange: (value: CodingAgentAuthView) => void;
+  extraActions?: ReactNode;
   onSave: (value: CodexSettings) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -662,6 +728,7 @@ function CodexPane({
         )}
         onSave={() => void save()}
         onReset={reset}
+        extra={extraActions}
       />
     </>
   );
@@ -671,11 +738,13 @@ function ClaudePane({
   initial,
   auth,
   onAuthChange,
+  extraActions,
   onSave,
 }: {
   initial: ClaudeSettings;
   auth: CodingAgentAuthView;
   onAuthChange: (value: CodingAgentAuthView) => void;
+  extraActions?: ReactNode;
   onSave: (value: ClaudeSettings) => Promise<void>;
 }) {
   const { t } = useI18n();
@@ -735,6 +804,7 @@ function ClaudePane({
         canSave={Boolean(value.model.trim() && value.effort)}
         onSave={() => void save()}
         onReset={reset}
+        extra={extraActions}
       />
     </>
   );

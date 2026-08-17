@@ -12,7 +12,7 @@
 - pnpm（没有的话 `npm install -g pnpm`；推荐 pnpm 11+）
 - `uv` 在 `PATH` 上（server action 调 `next-signal ...` 用）
 - `gbrain` 在 `PATH` 上（knowledge 搜索的 server action 用）
-- `npx` 和一个 Folo token 供 `/subscriptions` 用（设置 → 凭据）
+- `npx` 和一个 Folo token 供 `/subscriptions` 用（设置 → RSS）
 
 ## 运行
 
@@ -62,7 +62,7 @@ spawn 一次性 `next-signal` CLI 子进程 —— 没有任何一个走 AgentOS
 | `DATABASE_URL`             | （Postgres URL）          | `dashboard-radar`（直接读 DB）                                     |
 | `NEXT_SIGNAL_DATABASE_URL` | `DATABASE_URL`            | 可选的 dashboard 专用 Postgres URL                                 |
 | `INFO_RADAR_TIMEZONE`      | `America/Los_Angeles`     | `/radar` 按日历天分组 + recap 区间                                 |
-| _(`FOLO_TOKEN`)_           | 不是环境变量              | 在设置 → 凭据里填；`/subscriptions` 用                             |
+| _(`FOLO_TOKEN`)_           | 不是环境变量              | 在设置 → RSS 里填；`/subscriptions` 用                              |
 | `FOLO_CLI_ARGV`            | `npx --yes folocli@0.0.5` | 可选，覆盖 Folo CLI 启动方式                                       |
 
 ## 视觉设计系统
@@ -137,21 +137,28 @@ dashboard 的界面文案**默认英文**，通过 nav 上的语言选择器切�
 
 ## 设置
 
-nav 上的**齿轮按钮**现在链接到 `/settings`——一个带固定侧栏的页面，分四组：内容语言、
-定时运行、模型引擎、向量嵌入。它取代了原来的 nav 弹层：几段内容堆在 22rem 的面板里，
-引擎那一组根本没地方展开。
+nav 上的**齿轮按钮**现在链接到 `/settings`——一个带固定侧栏的页面，七个可折叠区块：内容
+语言、定时运行、模型引擎、雷达向量嵌入、知识库向量嵌入、RSS，加一份只读的凭据汇总。它取代了
+原来的 nav 弹层：几段内容堆在 22rem 的面板里，引擎那一组根本没地方展开。
 
-所有值都在 `app/settings/page.tsx` 里服务端解析，所以控件首次渲染就显示真实状态，挂载
-时不发请求。什么时候落盘由控件本身决定，而不是由所在的 section 决定：
+每个区块默认**折叠**，只显示标签和当前选择的一行摘要（或者「未配置」）；要改什么必须先
+展开。所有值都在 `app/settings/page.tsx` 里服务端解析，所以控件首次渲染就显示真实状态，
+挂载时不发请求。什么时候落盘由控件本身决定，而不是由所在的 section 决定：
 
 | 控件 | 提交时机 | 为什么 |
 |---|---|---|
 | Segmented（语言、开关、跳过/补跑、并发） | 点击即提交 | 一次交互本身就是一个完整、合法的意图 |
 | 定时的时间 | 失焦 / 回车 | 原生 time 输入每编辑一段就发出一个完整值，逐次保存会写进半截时间 |
-| 某个引擎或 embedder 自己的参数 | 显式 **保存** | 部分组合是非法的，不能发出去 |
+| 某个引擎、embedder 或 GBrain provider 自己的参数 | 显式 **保存配置** | 部分组合是非法的，不能发出去 |
+| 哪个引擎是主引擎、选中哪个 embedder | 引擎一节的显式 **应用选择**，或雷达/知识库向量嵌入面板自己带确认的保存 | 选中卡片只是提议，真正落盘要靠单独的提交动作，和上面的普通离散选择不同 |
 
 无论哪条路径，写成功都会弹 toast，写失败会把控件回滚——乐观更新的控件不管有没有落盘
 都会动。
+
+每个凭据（`DEEPSEEK_API_KEY`、两个 OpenAI key、`EMBEDDING_API_KEY`、`VOYAGE_API_KEY`、
+`GOOGLE_GENERATIVE_AI_API_KEY`、`FOLO_TOKEN`）都直接填在用到它的那个区块里——不再有
+共用的凭据填写区。页面最下面的**凭据**区块是一份只读、只显示是否配置的汇总，方便一眼
+看到整体配置情况，不能在那里填写或清除任何东西。
 
 ## 内容语言
 
@@ -165,10 +172,18 @@ nav 上的**齿轮按钮**现在链接到 `/settings`——一个带固定侧栏
 
 ## 模型引擎
 
-第三组选 next-signal 调用哪个引擎，四个平级呈现——**本地模型**、**DeepSeek**、
+模型引擎区块选 next-signal 调用哪个引擎，四个平级呈现——**本地模型**、**DeepSeek**、
 **Codex CLI**、**Claude Code CLI**——选中哪个就在下面展开哪个的设置，再加一条"连不上
 时"的回落。屏幕上永远只有被选中那一个的表单；四张表单堆在一起，正是这套设置需要一个
 独立页面的原因。
+
+**全新安装什么都不选中**，没应用之前没有卡片会显示为已选——这不只是表面功夫：在
+Python 那一侧，`EnginePreferences.primary` 现在是真正可选的，每个生产 stage job
+（`stage_job()`）在没有保存任何引擎时会先抛出一个专门的 `EngineNotSelected`，
+而不是像以前那样默默回落到本地模型。点击卡片只是把它提议为主引擎；真正的提交是
+一个显式的**应用选择**动作（渲染在当前展开面板自己的保存按钮旁边，不是单独一块），
+和这个页面别的地方"离散选择点击即提交"的规则不同，而是跟"自己的参数需要显式保存"
+那条规则走。
 
 它们对使用者是平级的，在磁盘上不是。拆分方式跟着"谁本来就拥有这个值"走：
 
@@ -177,9 +192,14 @@ nav 上的**齿轮按钮**现在链接到 `/settings`——一个带固定侧栏
 | Codex CLI · Claude Code CLI 的模型 / 强度 / 速度 | `~/.next-signal/coding-agents.json` | 调用对应 CLI 时校验 |
 | 主引擎、回落、OMLX 和 DeepSeek 设置 | `~/.next-signal/engine.json` | 每个 production job 开始时读取一次；修改从下一单生效 |
 
-`engine.json` 里没设过的字段会回落到 `configs/models.yaml` 和 `OMLX_BASE_URL` 的值，
-所以全新安装看到的是真实的端点和模型，而不是 dashboard 编出来的默认值。
-`DEEPSEEK_API_KEY` 来自凭据仓库（设置 → 凭据）——页面只报告它有没有配置，不读取也不存储密钥本身。
+`engine.json` 里没设过的字段会从 `configs/models.yaml` 拿**表单预填**——给 OMLX/DeepSeek
+面板自己的字段一个建议模型串，绝不是选中的主引擎。本地端点没有任何 baseline，
+初始就是**空的**——仓库拿不出一个正确的值，而从本容器的环境里读一个，等于把 dashboard
+自己的答案显示成 scheduler 的答案。端点留空是可以保存的——这就是「我没有本地服务」的
+表达方式，OMLX profile 会因此走云端回落。OMLX 卡片的状态反映的是这个端点是不是真的
+存过了，不是一个固定写死的"已配置"。改动对定时任务和新命令立即生效；AgentOS 里
+已经跑起来的 agent 要等该进程重启才会用上。
+`DEEPSEEK_API_KEY` 直接填在 DeepSeek 面板里——页面只报告它有没有配置，不读取也不存储密钥本身。
 同一个 production job 的所有 LLM stage 都使用同一个选定引擎。只有第一次成功响应之前的
 provider 故障可以触发配置的回落；一旦成功，后续 stage 和 schema 修复都固定在该引擎。
 卡片状态只反映 dashboard 能观察到的事实（密钥是否存在、模型是否选了）；这里不去
@@ -197,32 +217,71 @@ next-signal 才能调用。这里刻意不硬编码 CLI 默认值，因为 provi
 状态，并提供有边界的连接/重新连接/断开流程。它只调用固定的 provider 认证命令，生成的
 文件仍留在 provider 自己的 auth volume；模型设置继续放在 `coding-agents.json`。
 
-## 向量嵌入
+## 雷达向量嵌入
 
-第四组选的是雷达去重背后的 embedder，只写 `~/.next-signal/embedding.json`。它复用引擎那
-组的卡片和面板，因为交互是同一套；但后果不是：换 LLM 只是换谁来回答问题，换 embedder
-换的是*向量空间*——上一个身份下记住的所有主题都会被搁置，直到你切回去。这一组在点击之前
-就把这件事说清楚，并原样显示当前的身份（`omlx:<model>`、`openai:<model>` 或
+这一节选的是雷达去重背后的 embedder，只写 `~/.next-signal/embedding.json`。它复用引擎那
+组的卡片和面板，因为交互是同一套；但后果比引擎大得多：**一旦保存，这一节就整节永久
+锁定**——之后每张卡片和面板都变成只读，UI 上没有任何路子能改回去。换一个模型会产生和
+已存向量不可比较的新向量，所以这是本次安装生命周期里的一次性选择，不像引擎那样可以
+随时切换。锁定后原样显示当前的身份（`omlx:<model>`、`openai:<model>` 或
 `openai_compatible:<space_id>`）。
 
-三个平级选项——**本地模型**、**OpenAI**、**自定义端点**——其中有一处不对称值得知道：
+**全新安装什么都不选中**，这一节会写明：在你选一个 embedder 之前去重是关着的，
+雷达其余部分照常运行。仓库没有一个能替你老实挑的 provider——本地那个要一个只有你知道的
+地址，云端那两个要密钥、要花钱。
+
+三个平级选项——**本地模型**、**OpenAI**、**自定义端点**——锁定之前行为完全一致：
 
 | 卡片 | 选中它时 |
 |---|---|
-| 本地模型、OpenAI | 点击即提交，用该 provider 上次保存的参数 |
-| 自定义端点，在第一次保存之前 | **只展开面板，什么都不写**——没有 baseline 可选 |
-| 自定义端点，保存之后 | 和其他卡片一样点击即提交 |
+| 设置尚不完整的卡片 | **只展开面板，什么都不写**——还没有可选的有效配置 |
+| 第一个填完整、凭据也存好的面板 | 先弹确认——这个选择是永久的——然后提交并锁定这一节 |
 
-自定义端点在整个仓库里都没有出厂默认值，所以它的面板是全有或全无：**保存**会把
-`base_url`、`model`、`api_key_env`、`space_id` 一起存下来，并在同一次写入里让它生效。
-`space_id` 是你自己给这个端点产出的向量起的名字——权重、分词器、pooling 或量化变了就换
-一个；同一个服务换个 URL 不需要换。
+面板打开时会用 `configs/models.yaml` 的建议值预填——那是表单预填，不是默认值；只有你
+保存下来的东西才会跑。**保存配置**会存下该 provider 的字段，并在同一次写入里选中它。
 
-没有任何凭据经过这个页面。自定义端点收的是环境变量的*名字*，不是密钥；它的 URL 被限制
-为纯 API 根地址，所以密钥没法藏在 userinfo、query 或 fragment 里被存下来。密钥在不在是
-服务端算好的，传到浏览器的只是一个布尔值。因为取值是从流水线自己的进程环境读的，改完
-`.env` 要重启宿主进程或重建 Compose 服务它才存在——面板里写着这一点。云端 provider 还会
-说明：每条留下来的条目，摘要都会离开本机，而且可能计费，包括无人值守的定时运行。
+本地卡片有**自己的 API 根地址**，和引擎一节的那个是两回事：一个 mlx-lm 进程只挂一个
+模型，所以对话模型和嵌入模型是两个端口。自定义端点上的 `space_id` 是你自己给这个端点
+产出的向量起的名字——权重、分词器、pooling 或量化变了就换一个；同一个服务换个 URL 不需要换。
+
+每个云端面板的凭据都**直接填在那个面板里**——OpenAI 用 `RADAR_EMBEDDING_OPENAI_API_KEY`，
+自定义端点用 `EMBEDDING_API_KEY`——保存要求这个凭据必须已经存在，不只是其他字段填完，
+因为这次保存马上就要把这一节永久锁定。`RADAR_EMBEDDING_OPENAI_API_KEY` 和 GBrain 自己的
+`OPENAI_API_KEY`（见下面「知识库向量嵌入」）是两个不同的存储凭据，虽然都叫「OpenAI
+key」——它们是两条独立的嵌入流程，过去只是碰巧共用一个名字。URL 被限制为纯 API 根地址，
+所以密钥没法藏在 userinfo、query 或 fragment 里被存下来。密钥在不在是服务端算好的，
+传到浏览器的只是一个布尔值。云端 provider 还会说明：每条留下来的条目，摘要都会离开
+本机，而且可能计费，包括无人值守的定时运行。
+
+## 知识库向量嵌入
+
+这一节配置并初始化 **GBrain** 知识库搜索用的 embedding provider——和上面的雷达向量嵌入
+相互独立，配的是完全不同的一个 provider、不同的向量空间。它是过去只能靠 CLI 做的事情
+现在的 dashboard 入口：`next-signal knowledge gbrain-init --embedding-model
+<provider>:<model>`。
+
+六个平级选项——**OpenAI**、**Voyage**、**Google**、**Ollama**、**LM Studio**、
+**llama-server**——三个云端的需要在自己面板里填凭据（分别是 `OPENAI_API_KEY`、
+`VOYAGE_API_KEY`、`GOOGLE_GENERATIVE_AI_API_KEY`——这几个名字是 GBrain 自己的子进程从
+环境变量里按这个精确名字读的，是这个 dashboard 管不了的外部约定），三个本地 runner
+不需要任何凭据。保存云端面板同样要求凭据必须已经存在，跟雷达向量嵌入一样的规则。
+
+保存是两步提交：先弹一个警告——这个模型选择**对这个 GBrain 实例是永久的**（它会决定
+GBrain 的 Postgres schema 大小；对一个已初始化的 brain 再跑一次 `gbrain-init` 会拒绝，
+而不是重新配置它）——然后才真正调用 `gbrain-init`——这一步是等待完成的，不是发了就不管，
+这样这一节才能在决定是否锁定之前知道真实结果。成功就锁定这一节；失败（包括「已经
+初始化过」）则保持打开状态并报告错误。
+
+这一节把 GBrain 的就绪状态报成三种之一——**未初始化**、**已初始化但缺凭据**、
+**已就绪**——做法是直接读 `.gbrain/config.json`，跟 `next-signal doctor` 用的是同一套
+逻辑，而不是相信 `gbrain doctor --fast`（哪怕没有任何 brain 存在，它也会报健康）。
+
+## RSS
+
+这一节管着 `FOLO_TOKEN`——info-radar 的 Folo 来源和 `/subscriptions` 页面都要用的凭据。
+两个入口：**登录 Folo**（新开一个标签页打开 Folo，在 dashboard 自己 host 的 callback
+路由上换取返回的一次性 token，存下换来的 session token）和**手动粘贴**（弹出一个小弹窗，
+给连不上 dashboard 的浏览器，或者登录失败时用——两条路径存下的结果完全一样）。
 
 ## 定时运行
 

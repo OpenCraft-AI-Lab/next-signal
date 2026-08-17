@@ -12,15 +12,19 @@ from next_signal.core.engine_preferences import (
 
 
 @pytest.fixture
-def defaults(monkeypatch: pytest.MonkeyPatch) -> EnginePreferences:
-    monkeypatch.setenv("OMLX_BASE_URL", "http://omlx.test/v1")
+def defaults() -> EnginePreferences:
     return configured_engine_defaults()
 
 
 def test_configured_defaults_follow_models_yaml(defaults: EnginePreferences) -> None:
-    assert defaults.primary == "omlx"
-    assert defaults.fallback == "deepseek"
-    assert defaults.omlx.base_url == "http://omlx.test/v1"
+    # No engine is chosen on a fresh install — `models.yaml` only prefills the
+    # omlx/deepseek panes' own fields, the same way `embedders` prefills Radar
+    # Embedding's panes without selecting a provider.
+    assert defaults.primary is None
+    assert defaults.fallback == "none"
+    # The local server's address is the one thing the repo cannot know, so a
+    # fresh install reads as unset rather than borrowing an environment value.
+    assert defaults.omlx.base_url is None
     assert defaults.omlx.model == "Qwen3.5-122B-A10B-mlx-oQ4"
     assert defaults.omlx.parallel == 2
     assert defaults.deepseek.model == "deepseek-v4-flash"

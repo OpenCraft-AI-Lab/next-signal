@@ -44,11 +44,15 @@ production workflow 调 `run_stage`：每个 job 读取一次 `engine.json`，AP
   放宽实验做过、无效，结论固化在 `configs/models.yaml` 注释里。
 - **回落链**：构建 provider 时抛 `RuntimeError`（典型：OMLX 端点不可达）→ 自动改建
   `fallback_profile`；`KeyError` / `ValueError`（程序员错误）不回落、直接抛。
-  结果是 lru-cached 的——**OMLX 恢复后必须 `next_signal.core.models.reset_cache()` 才会重试本地**，
-  长驻进程（`next-signal serve`）尤其注意。
-- `next_signal.core.omlx.resolve_omlx_endpoint()` 是唯一读取 `OMLX_BASE_URL`（环境）
-  和 `OMLX_API_KEY`（凭据库）的位置；普通调用走 strict public wrapper
-  `next_signal.core.models.omlx_endpoint()`。其他地方不要复制这套逻辑。
+  **模型不缓存**——它们构建时用的端点和凭据都在可以随时改动的用户状态里，profile 名字
+  已经不能决定结果了——所以 OMLX 恢复后下一次调用自己就会重试本地，不需要任何手工步骤。
+  唯一的例外是**持有**已构建模型的调用方：`next-signal serve` 在 import 时一次性构建
+  agent，所以那些要等进程重启才会用上新端点。stage 模型按 job、embedder 按 item 解析。
+- `next_signal.core.omlx.resolve_omlx_endpoint()` 是唯一读取本地对话端点的位置，
+  `base_url` 取自 `engine.json`、`OMLX_API_KEY` 取自凭据库；普通调用走 strict public
+  wrapper `next_signal.core.models.omlx_endpoint()`。其他地方不要复制这套逻辑，也不要
+  从环境变量读端点——dashboard 和 scheduler 是两个容器，共享 `/state` 但不共享环境。
+  embedder 的 OMLX 端点又是另一个，在 `embedding.json` 里。
 - Qwen3 细节固化在 `_build_omlx`：关 thinking、sampling 参数、结构化输出走 OpenAI 标准
   `response_format` json_schema（OMLX 侧 xgrammar 约束解码），agno 的 native structured
   outputs 保持关闭。
@@ -76,9 +80,14 @@ production workflow 调 `run_stage`：每个 job 读取一次 `engine.json`，AP
   `radar_pushed_topics.embedding` 在换 provider 时仍然是 `vector(1024)`——同时也排除了做
   不到这个宽度的定宽模型，比如 `text-embedding-ada-002`。
 
+  **不选就没有 embedder。** 文件不存在、或存在但没写 provider，都解析为「未选中」；
+  `get_embedder()` 抛 `EmbedderNotSelected`——一个独立的类型，让调用方能区分「还没配」
+  和「配了但坏了」——dedup gate 据此把自己关掉，整条链路其余部分照常跑。
+  `configs/models.yaml::embedders` 是表单预填，不是默认值。
+
   **状态和密钥是分开的。** 状态文件存的是选择、模型、API 根地址和向量空间 id，从不存
-  密钥。`openai` 读 `OPENAI_API_KEY`，通用 provider 读 `api_key_env` 里*写着名字*的那个
-  凭据，都在构建快照时从凭据库读。状态文件和凭据库都是构建快照时才读，所以改哪一个都是
+  密钥，连凭据的名字都不存。每个 provider 的凭据都有固定名字——`OMLX_API_KEY`（可选）、
+  `OPENAI_API_KEY`、`EMBEDDING_API_KEY`——在构建快照时从凭据库读。状态文件和凭据库都是构建快照时才读，所以改哪一个都是
   下一个 item 生效——不用重启，也不用 `--force-recreate`。embedder 没有
   回落：两个 LLM 可以互相替代，两个 embedder 不行，所以失败直接抛，由 dedup gate 把该
   条目按 novel 处理。

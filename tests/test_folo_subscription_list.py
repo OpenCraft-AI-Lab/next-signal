@@ -32,7 +32,7 @@ def test_missing_token_raises_before_spawning(monkeypatch) -> None:
         folo.subprocess, "run", lambda args, **kw: spawned.append(list(args))
     )
 
-    with pytest.raises(RuntimeError, match="FOLO_TOKEN is not configured.*Settings"):
+    with pytest.raises(RuntimeError, match="FOLO_TOKEN is not configured.*settings page"):
         folo.subscription_list()
 
     assert spawned == []

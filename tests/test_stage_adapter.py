@@ -11,7 +11,7 @@ from next_signal.core.coding_agent_preferences import (
     CodingAgentPreferences,
     CodexPreferences,
 )
-from next_signal.core.engine_preferences import configured_engine_defaults
+from next_signal.core.engine_preferences import EngineNotSelected, configured_engine_defaults
 from next_signal.integrations.coding_agents.types import CodingAgentResult
 
 
@@ -31,6 +31,14 @@ def _codex_prefs(model: str, effort: str = "high") -> CodingAgentPreferences:
             model=model, model_reasoning_effort=effort, service_tier="fast"
         )
     )
+
+
+def test_nothing_selected_raises_its_own_type() -> None:
+    """Distinguishable from a failure, mirroring `EmbedderNotSelected` — no
+    degraded mode exists for a production stage job, so this blocks it."""
+    with pytest.raises(EngineNotSelected, match="No engine has been selected"):
+        with stage.stage_job(configured_engine_defaults()):
+            pass
 
 
 def test_primary_failure_before_first_response_pins_fallback(monkeypatch) -> None:

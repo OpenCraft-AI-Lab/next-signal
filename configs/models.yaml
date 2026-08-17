@@ -96,16 +96,19 @@ profiles:
   #   model_id: gpt-5.2
   #   temperature: 0.4
 
-# Per-provider embedder baselines for the dedup gate. These are defaults, not
-# the live selection: `~/.next-signal/embedding.json` picks which provider runs
-# and may override these models (see next_signal.core.embedding_preferences).
-# `local` doubles as the fresh-install selection.
+# Suggested embedder models for the dedup gate — form prefill, NOT defaults.
+# Nothing here selects a provider or reaches the pipeline: an unconfigured
+# settings pane opens with these values, and only what an operator saves into
+# `~/.next-signal/embedding.json` ever runs (see
+# next_signal.core.embedding_preferences). A fresh install has no embedder at
+# all, which turns deduplication off until someone chooses one.
 #
 # Every embedder must emit exactly 1024 values — get_embedder rejects anything
 # else, and the hosted providers request `dimensions: 1024` — so
 # radar_pushed_topics.embedding stays vector(1024) across a provider switch.
-# There is no generic-endpoint entry here on purpose: its URL, key variable, and
-# vector-space id have no honest repo-wide default and are operator state.
+# There is no generic-endpoint entry here on purpose: its URL and vector-space
+# id have no honest repo-wide default and are operator state. Neither is the
+# local endpoint, for the same reason.
 embedders:
   local:
     provider: omlx

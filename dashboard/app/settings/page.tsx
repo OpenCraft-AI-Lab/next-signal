@@ -1,7 +1,11 @@
 import { SettingsView } from "@/components/settings/settings-view";
 import { getCodingAgentSettings } from "@/lib/actions/coding-agent-settings";
-import { getEmbeddingPreferences } from "@/lib/actions/embedding";
+import {
+  getEmbeddingPrefill,
+  getEmbeddingPreferences,
+} from "@/lib/actions/embedding";
 import { getEnginePreferences } from "@/lib/actions/engine";
+import { getGbrainReadiness } from "@/lib/actions/knowledge-embedding";
 import { getContentLanguage } from "@/lib/actions/language";
 import { getSchedule, getScheduleStatus } from "@/lib/actions/schedule";
 import { getCredentialPresence } from "@/lib/actions/secrets";
@@ -30,8 +34,14 @@ export default async function SettingsPage() {
     codingAgentAuth,
     engine,
     embedding,
+    embeddingPrefill,
+    knowledgeEmbeddingReadiness,
     schedule,
     scheduleStatus,
+    // Presence from the credential store, resolved server-side. Every
+    // credential now has a fixed name, so this needs nothing from the embedding
+    // state. Booleans cross to the client — never a value, in whole or in part.
+    presence,
   ] = await Promise.all([
     getLocale(),
     getContentLanguage(),
@@ -39,23 +49,13 @@ export default async function SettingsPage() {
     getCodingAgentAuthViews(),
     getEnginePreferences(),
     getEmbeddingPreferences(),
+    getEmbeddingPrefill(),
+    getGbrainReadiness(),
     getSchedule(),
     getScheduleStatus(),
+    getCredentialPresence(),
   ]);
   const t = getDictionary(locale);
-  // Presence from the credential store, resolved server-side. The custom
-  // embedding endpoint names its own credential, so which extra name to report
-  // is only knowable after reading the saved embedding state. Booleans cross to
-  // the client — never a value, in whole or in part.
-  const presence = await getCredentialPresence(
-    embedding.openaiCompatible ? [embedding.openaiCompatible.apiKeyEnv] : [],
-  );
-  const deepSeekKey = presence.DEEPSEEK_API_KEY;
-  const openAiKey = presence.OPENAI_API_KEY;
-  const embeddingCompatibleKey = Boolean(
-    embedding.openaiCompatible &&
-      presence[embedding.openaiCompatible.apiKeyEnv],
-  );
 
   return (
     <div className="page page-enter">
@@ -69,10 +69,9 @@ export default async function SettingsPage() {
           codingAgentSettings={codingAgentSettings}
           codingAgentAuth={codingAgentAuth}
           engine={engine}
-          deepSeekKey={deepSeekKey}
           embedding={embedding}
-          openAiKey={openAiKey}
-          embeddingCompatibleKey={embeddingCompatibleKey}
+          embeddingPrefill={embeddingPrefill}
+          knowledgeEmbeddingReadiness={knowledgeEmbeddingReadiness}
           credentialPresence={presence}
           schedule={schedule}
           scheduleStatus={scheduleStatus}

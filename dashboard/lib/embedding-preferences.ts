@@ -6,15 +6,15 @@
  * as strict — both sides read and write the same `~/.next-signal/embedding.json`,
  * so a value this file accepts is a value the pipeline must also accept.
  *
- * `omlx` and `openai` have real baselines in `configs/models.yaml` under
- * `embedders:`, so an unset field reads back as whatever the repo is configured
- * with. `openai_compatible` describes an endpoint this repo has never seen — no
- * honest universal URL, model, key-variable name, or vector space exists for it
- * — so its section is optional and, once present, complete.
+ * Nothing is selected until an operator selects it: `provider: null` is the
+ * fresh-install state, not an error. `configs/models.yaml` supplies suggestions
+ * for a pane someone is filling in, never a value that runs. Every section is
+ * therefore optional and, once present, complete — there is no baseline for a
+ * partial one to inherit.
  *
- * Nothing here ever holds a credential. The generic section stores the *name* of
- * an environment variable, and its base URL is restricted to a plain API root so
- * a key cannot be smuggled in through userinfo or a query parameter.
+ * Nothing here ever holds a credential, or names one: each provider's key has a
+ * fixed name in the credential store. Base URLs are restricted to a plain API
+ * root so a key cannot be smuggled in through userinfo or a query parameter.
  */
 
 export const EMBEDDING_PROVIDERS = [
@@ -26,6 +26,12 @@ export const EMBEDDING_PROVIDERS = [
 export type EmbeddingProvider = (typeof EMBEDDING_PROVIDERS)[number];
 
 export interface OmlxEmbeddingSettings {
+  /**
+   * The embedding server's own address. Separate from the engine section's
+   * local endpoint: one mlx-lm process serves one model, so a chat model and an
+   * embedding model are two ports.
+   */
+  baseUrl: string;
   model: string;
 }
 
@@ -36,7 +42,6 @@ export interface OpenAIEmbeddingSettings {
 export interface OpenAICompatibleEmbeddingSettings {
   baseUrl: string;
   model: string;
-  apiKeyEnv: string;
   /**
    * The logical name of the vector space this endpoint produces. Separate from
    * `model` because two endpoints can advertise the same model name while
@@ -47,9 +52,10 @@ export interface OpenAICompatibleEmbeddingSettings {
 }
 
 export interface EmbeddingPreferences {
-  provider: EmbeddingProvider;
-  omlx: OmlxEmbeddingSettings;
-  openai: OpenAIEmbeddingSettings;
+  /** `null` until an operator chooses one. Dedup is inactive until they do. */
+  provider: EmbeddingProvider | null;
+  omlx: OmlxEmbeddingSettings | null;
+  openai: OpenAIEmbeddingSettings | null;
   openaiCompatible: OpenAICompatibleEmbeddingSettings | null;
 }
 
@@ -61,18 +67,12 @@ const TOP_LEVEL_KEYS = new Set([
   "updated_at",
   "updated_by",
 ]);
-const OMLX_KEYS = new Set(["model"]);
+const OMLX_KEYS = new Set(["base_url", "model"]);
 const OPENAI_KEYS = new Set(["model"]);
-const COMPATIBLE_KEYS = new Set([
-  "base_url",
-  "model",
-  "api_key_env",
-  "space_id",
-]);
+const COMPATIBLE_KEYS = new Set(["base_url", "model", "space_id"]);
 
 /** Same shape as every other model id the settings page accepts. */
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
-const API_KEY_ENV = /^[A-Z][A-Z0-9_]{0,63}$/;
 const SPACE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -163,28 +163,24 @@ export function normalizeCompatibleBaseUrl(value: string): string {
 export function validateEmbeddingPreferences(
   value: EmbeddingPreferences,
 ): EmbeddingPreferences {
-  if (!EMBEDDING_PROVIDERS.includes(value.provider)) {
+  if (value.provider !== null && !EMBEDDING_PROVIDERS.includes(value.provider)) {
     throw new Error(`unknown embedding provider: ${value.provider}`);
   }
 
-  const compatible = value.openaiCompatible;
-  if (value.provider === "openai_compatible" && compatible === null) {
-    throw new Error(
-      "openai_compatible is selected but has no saved configuration; save " +
-        "base_url, model, api_key_env, and space_id before selecting it",
-    );
-  }
+  const checkedOmlx: OmlxEmbeddingSettings | null = value.omlx
+    ? {
+        baseUrl: normalizeCompatibleBaseUrl(value.omlx.baseUrl),
+        model: checkedModel(value.omlx.model, "OMLX"),
+      }
+    : null;
+
+  const checkedOpenAI: OpenAIEmbeddingSettings | null = value.openai
+    ? { model: checkedModel(value.openai.model, "OpenAI") }
+    : null;
 
   let checkedCompatible: OpenAICompatibleEmbeddingSettings | null = null;
-  if (compatible !== null) {
-    const apiKeyEnv = compatible.apiKeyEnv.trim();
-    if (!API_KEY_ENV.test(apiKeyEnv)) {
-      throw new Error(
-        "api_key_env stores an environment variable NAME: 1-64 uppercase " +
-          `letters, digits, or underscores, starting with a letter: ${apiKeyEnv}`,
-      );
-    }
-    const spaceId = compatible.spaceId.trim();
+  if (value.openaiCompatible !== null) {
+    const spaceId = value.openaiCompatible.spaceId.trim();
     if (!SPACE_ID.test(spaceId)) {
       throw new Error(
         "space_id must be 1-128 letters, digits, dots, underscores, or " +
@@ -192,32 +188,40 @@ export function validateEmbeddingPreferences(
       );
     }
     checkedCompatible = {
-      baseUrl: normalizeCompatibleBaseUrl(compatible.baseUrl),
-      model: checkedModel(compatible.model, "OpenAI-compatible"),
-      apiKeyEnv,
+      baseUrl: normalizeCompatibleBaseUrl(value.openaiCompatible.baseUrl),
+      model: checkedModel(value.openaiCompatible.model, "OpenAI-compatible"),
       spaceId,
     };
   }
 
+  const sections = {
+    omlx: checkedOmlx,
+    openai: checkedOpenAI,
+    openai_compatible: checkedCompatible,
+  };
+  if (value.provider !== null && sections[value.provider] === null) {
+    throw new Error(
+      `${value.provider} is selected but has no saved configuration; save its ` +
+        "settings before selecting it",
+    );
+  }
+
   return {
     provider: value.provider,
-    omlx: { model: checkedModel(value.omlx.model, "OMLX") },
-    openai: { model: checkedModel(value.openai.model, "OpenAI") },
+    omlx: checkedOmlx,
+    openai: checkedOpenAI,
     openaiCompatible: checkedCompatible,
   };
 }
 
 /**
- * Read the stored preferences, filling every absent OMLX/OpenAI field from
- * `base` — the values resolved from `configs/models.yaml`. The compatible
- * section has no baseline to fall back on, so it is read whole or not at all: a
+ * Read the stored preferences.
+ *
+ * Every section is read whole or not at all: with nothing to inherit from, a
  * partial section fails rather than silently completing itself from values this
  * file would have had to invent.
  */
-export function parseEmbeddingPreferences(
-  raw: string,
-  base: EmbeddingPreferences,
-): EmbeddingPreferences {
+export function parseEmbeddingPreferences(raw: string): EmbeddingPreferences {
   const data: unknown = JSON.parse(raw);
   if (!isRecord(data)) {
     throw new Error("embedding preferences must be an object");
@@ -229,13 +233,26 @@ export function parseEmbeddingPreferences(
     }
   }
 
-  const omlx = data.omlx ?? {};
-  if (!isRecord(omlx)) throw new Error("omlx preferences must be an object");
-  rejectUnknownKeys(omlx, OMLX_KEYS, "omlx");
+  let omlx: OmlxEmbeddingSettings | null = null;
+  const rawOmlx = data.omlx;
+  if (rawOmlx !== undefined && rawOmlx !== null) {
+    if (!isRecord(rawOmlx)) throw new Error("omlx preferences must be an object");
+    rejectUnknownKeys(rawOmlx, OMLX_KEYS, "omlx");
+    omlx = {
+      baseUrl: requiredString(rawOmlx, "base_url", "omlx"),
+      model: requiredString(rawOmlx, "model", "omlx"),
+    };
+  }
 
-  const openai = data.openai ?? {};
-  if (!isRecord(openai)) throw new Error("openai preferences must be an object");
-  rejectUnknownKeys(openai, OPENAI_KEYS, "openai");
+  let openai: OpenAIEmbeddingSettings | null = null;
+  const rawOpenAI = data.openai;
+  if (rawOpenAI !== undefined && rawOpenAI !== null) {
+    if (!isRecord(rawOpenAI)) {
+      throw new Error("openai preferences must be an object");
+    }
+    rejectUnknownKeys(rawOpenAI, OPENAI_KEYS, "openai");
+    openai = { model: requiredString(rawOpenAI, "model", "openai") };
+  }
 
   let openaiCompatible: OpenAICompatibleEmbeddingSettings | null = null;
   const rawCompatible = data.openai_compatible;
@@ -247,18 +264,15 @@ export function parseEmbeddingPreferences(
     openaiCompatible = {
       baseUrl: requiredString(rawCompatible, "base_url", "openai_compatible"),
       model: requiredString(rawCompatible, "model", "openai_compatible"),
-      apiKeyEnv: requiredString(rawCompatible, "api_key_env", "openai_compatible"),
       spaceId: requiredString(rawCompatible, "space_id", "openai_compatible"),
     };
   }
 
+  const provider = optionalString(data, "provider", "embedding") ?? null;
   return validateEmbeddingPreferences({
-    provider: (optionalString(data, "provider", "embedding") ??
-      base.provider) as EmbeddingProvider,
-    omlx: { model: optionalString(omlx, "model", "omlx") ?? base.omlx.model },
-    openai: {
-      model: optionalString(openai, "model", "openai") ?? base.openai.model,
-    },
+    provider: provider as EmbeddingProvider | null,
+    omlx,
+    openai,
     openaiCompatible,
   });
 }
@@ -268,16 +282,18 @@ export function serializeEmbeddingPreferences(
 ): string {
   const checked = validateEmbeddingPreferences(value);
   return JSON.stringify({
-    provider: checked.provider,
-    omlx: { model: checked.omlx.model },
-    openai: { model: checked.openai.model },
-    // Written as the four names only — never a resolved key value.
+    ...(checked.provider ? { provider: checked.provider } : {}),
+    ...(checked.omlx
+      ? { omlx: { base_url: checked.omlx.baseUrl, model: checked.omlx.model } }
+      : {}),
+    ...(checked.openai ? { openai: { model: checked.openai.model } } : {}),
+    // Written as endpoint parameters only — the credential lives under a fixed
+    // name in the store, so nothing here even references one.
     ...(checked.openaiCompatible
       ? {
           openai_compatible: {
             base_url: checked.openaiCompatible.baseUrl,
             model: checked.openaiCompatible.model,
-            api_key_env: checked.openaiCompatible.apiKeyEnv,
             space_id: checked.openaiCompatible.spaceId,
           },
         }
@@ -288,12 +304,29 @@ export function serializeEmbeddingPreferences(
 }
 
 /**
- * The stable vector-space id stamped onto every vector this selection produces.
- * Physical endpoints stay out of it, so moving one compatible service to a new
- * host does not park its dedup memory.
+ * The stable vector-space id stamped onto every vector this selection produces,
+ * or `null` while nothing is selected. Physical endpoints stay out of it, so
+ * moving one compatible service to a new host does not park its dedup memory.
  */
-export function embedderIdentity(value: EmbeddingPreferences): string {
-  if (value.provider === "omlx") return `omlx:${value.omlx.model}`;
-  if (value.provider === "openai") return `openai:${value.openai.model}`;
-  return `openai_compatible:${value.openaiCompatible?.spaceId ?? ""}`;
+export function embedderIdentity(value: EmbeddingPreferences): string | null {
+  if (value.provider === "omlx" && value.omlx) {
+    return `omlx:${value.omlx.model}`;
+  }
+  if (value.provider === "openai" && value.openai) {
+    return `openai:${value.openai.model}`;
+  }
+  if (value.provider === "openai_compatible" && value.openaiCompatible) {
+    return `openai_compatible:${value.openaiCompatible.spaceId}`;
+  }
+  return null;
+}
+
+/** Which fixed credential a provider needs, or `null` when it needs none. */
+export function embeddingCredentialName(
+  provider: EmbeddingProvider,
+): string | null {
+  if (provider === "openai") return "OPENAI_API_KEY";
+  if (provider === "openai_compatible") return "EMBEDDING_API_KEY";
+  // A local OMLX server usually has no key at all, so its own is optional.
+  return null;
 }

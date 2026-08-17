@@ -13,7 +13,7 @@
 brew install uv
 brew install --cask postgres-app          # 或 brew install postgresql@16
 uv sync
-cp .env.example .env && $EDITOR .env       # 至少 DATABASE_URL + 一个 LLM key
+cp .env.example .env && $EDITOR .env       # host-native：DATABASE_URL。凭据在 dashboard 里配
 createdb next_signal
 uv run python scripts/bootstrap_db.py
 uv run next-signal doctor
@@ -35,13 +35,28 @@ Dashboard 是单独的 Next.js 进程，不要求 `next-signal serve` 同时运�
 
 ## 凭据
 
-所有 provider 的 API key 和 token 都在 dashboard 设置页（**设置 → 凭据**）里填，
-存在同一个文件 `~/.next-signal/secrets.json`（容器里 `/state/secrets.json`）：扁平的
-`NAME → value` 对象，原子写入，权限 `0600`。
+所有 provider 的 API key 和 token 都在 dashboard 设置页里填，就填在用到它的那个
+功能区块里（引擎、雷达向量嵌入、知识库向量嵌入、RSS），不再是一个共用列表。
+它们仍然都落在同一个文件 `~/.next-signal/secrets.json`（容器里
+`/state/secrets.json`）：扁平的 `NAME → value` 对象，原子写入，权限 `0600`。
+设置页最下面有一份只读、只显示是否配置的汇总，方便一眼看到整体配置情况。
 
-七个凭据：`ANTHROPIC_API_KEY`、`OPENAI_API_KEY`、`GOOGLE_API_KEY`、
-`DEEPSEEK_API_KEY`、`OMLX_API_KEY`、`GITHUB_TOKEN`、`FOLO_TOKEN`。用
-OpenAI-compatible 嵌入端点时，还会存 `api_key_env` 指定的那个名字。
+七个凭据：`DEEPSEEK_API_KEY`（引擎）、`RADAR_EMBEDDING_OPENAI_API_KEY` 和
+`EMBEDDING_API_KEY`（雷达向量嵌入）、`OPENAI_API_KEY`、`VOYAGE_API_KEY`、
+`GOOGLE_GENERATIVE_AI_API_KEY`（知识库向量嵌入）、`FOLO_TOKEN`（RSS）。这个集合是
+封闭的——系统会用到的每个凭据在那一页上的某处都有对应的输入框。
+`RADAR_EMBEDDING_OPENAI_API_KEY` 和 `OPENAI_API_KEY` 刻意是两个不同的存储凭据，
+尽管两个都是「OpenAI key」：雷达去重 embedder 和 GBrain 的 OpenAI provider 是两条
+独立的嵌入流程，过去只是碰巧共用一个名字。`EMBEDDING_API_KEY`
+是 OpenAI-compatible 嵌入端点（radar 的 dedup embedder）用的那个；
+`VOYAGE_API_KEY` 和 `GOOGLE_GENERATIVE_AI_API_KEY` 是 GBrain 自己在选中对应
+provider 时读取的——不管是从知识库向量嵌入这个区块选，还是直接跑
+`next-signal knowledge gbrain-init`，见
+[containerized-deployment.md §8](./containerized-deployment.md#8-纯云容器特有的注意事项)。
+`ANTHROPIC_API_KEY`、`GOOGLE_API_KEY`、`GITHUB_TOKEN`、`OMLX_API_KEY`
+不在这个集合里——前两个系统里没有任何功能会用到它们，后两个都只走
+graceful-degradation（GitHub 匿名访问、本地服务不带鉴权请求），设置页暴露的功能
+没有一个需要它们。
 
 三条要点：
 
@@ -58,7 +73,7 @@ secret manager 只动一个文件。
 
 ### 怎么拿 Folo token
 
-Folo 不发 API key：它的 token 是 session 值，没有任何页面能生成一个。**设置 → 凭据 →
+Folo 不发 API key：它的 token 是 session 值，没有任何页面能生成一个。**设置 → RSS →
 登录 Folo** 会新开标签页打开 Folo，在 dashboard 自己的 callback 路由上接住返回的一次性
 token，换成 session token 存起来。手动粘贴也行，登录失败时就走这条。
 
@@ -68,10 +83,10 @@ token，换成 session token 存起来。手动粘贴也行，登录失败时就
 
 ## 环境变量
 
-凭据不放这里。repo-local `.env` 关键值：
+凭据不放这里，本地模型端点也不放——那些在设置页里填（对话模型走**设置 → 引擎**，
+去重 embedder 走**设置 → 雷达向量嵌入**）。repo-local `.env` 关键值：
 
 - `DATABASE_URL`
-- `OMLX_BASE_URL`（OMLX 的 key 是凭据，见上）
 - `GBRAIN_BIN`（`gbrain` 不在 `PATH` 时；dashboard 与后端同一套解析）
 - `WIKI_DIR` / `WIKI_RAW_DIR`（**代码层面必填**，无默认；缺失时 knowledge pipeline 与
   dashboard wiki 视图 fail loud。跑 Docker Compose 时可以留空：Compose 会挂载
@@ -88,12 +103,13 @@ nav 上的语言选择器是另一个独立设置，只改 dashboard 自己的�
 
 | 集成 | Env Var |
 |---|---|
-| LLM: Anthropic / OpenAI / Google / DeepSeek | **设置 → 凭据**（可选的 `DEEPSEEK_BASE_URL` 仍在 `.env`，默认 `https://api.deepseek.com`） |
-| Folo (info-radar) | **设置 → 凭据**——必填；点「登录 Folo」或手动粘贴。`~/.folo/config.json` 不再读取。可选的 `FOLO_CLI_ARGV` 仍在 `.env` |
+| LLM: DeepSeek（引擎的云端回落） | **设置 → 引擎**（可选的 `DEEPSEEK_BASE_URL` 仍在 `.env`，默认 `https://api.deepseek.com`） |
+| Folo (info-radar) | **设置 → RSS**——必填；点「登录 Folo」或手动粘贴。`~/.folo/config.json` 不再读取。可选的 `FOLO_CLI_ARGV` 仍在 `.env` |
 | GBrain / OpenCLI (knowledge) | `GBRAIN_BIN`（`gbrain` 不在 PATH 时） / `OPENCLI_BIN`（WeChat 下载，main.js 路径或 wrapper） |
 | Coding agents | `CODEX_BIN` / `CLAUDE_BIN`（可选的可执行文件覆盖；已保存的 CLI 登录仍由 provider 管理） |
-| GitHub (knowledge 收藏) | **设置 → 凭据**（可选；缺省匿名 60 req/h） |
-| Embedder (info-radar analysis dedup) | 取决于**设置 → 向量嵌入**里选的 provider，见下 |
+| GitHub (knowledge 收藏) | 只走匿名（60 req/h）——`GITHUB_TOKEN` 不在设置页解析的凭据集合里 |
+| 雷达 embedder (info-radar analysis dedup) | 取决于**设置 → 雷达向量嵌入**里选的 provider，见下 |
+| 知识库 embedder (GBrain 搜索) | 取决于**设置 → 知识库向量嵌入**里选的 provider，或直接跑 `next-signal knowledge gbrain-init`，见下 |
 
 每个云集成在 call time 从凭据库读自己的凭据，缺凭据只让对应工具失败，不阻断启动；
 dashboard 里存的凭据下一次调用就生效，所有进程都一样，不用重启，也不用
@@ -104,21 +120,31 @@ dashboard 里存的凭据下一次调用就生效，所有进程都一样，不�
 ### 选择 embedder
 
 dedup gate 的 embedder 与 LLM 引擎分开选，在 `/settings` 上，存进
-`~/.next-signal/embedding.json`。三个 provider：
+`~/.next-signal/embedding.json`。
+
+**全新安装不会选中任何 embedder。** next-signal 没有一个能替你老实挑的 provider——
+本地那个要一个只有你知道的地址，云端那两个要密钥、要花钱——所以在你选之前什么都不选，
+**在那之前去重是关着的**。雷达照常抓取、打分、展示，你只会看到同一件事出现多次。
+`next-signal doctor` 会报出这个未选中状态，设置页也会在卡片上方写明。
+
+三个 provider：
 
 | Provider | 配置 | 说明 |
 |---|---|---|
-| `omlx`（默认） | `OMLX_BASE_URL` 可达；`configs/models.yaml::embedders.local.model_id` 默认 `Qwen3-Embedding-0.6B-8bit`，需要 OMLX server 加载该模型 | `OMLX_API_KEY` 仍是可选的（设置 → 凭据）。数据不出本机 |
-| `openai` | **设置 → 凭据**里的 `OPENAI_API_KEY`；模型取自 `embedders.openai`（默认 `text-embedding-3-small`） | 按条目计费；摘要会离开本机 |
-| `openai_compatible` | 一个 API **根地址**（例如 `https://host.example/v1`——`/embeddings` 由程序拼），一个模型，凭据的**名字**，以及一个向量空间 id | 没有出厂默认值；四项都保存后才能选中 |
+| `omlx` | 它自己的 API 根地址（**设置 → 雷达向量嵌入**）加一个服务已加载的模型；`configs/models.yaml::embedders.local.model_id` 预填 `Qwen3-Embedding-0.6B-8bit` | 与**设置 → 引擎**是两个端点：一个 mlx-lm 进程只挂一个模型，对话和嵌入是两个端口。不解析任何凭据。数据不出本机 |
+| `openai` | `RADAR_EMBEDDING_OPENAI_API_KEY`，就填在**设置 → 雷达向量嵌入**的 OpenAI 面板里；模型由 `embedders.openai` 预填（`text-embedding-3-small`） | 按条目计费；摘要会离开本机。和 GBrain 自己的 `OPENAI_API_KEY`（知识库向量嵌入）是两回事 |
+| `openai_compatible` | 一个 API **根地址**（例如 `https://host.example/v1`——`/embeddings` 由程序拼）、一个模型、一个向量空间 id，外加同一面板里的 `EMBEDDING_API_KEY` | 没有出厂默认值；所有字段（含 key）都保存后才能选中——一旦选中，这一节永久锁定 |
 
-换之前有三条值得先想清楚：
+`configs/models.yaml` 里的值是**表单预填，不是默认值**——它只负责把空面板填上，仅此而已。
+只有你保存下来的东西才会真的跑。
+
+保存之前有三条值得先想清楚——这个选择一旦做出就永久锁定这一节，之后没法再换：
 
 - **每个 embedder 都必须返回正好 1024 个有限数值。** 云端路径会带 `dimensions: 1024`；
   其他情况在调用时直接抛，不会被塑形。所以 `text-embedding-ada-002` 之类做不到 1024
   的定宽模型无法使用。
-- **状态文件从不存密钥。** `openai_compatible` 存的是 `api_key_env`——凭据的*名字*——
-  取值时从凭据库读。URL 里带凭据（userinfo、query、fragment）会被直接拒绝。
+- **状态文件从不存密钥，连名字都不存。** 每个 provider 的凭据在凭据库里都有固定名字。
+  URL 里带凭据（userinfo、query、fragment）会被直接拒绝。
 - **这里没有任何东西需要重启。** 状态文件和凭据库都在 item 解析 embedder 时才读，
   所以改哪一个都是下一个 item 生效——不用重启宿主进程，也不用 `--force-recreate`。
 
@@ -126,13 +152,14 @@ dedup gate 的 embedder 与 LLM 引擎分开选，在 `/settings` 上，存进
 变了就换一个；同一个服务换个 URL **不需要**换。它和模型名分开，是因为两个端点可以打着
 同一个模型名产出互不可比的向量，而误判成重复会把真正的新条目吞掉。
 
-### 换 embedder，以及 `legacy:unknown` 那些行
+### embedder 选择是永久的，以及 `legacy:unknown` 那些行
 
 每条存下来的向量都在 `radar_pushed_topics.embedder` 里记着产生它的身份
 （`omlx:<model>`、`openai:<model>` 或 `openai_compatible:<space_id>`），dedup 检索永远只在
-同一个身份内比较。所以换 provider 是把上一个身份的记忆**搁置**，而不是翻译过去：在新身份
-下重新积累之前，见过的主题会被报成 novel。切回去那些行原样恢复、不需要重新嵌入——全程
-不删任何数据。
+同一个身份内比较。**设置 → 雷达向量嵌入一旦保存某个 provider 就整节永久锁定**——之后每张
+卡片和面板都变成只读，UI 上没有任何路子能改回去。这是刻意设计，不是漏掉的功能：换一个
+模型会产生和已存向量不可比较的新向量，允许之后再切换，等于让一个没人会认真读的
+`window.confirm()` 悄悄降低去重质量。保存之前想清楚——设置页会在保存那一刻给出明确警告。
 
 这个列出现之前写下的行标记为 `legacy:unknown` 并永久搁置。bootstrap 不猜它们的来源：
 `embedders.local.model_id` 一直是可改的，按出厂默认值去认会给改过配置的安装打错标签，
@@ -216,13 +243,17 @@ uv run next-signal doctor                            # host-native
 docker compose exec dashboard next-signal doctor     # 容器里
 ```
 
-检查：`DATABASE_URL`、`OMLX_BASE_URL`、**凭据库里** `ANTHROPIC_API_KEY` 和
-`DEEPSEEK_API_KEY` 在不在、
+检查：`DATABASE_URL`、
+**凭据库里** `DEEPSEEK_API_KEY` 在不在、
+生产 stage job（info-radar analyze、info-radar recap、knowledge ingest）会解析到哪个
+引擎——未选中时单独报出，因为没选引擎 `stage_job()` 会直接拒绝启动任何这类 job、
+`engine.json` 里记录的本地对话端点（只看配没配，不看通不通）、
 解析后的内容语言（报出 `global` policy 的值、来自偏好文件还是硬编码默认值，偏好文件
-损坏或值不认识则标红）、解析后的 embedder（打印当前向量空间身份，以及它需要的配置在不在
-——全程不发嵌入请求，`embedding.json` 不可用时报成失败项而不是把 doctor 弄挂）、
+损坏或值不认识则标红）、解析后的雷达去重 embedder（打印当前向量空间身份，以及它需要的配置在不在；
+一个都没选时报出未选中、去重已关闭——全程不发嵌入请求，`embedding.json` 不可用时报成
+失败项而不是把 doctor 弄挂）、
 Postgres 可达、
-configured agents、registered tools、GBrain CLI/service（`gbrain doctor --fast`）、
+configured agents、registered tools、GBrain 是否就绪、
 folocli auth（先看凭据库里有没有 `FOLO_TOKEN`，再跑 `folocli whoami`；folocli 自己
 缓存的 session 不再算数）、
 info-radar 运行时 goals 文件存在、可解析、且至少有一个目标。goals 这一项把三种失败
@@ -231,10 +262,16 @@ info-radar 运行时 goals 文件存在、可解析、且至少有一个目标�
 代码层面不区分"必需"和"可选"检查——任一项失败（包括上面标为可选的 folocli auth）
 doctor 都退出非零；上面的必需/可选划分只是"这台机器不打算用这个功能就可以忽略对应的✗"。
 
-`DEEPSEEK_API_KEY` 缺失算非零项 —— `local*` 的默认 fallback profile 用 DeepSeek（OMLX 不可达时回落）；
-`ANTHROPIC_API_KEY` 缺失也算非零项，供 `claude_*` profile 使用。两者都从凭据库读，
-设在环境变量里不算数；凭据项只报告在不在，绝不打印值。若刻意只跑本地，要明白这些云
-fallback 会失败。
+`DEEPSEEK_API_KEY` 缺失算非零项 —— `local*` 的默认 fallback profile 用 DeepSeek（OMLX 不可达时回落）。
+它从凭据库读，设在环境变量里不算数；凭据项只报告在不在，绝不打印值。没选引擎同样算非零项——
+全新安装默认就是没选，所以这是预期状态，直到你去**设置 → 引擎**选一个并应用。若刻意只跑
+本地，要明白 OMLX 不可达时 DeepSeek 这条 fallback 会失败。
+
+GBrain 就绪状态分三档，不是简单的通过/失败：**未初始化**（全新栈的预期状态——
+bootstrap 刻意让它保持这样；检查项会指名 `next-signal knowledge gbrain-init`）、
+**已初始化但对应 provider 的凭据缺失**（brain 已经选好了模型，但缺凭据没法 embed）、
+以及**就绪**。这一项由 doctor 自己判定，而不是信任 `gbrain doctor --fast`——后者即使
+根本没有 brain 也会报健康、退出 0。
 
 纯云容器里 OMLX（以及没配的 Anthropic）显示 ✗ 是预期的——确认 Postgres / agents / tools
 是 ✔ 即可，其余当参考信息。
@@ -323,6 +360,10 @@ uv run next-signal dashboard --start                         # 启动已 build �
 uv run next-signal knowledge ingest <url|staged-file>        # ingest 到知识库
 #   --category <taxonomy-path>   指定落点，跳过自动分类
 #   --progress                   每步输出一行 JSON 事件（dashboard 入库进度面板用）
+uv run next-signal knowledge gbrain-init --embedding-model <provider>:<model>
+                                                      # 一次性 GBrain 初始化；模型选择是永久的
+                                                      # (openai: voyage: google: 需要对应 provider 的凭据；
+                                                      #  ollama: lmstudio: llama-server: 不需要凭据)
 uv run next-signal knowledge gbrain-search "query"           # 搜索本地 GBrain
 uv run next-signal knowledge gbrain-ingest <file|dir>        # 导入 markdown 到 GBrain
 uv run next-signal knowledge review                          # 对照 wiki 与 knowledge_reviews
@@ -404,15 +445,26 @@ docker compose logs -f scheduler
 ## 故障排查
 
 - **`DATABASE_URL not set`** → 复制 `.env.example` 到 `.env` 并填好。
-- **`<NAME> is not configured`** → 凭据库里没有这个凭据，去**设置 → 凭据**填；
-  填在 `.env` 里没有用。
+- **`<NAME> is not configured`** → 凭据库里没有这个凭据，去用到它的那个设置区块里
+  填（引擎、雷达向量嵌入、知识库向量嵌入、RSS）；填在 `.env` 里没有用。
+- **没选引擎** → 去**设置 → 引擎**选一张卡片并应用。每个生产 stage job（info-radar
+  analyze、info-radar recap、knowledge ingest）在选定引擎之前都会拒绝启动。
 - **Postgres unreachable** → 启动 Postgres.app 或 Homebrew service，重跑 `next-signal doctor`。
-- **OMLX profile 回落到 DeepSeek** → 查 `.env` 的 `OMLX_BASE_URL`、设置 → 凭据里可选的
-  `OMLX_API_KEY`、以及端点 `/v1/models`；
-  OMLX 恢复后长驻进程要调 `next_signal.core.models.reset_cache()`。
-- **GBrain 搜索 / re-index 失败** → 跑 `next-signal doctor` 和 `gbrain doctor --fast`；
-  embed 失败时 ingest 应在写完 wiki artifact 后 loud fail，manifest 不前进，
-  修好后重跑 `next-signal run-workflow knowledge_ingest`。
+- **OMLX profile 回落到 DeepSeek** → 查**设置 → 引擎**里的端点、以及端点 `/v1/models`。
+  模型不再缓存，OMLX 恢复后下一次调用自己就会重试本地；例外是 AgentOS——它在启动时
+  一次性构建 interactive agent，换端点后要重启该进程。
+- **雷达反复推同一件事** → 没选 embedder，去重是关着的。去**设置 → 雷达向量嵌入**选一个、
+  保存、并确认永久锁定的警告；`next-signal doctor` 会把这个报成 embedder 检查失败。
+  这个选择之后没法再改。
+- **GBrain 搜索 / re-index 失败** → 先跑 `next-signal doctor`：全新的栈上预期会报
+  GBrain 未初始化，这种情况下可以在**设置 → 知识库向量嵌入**里初始化（同样会有一次
+  永久锁定的确认），或者直接跑
+  `next-signal knowledge gbrain-init --embedding-model <provider>:<model>`
+  （见 [containerized-deployment.md
+  §8](./containerized-deployment.md#8-纯云容器特有的注意事项)）。
+  如果报就绪但调用仍然失败，再查 `gbrain doctor --fast`。embed 失败时 ingest
+  应在写完 wiki artifact 后 loud fail，manifest 不前进，修好后重跑
+  `next-signal run-workflow knowledge_ingest`。
 - **Dashboard 起不来** → 先确认 `pnpm` 在 PATH；用 `uv run next-signal dashboard --build`
   看 Next.js 编译错误。Dashboard 不需要 `next-signal serve`，但 `/radar` 需要 Postgres，
   `/knowledge` 需要 GBrain CLI，`/subscriptions` 需要 Folo auth。

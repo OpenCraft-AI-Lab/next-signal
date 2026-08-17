@@ -10,7 +10,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from next_signal.core.config import ModelsConfig, load_models
-from next_signal.core.omlx import resolve_omlx_endpoint
 from next_signal.core.paths import STATE_ROOT
 
 Engine = Literal["omlx", "deepseek", "codex_cli", "claude_cli"]
@@ -19,20 +18,26 @@ DeepSeekReasoning = Literal["off", "low", "high"]
 
 ENGINE_PREFERENCES_FILE = STATE_ROOT / "engine.json"
 _MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
-_PROVIDER_ENGINE: dict[str, Engine] = {"omlx": "omlx", "deepseek": "deepseek"}
 
 
 class OmlxSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    base_url: str
+    # Unset until an operator points next-signal at a local server. There is no
+    # value this repo could ship that would be right, so a fresh install reads
+    # as unset and OMLX profiles take their configured `fallback_profile`.
+    base_url: str | None = None
     model: str
     parallel: Literal[1, 2, 4]
 
     @field_validator("base_url")
     @classmethod
-    def _valid_url(cls, value: str) -> str:
+    def _valid_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         selected = value.strip()
+        if not selected:
+            return None
         if not re.fullmatch(r"https?://\S+", selected):
             raise ValueError(f"OMLX endpoint must be an http(s) URL: {selected}")
         return selected
@@ -61,10 +66,28 @@ class DeepSeekSettings(BaseModel):
         return selected
 
 
+class EngineNotSelected(RuntimeError):
+    """No engine has been selected, so no production job can run.
+
+    A distinct type rather than a generic error, mirroring
+    ``core.embedding_preferences.EmbedderNotSelected`` — a caller can tell
+    "nobody has chosen one yet" from "the chosen one is broken" without
+    parsing prose. Unlike embedding, there is no degraded mode to fall back
+    to: a production stage job's entire purpose is an LLM call, so an
+    unselected engine blocks the job rather than being caught and skipped by
+    a conservative-default consumer the way the dedup gate handles
+    ``EmbedderNotSelected``.
+    """
+
+
 class EnginePreferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    primary: Engine
+    # Unset until an operator explicitly saves a selection — `configs/models.yaml`
+    # supplies prefill for the omlx/deepseek panes' own fields, never a primary.
+    # This mirrors `core.embedding_preferences.EmbeddingPreferences.provider`:
+    # nothing this repo could pick on the operator's behalf, so nothing is picked.
+    primary: Engine | None = None
     fallback: FallbackEngine
     omlx: OmlxSettings
     deepseek: DeepSeekSettings
@@ -73,28 +96,31 @@ class EnginePreferences(BaseModel):
 
     @model_validator(mode="after")
     def _fallback_differs_from_primary(self) -> "EnginePreferences":
-        if self.fallback == self.primary:
+        if self.primary is not None and self.fallback == self.primary:
             raise ValueError(f"{self.primary} cannot fall back to itself")
         return self
 
 
 def configured_engine_defaults(models: ModelsConfig | None = None) -> EnginePreferences:
-    """Derive fresh-install settings from the same profiles as the Dashboard."""
+    """Fresh-install settings: no primary selected, panes prefilled from `models.yaml`.
+
+    `primary` and `fallback` are never derived from `configs/models.yaml` — that
+    file's `local` profile is prefill for the OMLX pane's own fields, exactly as
+    `embedders.local` is prefill for the Radar Embedding OMLX pane, never a
+    runtime default. An operator must explicitly choose and save a primary
+    engine before any production stage job can run.
+    """
     config = models or load_models()
     local = config.profiles["local"]
     deepseek = config.profiles["deepseek_smart"]
-    fallback_provider = ""
-    if local.fallback_profile:
-        fallback = config.profiles.get(local.fallback_profile)
-        fallback_provider = fallback.provider if fallback else ""
 
     return EnginePreferences(
-        primary=_PROVIDER_ENGINE.get(local.provider, "omlx"),
-        fallback=_PROVIDER_ENGINE.get(fallback_provider, "none"),
+        primary=None,
+        fallback="none",
         omlx=OmlxSettings(
-            base_url=resolve_omlx_endpoint(
-                default_base_url="http://127.0.0.1:8000/v1"
-            )["base_url"],
+            # No endpoint baseline: the local server's address is the one thing
+            # this repo cannot know, so it stays unset until someone saves it.
+            base_url=None,
             model=local.model_id,
             parallel=config.concurrency.get("omlx", 2),
         ),

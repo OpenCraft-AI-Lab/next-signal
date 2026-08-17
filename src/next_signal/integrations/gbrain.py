@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -24,8 +25,101 @@ def resolve_gbrain_home(value: str) -> str:
     return str(path.resolve())
 
 
-def gbrain_env(*, gbrain_home: str | None = None) -> dict[str, str]:
-    env = child_env(["OPENAI_API_KEY"])
+NOT_INITIALISED_HINT = (
+    "GBrain has not been initialised, so knowledge search is unavailable. "
+    "Container bootstrap deliberately leaves it uninitialised, because the "
+    "embedding model sizes the schema permanently and bootstrap runs before "
+    "anyone can choose one. Initialise it with the model you want: "
+    "`next-signal knowledge gbrain-init --embedding-model <provider>:<model>`."
+)
+
+# Embedding providers GBrain can be pointed at, mapped to the credential each
+# one reads from its own environment. A local runner takes an endpoint rather
+# than a key, so it maps to None and works against an empty credential store.
+# The model string is `<provider>:<model>`; the provider half fixes which
+# credential — if any — a spawn needs.
+_PROVIDER_CREDENTIAL: dict[str, str | None] = {
+    "openai": "OPENAI_API_KEY",
+    "voyage": "VOYAGE_API_KEY",
+    "google": "GOOGLE_GENERATIVE_AI_API_KEY",
+    "ollama": None,
+    "lmstudio": None,
+    "llama-server": None,
+}
+
+EMBEDDING_PROVIDERS: tuple[str, ...] = tuple(sorted(_PROVIDER_CREDENTIAL))
+
+
+def provider_of(embedding_model: str) -> str:
+    """Provider half of a `<provider>:<model>` string, lowercased."""
+    return embedding_model.split(":", 1)[0].strip().lower()
+
+
+def credential_for_model(embedding_model: str) -> str | None:
+    """Credential the model's provider reads, or None when it needs none.
+
+    An unrecognised provider also resolves to None. This sits on the read path
+    for every gbrain call, so an unknown provider degrades to injecting nothing
+    and letting gbrain report; `gbrain-init` validates the provider up front,
+    where the operator is actually choosing one.
+    """
+    return _PROVIDER_CREDENTIAL.get(provider_of(embedding_model))
+
+
+def _home(gbrain_home: str | None = None) -> str:
+    """Resolve GBRAIN_HOME without going through `gbrain_env`, which needs this."""
+    value = (gbrain_home if gbrain_home is not None else os.environ.get("GBRAIN_HOME", "")).strip()
+    return resolve_gbrain_home(value) if value else ""
+
+
+def brain_config(*, gbrain_home: str | None = None) -> dict[str, Any] | None:
+    """GBrain's own config file, or None when it is absent or unreadable."""
+    home = _home(gbrain_home)
+    if not home:
+        return None
+    try:
+        parsed = json.loads((Path(home) / ".gbrain" / "config.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def brain_initialised(*, gbrain_home: str | None = None) -> bool | None:
+    """Whether a brain exists: True, False, or None when it can't be determined.
+
+    Read from GBrain's own config file because nothing else reports it: `gbrain
+    doctor --fast` scores a brain that does not exist as healthy and exits 0,
+    and a search against one prints "No results." and exits 0 too.
+
+    The three-way return keeps "no brain" separate from "we could not find out",
+    so an unreadable config degrades to attempting the work rather than refusing.
+    """
+    home = _home(gbrain_home)
+    if not home:
+        return None
+    if not (Path(home) / ".gbrain" / "config.json").exists():
+        return False
+    return None if brain_config(gbrain_home=gbrain_home) is None else True
+
+
+def configured_embedding_model(*, gbrain_home: str | None = None) -> str | None:
+    """The embedding model an initialised brain was built with, if any."""
+    value = (brain_config(gbrain_home=gbrain_home) or {}).get("embedding_model")
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def gbrain_env(
+    *, gbrain_home: str | None = None, embedding_model: str | None = None
+) -> dict[str, str]:
+    """Child environment for a gbrain spawn, scoped to the selected provider.
+
+    `embedding_model` overrides what the brain's config says, for the one caller
+    that runs before a brain exists: `gbrain-init` knows the provider the
+    operator just chose.
+    """
+    model = embedding_model or configured_embedding_model(gbrain_home=gbrain_home)
+    credential = credential_for_model(model) if model else None
+    env = child_env([credential] if credential else [])
     gbrain_home = (gbrain_home if gbrain_home is not None else env.get("GBRAIN_HOME", "")).strip()
     gbrain_url = env.get("GBRAIN_DATABASE_URL", "").strip()
 

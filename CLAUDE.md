@@ -118,6 +118,9 @@ CLI 子命令：
 - `next-signal knowledge ingest <url|file>` — 路由输入、保存 raw / clean markdown、可选导入 GBrain
   （`--category <taxonomy-path>` 指定落点跳过自动分类；`--progress` 每步输出一行 JSON 事件，dashboard 入库进度面板用）
 - `next-signal knowledge gbrain-search|gbrain-ingest` — 通过本地 GBrain CLI 搜索 / 导入 markdown
+- `next-signal knowledge gbrain-init --embedding-model <provider>:<model>` — 用选定的 embedding 模型
+  初始化 GBrain；模型永久决定 schema 尺寸，只能跑一次，容器 bootstrap 故意不做这一步，留给
+  operator 显式选择
 - `next-signal knowledge review` — 对照 wiki 与 `knowledge_reviews`（入列新文档、移除文件已删的行）；回顾卡片直接用文档 frontmatter 的 `summary`，不调 LLM（固定艾宾浩斯曲线）
 - `next-signal info-radar pull [--source NAME]` — 跑一次 info-radar 各 source 的 CLI，写入 `radar_items`
 - `next-signal info-radar sweep` — 删除 30 天前的 `radar_items` 行
@@ -261,19 +264,25 @@ profile / 默认行为放这。
 - 静态 AgentOS 模型从 `configs/models.yaml` 的 profile 引用；production stage 的 baseline
   也从这里取，但 provider/model/effort 由 `engine.json` / `coding-agents.json` 在 job 开始时覆盖。
   绝不在 agent 代码里 `Codex(...)`
-- OMLX 端点：`OMLX_BASE_URL` 读自 `.env`，`OMLX_API_KEY`（可选）是凭据，走 credential
-  store——两者**只通过** `next_signal.core.omlx.resolve_omlx_endpoint()` 解析；普通调用使用
-  公开的 `next_signal.core.models.omlx_endpoint()`，不要在别处直接读 env 或复制逻辑
+- **本地端点从不读环境变量**（dashboard 和 scheduler 是两个容器，共享 `/state` 但不共享
+  环境）。对话端点读 `engine.json`、`OMLX_API_KEY`（可选）走 credential store——两者
+  **只通过** `next_signal.core.omlx.resolve_omlx_endpoint()` 解析；普通调用使用公开的
+  `next_signal.core.models.omlx_endpoint()`，不要在别处复制逻辑。embedder 的 OMLX 端点
+  是**另一个**，在 `embedding.json` 里（一个 mlx-lm 进程只挂一个模型）。`OMLX_BASE_URL`
+  已删除，不要复活它
 - OMLX 不可达时 `next_signal.core.models.get_model` 自动捕获 `RuntimeError` 并切到 `fallback_profile`
-  （YAML 里配）；恢复后需要 `reset_cache()` 才会重试 OMLX
+  （YAML 里配）。**模型不缓存**，所以恢复后下一次调用自己就会重试；例外是 AgentOS
+  ——它在 import 时一次性构建 agent，换端点后要重启进程
 - Qwen3 sampling（temp 0.4 / top_p 0.85 / min_p 0.05 / 关 thinking）与 agno `OpenAILike`
   的结构化输出开关（`supports_json_schema_outputs=True` + `supports_native_structured_outputs=False`，
   走 OMLX 标准 `response_format` json_schema / xgrammar 约束解码）都固化在
   `next_signal.core.models._build_omlx`，**不要轻易改**
 - **embedder 不走 profile 工厂**：`get_embedder()` 不接参数，按 item 读一次
-  `embedding.json` + 进程环境，返回不可变 `ResolvedEmbedder`（provider / model /
-  identity / `embed`）。`models.yaml::embedders` 只是 `omlx` / `openai` 两个 baseline；
-  `openai_compatible` 没有默认值，必须由 operator 配全。**1024 维是硬契约**——
+  `embedding.json` + 凭据库，返回不可变 `ResolvedEmbedder`（provider / model /
+  identity / `embed`）。**默认什么都不选**——文件缺失或没写 provider 就是「未选中」，
+  抛 `EmbedderNotSelected`（独立类型，让调用方区分「没配」和「配坏了」），dedup 据此
+  关掉自己、其余照跑。`models.yaml::embedders` 只是表单预填，**不是默认值**；三个
+  provider 都必须由 operator 配全才能选中。**1024 维是硬契约**——
   `embed()` 校验整条向量，长度/非数值/NaN/inf 一律 `RuntimeError`，绝不截断补齐。
   embedder **没有 fallback**（换 provider = 换向量空间），并发按快照里的 provider 取
 

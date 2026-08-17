@@ -10,15 +10,15 @@ from next_signal.core.secrets import save_secret
 
 from next_signal.core import models as models_mod
 from next_signal.core.embedding_preferences import (
-    configured_embedding_defaults,
+    EmbedderNotSelected,
     load_embedding_preferences,
 )
 
 VECTOR = [0.1] * 1024
+OMLX = {"base_url": "http://localhost:11434/v1", "model": "Qwen3-Embedding-0.6B-8bit"}
 COMPATIBLE = {
     "base_url": "https://host.example/v1/",
     "model": "bge-m3",
-    "api_key_env": "MY_EMBED_KEY",
     "space_id": "house-bge-m3",
 }
 
@@ -62,11 +62,10 @@ def state(tmp_path, monkeypatch):
     The real loader and validators still run — only the path moves.
     """
     path = tmp_path / "embedding.json"
-    defaults = configured_embedding_defaults()
     monkeypatch.setattr(
         models_mod,
         "load_embedding_preferences",
-        lambda: load_embedding_preferences(path, defaults=defaults),
+        lambda: load_embedding_preferences(path),
     )
 
     def select(payload: dict) -> None:
@@ -95,10 +94,18 @@ def responds(monkeypatch):
     return install
 
 
-def test_omlx_snapshot_uses_the_centralized_endpoint(state, responds, monkeypatch) -> None:
-    monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:11434/v1")
+def test_nothing_selected_raises_its_own_type(state) -> None:
+    """Distinguishable from a failure, so dedup can report it differently."""
+    state({})
+
+    with pytest.raises(EmbedderNotSelected, match="No embedder has been selected"):
+        models_mod.get_embedder()
+
+
+def test_omlx_snapshot_uses_its_own_endpoint(state, responds) -> None:
+    """Embedding's endpoint, not the engine's — one mlx-lm process, one model."""
     save_secret("OMLX_API_KEY", "test-key")
-    state({"provider": "omlx"})
+    state({"provider": "omlx", "omlx": OMLX})
     client = responds()
 
     snapshot = models_mod.get_embedder()
@@ -114,7 +121,7 @@ def test_omlx_snapshot_uses_the_centralized_endpoint(state, responds, monkeypatc
 
 
 def test_openai_snapshot_requests_the_fixed_width(state, responds, monkeypatch) -> None:
-    save_secret("OPENAI_API_KEY", "sk-test")
+    save_secret("RADAR_EMBEDDING_OPENAI_API_KEY", "sk-test")
     state({"provider": "openai", "openai": {"model": "text-embedding-3-large"}})
     client = responds()
 
@@ -129,7 +136,7 @@ def test_openai_snapshot_requests_the_fixed_width(state, responds, monkeypatch) 
 
 
 def test_compatible_snapshot_appends_the_route(state, responds, monkeypatch) -> None:
-    save_secret("MY_EMBED_KEY", "secret")
+    save_secret("EMBEDDING_API_KEY", "secret")
     state({"provider": "openai_compatible", "openai_compatible": COMPATIBLE})
     client = responds()
 
@@ -146,23 +153,24 @@ def test_compatible_snapshot_appends_the_route(state, responds, monkeypatch) -> 
 
 
 def test_openai_without_a_key_names_the_variable(state) -> None:
-    state({"provider": "openai"})
+    state({"provider": "openai", "openai": {"model": "text-embedding-3-small"}})
 
-    with pytest.raises(RuntimeError, match="OPENAI_API_KEY is not configured"):
+    with pytest.raises(
+        RuntimeError, match="RADAR_EMBEDDING_OPENAI_API_KEY is not configured"
+    ):
         models_mod.get_embedder()
 
 
 def test_compatible_without_its_key_names_that_variable(state) -> None:
     state({"provider": "openai_compatible", "openai_compatible": COMPATIBLE})
 
-    with pytest.raises(RuntimeError, match="MY_EMBED_KEY is not configured"):
+    with pytest.raises(RuntimeError, match="EMBEDDING_API_KEY is not configured"):
         models_mod.get_embedder()
 
 
 @pytest.fixture
-def omlx_snapshot(state, monkeypatch):
-    monkeypatch.setenv("OMLX_BASE_URL", "http://localhost:11434/v1")
-    state({"provider": "omlx"})
+def omlx_snapshot(state):
+    state({"provider": "omlx", "omlx": OMLX})
     return models_mod.get_embedder
 
 

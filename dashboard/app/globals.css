@@ -631,11 +631,25 @@ textarea.input { padding: 8px 10px; height: auto; line-height: 1.55; resize: ver
 
 /* One setting = one row: description left, control hard right. */
 .set-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
-.set-rowtext { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.set-label { font-size: 13.5px; font-weight: 500; }
-.set-hint { font-size: 12.5px; line-height: 1.5; color: var(--text-3); max-width: 46ch; text-wrap: pretty; }
+.set-rowtext { display: flex; flex-direction: column; gap: 3px; min-width: 0; text-align: left; }
+.set-label { font-size: 13.5px; font-weight: 500; text-align: left; }
+.set-hint { font-size: 12.5px; line-height: 1.5; color: var(--text-3); max-width: 46ch; text-wrap: pretty; text-align: left; }
 .set-rowctl { flex: none; padding-top: 1px; }
 .set-sub { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--line); }
+
+/* A functional settings section's collapsible trigger: a button-reset row so
+   the whole header opens/closes it, the summary staying legible collapsed.
+   `<button>` gets a UA default `text-align: center` in some browsers, hence
+   the explicit override here in addition to the text elements' own. */
+.set-sectiontrigger { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; background: none; border: none; padding: 0; cursor: pointer; font-family: var(--font-sans); color: inherit; text-align: left; }
+.set-sectionchevrons { flex: none; padding-top: 2px; }
+
+/* A locked-down `overflow: hidden` sits on the collapsible body (needed for
+   the height animation), which clips any child whose box-shadow / focus ring
+   bleeds past its own box — a selected `.set-engine` card's accent ring,
+   button focus rings, and so on. This buffer gives them room; without it,
+   content reads as clipped a pixel or two into the left/right edge. */
+.set-sectionbody { padding: 4px 4px 2px; }
 
 /* Credentials: one row per key, each its own rule so seven of them read as a
    list rather than one dense block. Scoped to the section — every other card

@@ -54,7 +54,7 @@ export async function GET(request: Request): Promise<Response> {
     // already timed out. Write nothing.
     return page(
       "No sign-in in progress",
-      "Start the sign-in again from Settings → Credentials.",
+      "Start the sign-in again from Settings → RSS.",
       409,
     );
   }
@@ -64,7 +64,7 @@ export async function GET(request: Request): Promise<Response> {
     failFoloSignIn("Folo returned no sign-in token");
     return page(
       "Sign-in failed",
-      "Folo did not return a sign-in token. You can paste a token manually in Settings → Credentials.",
+      "Folo did not return a sign-in token. You can paste a token manually in Settings → RSS.",
       400,
     );
   }
@@ -80,7 +80,7 @@ export async function GET(request: Request): Promise<Response> {
     console.error("folo sign-in failed:", message);
     return page(
       "Sign-in failed",
-      `${message}. You can paste a token manually in Settings → Credentials.`,
+      `${message}. You can paste a token manually in Settings → RSS.`,
       502,
     );
   }

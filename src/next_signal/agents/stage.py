@@ -24,7 +24,12 @@ from next_signal.core.coding_agent_preferences import (
 )
 from next_signal.core.concurrency import ProviderConcurrency
 from next_signal.core.config import AgentConfig, CodingAgentsConfig, load_agent, load_coding_agents
-from next_signal.core.engine_preferences import Engine, EnginePreferences, load_engine_preferences
+from next_signal.core.engine_preferences import (
+    Engine,
+    EngineNotSelected,
+    EnginePreferences,
+    load_engine_preferences,
+)
 from next_signal.core.logging import get_logger
 from next_signal.core.models import ensure_concurrency_configured, get_stage_model
 from next_signal.core.paths import AGENT_TMP_DIR
@@ -100,6 +105,11 @@ def stage_job(
         raise ValueError("stage_job accepts preferences or state, not both")
     if state is None:
         selected = preferences or load_engine_preferences()
+        if selected.primary is None:
+            raise EngineNotSelected(
+                "No engine has been selected, so this job cannot run. "
+                "Choose one on the dashboard settings page (Settings -> Engine)."
+            )
         ensure_concurrency_configured()
         ProviderConcurrency.set_limit("omlx", selected.omlx.parallel)
         state = StageJobState(
