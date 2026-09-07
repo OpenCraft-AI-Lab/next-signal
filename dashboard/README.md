@@ -170,8 +170,9 @@ persists depends on the control, not the section:
 |---|---|---|
 | Segmented (language, on/off, skip/catch-up, parallelism) | click | one interaction is already a complete, valid intent |
 | A schedule time | blur / Enter | a native time input emits a complete value per segment edit, so saving each change would publish half-typed times |
-| An engine's, embedder's, or GBrain provider's own parameters | explicit **Save configuration** | a partial combination is invalid and cannot be sent |
-| Which engine is primary, which embedder is selected | explicit **Apply selection** (Engine) or the pane's own confirmed Save (Radar/Knowledge Embedding) | picking a card only proposes it; a separate commit is what writes it, unlike the plain discrete choices above |
+| An embedder's or GBrain provider's own parameters, its credential, and its selection (one fused decision) | explicit **Save configuration** | a partial combination is invalid and cannot be sent, and it's about to lock permanently |
+| An engine's own parameters and its credential | explicit **Save configuration** | a partial combination is invalid and cannot be sent |
+| Which engine is primary, or its fallback | **Use as primary** / the Fallback selector — commits immediately | switching primary is fully reversible and independent of a pane's own unsaved edits, so it shouldn't wait on (or be blocked by) a separate save |
 
 Either way a successful write raises a toast and a failed one rolls the control
 back — an optimistic control moves whether or not the write landed.
@@ -204,15 +205,27 @@ cannot be reached. Only the selected engine's form is on screen; four stacked
 forms was the reason this needed a page.
 
 **Nothing is selected on a fresh install**, and no card shows as chosen until
-one is explicitly applied — this is real, not cosmetic: on the Python side,
-`EnginePreferences.primary` is genuinely optional, and every production stage
-job (`stage_job()`) raises a distinct `EngineNotSelected` before any provider
-call when nothing has been saved, rather than silently defaulting to the local
-model the way it once did. Clicking a card only proposes it as primary; an
-explicit **Apply selection** action (rendered beside whichever pane's own Save
-button is currently open, not in a separate block) is the commit, matching
-every other section's own-parameters-need-explicit-Save rule rather than the
-commit-on-click behavior a plain discrete choice gets elsewhere on this page.
+one is explicitly saved as primary — this is real, not cosmetic: on the Python
+side, `EnginePreferences.primary` is genuinely optional, and every production
+stage job (`stage_job()`) raises a distinct `EngineNotSelected` before any
+provider call when nothing has been saved, rather than silently defaulting to
+the local model the way it once did.
+
+Clicking a card only opens its pane to view or edit — it never by itself
+changes the primary engine, so an operator can reconfigure a non-active
+engine (pre-fill a fallback's model, rotate DeepSeek's key) without touching
+which one is active. Two fully independent actions, each committing the
+instant it's used, with no shared draft between them: an explicit **Use as
+primary** button on the open pane writes that engine as primary immediately
+(the Fallback selector does the same for the fallback slot on change) — no
+confirmation, since switching is fully reversible; the pane's own **Save
+configuration** button writes only that pane's own fields (and DeepSeek's
+credential, if changed) and never touches which engine is primary, regardless
+of whether a primary switch is pending. "Use as primary" is disabled while
+that engine is incomplete in its last-*saved* configuration (missing model,
+missing DeepSeek key, CLI not connected) — an engine can no longer become
+primary while unusable, and an unsaved edit sitting in the pane's own fields
+has no bearing on that check.
 
 They are peers to the operator but not on disk, and the split follows what
 already owns each value:
@@ -296,14 +309,18 @@ change; moving the same service to a new URL does not need a new one.
 
 Each hosted pane's credential is entered **inline, in that pane** —
 `RADAR_EMBEDDING_OPENAI_API_KEY` for OpenAI, `EMBEDDING_API_KEY` for the
-custom endpoint — and saving requires that credential to already be present,
-not just the other fields, since this save is about to lock the section
-permanently. `RADAR_EMBEDDING_OPENAI_API_KEY` is a different stored credential
-from GBrain's own `OPENAI_API_KEY` (see Knowledge Embedding below), even
-though both are "an OpenAI key" — they're independent embedding flows that
+custom endpoint — as a plain field folded into the same draft as the pane's
+other settings: type a fresh key, or leave it blank to keep whatever is
+already stored, and **Save configuration** writes the credential and the rest
+of the pane together, locking the section in that one action.
+`RADAR_EMBEDDING_OPENAI_API_KEY` is a different stored credential from
+GBrain's own `OPENAI_API_KEY` (see Knowledge Embedding below), even though
+both are "an OpenAI key" — they're independent embedding flows that
 coincidentally shared one name in the past. URLs are restricted to a plain API
 root so a secret cannot be persisted in userinfo, a query, or a fragment. Key
-presence is computed server-side and reaches the browser as a boolean. Hosted
+presence is computed server-side and reaches the browser as a boolean; once a
+section is locked, the credential store itself refuses a write to that
+credential's name, not just the disabled control in front of it. Hosted
 providers also state that every kept item's summary leaves the machine and can
 be billed, including on unattended scheduler runs.
 
@@ -316,12 +333,16 @@ dashboard's front end for what used to be CLI-only:
 `next-signal knowledge gbrain-init --embedding-model <provider>:<model>`.
 
 Six peers — **OpenAI**, **Voyage**, **Google**, **Ollama**, **LM Studio**,
-**llama-server** — the three hosted ones needing a credential entered inline in
-their own pane (`OPENAI_API_KEY`, `VOYAGE_API_KEY`,
-`GOOGLE_GENERATIVE_AI_API_KEY` respectively — GBrain's own subprocess reads
-these exact names from its environment, an external contract this dashboard
-doesn't choose), the three local runners needing none. Saving a hosted pane
-requires its credential to already be present, same rule as Radar Embedding.
+**llama-server** — the three hosted ones needing a credential entered inline
+in their own pane, folded into the same draft as the model field
+(`OPENAI_API_KEY`, `VOYAGE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`
+respectively — GBrain's own subprocess reads these exact names from its
+environment, an external contract this dashboard doesn't choose), the three
+local runners needing none. A hosted pane's one **Save configuration** click
+stores a freshly typed key (or keeps whatever is already stored, if left
+blank) before running `gbrain-init`, same rule as Radar Embedding; once
+GBrain is initialized, the credential store refuses further writes to that
+name too.
 
 Saving is a two-step commit: an explicit warning that the model choice is
 **permanent for the life of this GBrain instance** (it sizes GBrain's Postgres

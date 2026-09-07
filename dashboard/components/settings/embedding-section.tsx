@@ -5,15 +5,16 @@ import { useState, type ComponentType } from "react";
 import { toast } from "sonner";
 
 import { useI18n } from "@/components/i18n-provider";
+import { CredentialField } from "@/components/settings/credential-field";
 import {
   PaneActions,
   usePaneSave,
 } from "@/components/settings/engine-section";
-import { InlineCredential } from "@/components/settings/inline-credential";
 import { SettingsSectionShell } from "@/components/settings/section-shell";
 import { Input } from "@/components/ui/input";
 import type { EmbeddingPrefill } from "@/lib/actions/embedding";
 import { setEmbeddingPreferences } from "@/lib/actions/embedding";
+import { saveCredential } from "@/lib/actions/secrets";
 import {
   EMBEDDING_PROVIDERS,
   embedderIdentity,
@@ -29,6 +30,12 @@ const GLYPHS: Record<EmbeddingProvider, ComponentType<{ size?: number }>> = {
   omlx: Server,
   openai: Cloud,
   openai_compatible: Share2,
+};
+
+/** The credential name each provider's pane folds into its one commit, if any. */
+const CREDENTIAL_NAME: Partial<Record<EmbeddingProvider, string>> = {
+  openai: "RADAR_EMBEDDING_OPENAI_API_KEY",
+  openai_compatible: "EMBEDDING_API_KEY",
 };
 
 /**
@@ -119,20 +126,34 @@ export function EmbeddingSection({
 
   /**
    * Saving a pane's first complete provider is the one write this section ever
-   * makes: it stores the pane's fields, selects that provider, and locks the
-   * section. The choice is confirmed once, here, because there is no way back
-   * through this UI afterward.
+   * makes: it stores the pane's credential (if the operator typed a new one),
+   * then the pane's fields, selects that provider, and locks the section. The
+   * choice is confirmed once, here, because there is no way back through this
+   * UI afterward.
+   *
+   * The credential writes first so a failure partway through is safely
+   * retryable: if the preferences write fails after the credential succeeded,
+   * `hasKey` already reads true on retry and an empty key input keeps it.
+   *
+   * Doesn't toast on success — the calling pane's own save wrapper does that
+   * once, after this (and its own state update) resolves.
    */
   const saveAndSelect = async (
     provider: EmbeddingProvider,
     next: EmbeddingPreferences,
+    apiKey?: string,
   ) => {
     if (!window.confirm(t.settings.embeddingConfirmPermanent)) return;
+    const credentialName = CREDENTIAL_NAME[provider];
+    const trimmedKey = apiKey?.trim();
+    if (credentialName && trimmedKey) {
+      await saveCredential(credentialName, trimmedKey);
+      onCredentialChange(credentialName, true);
+    }
     const selected = { ...next, provider };
     await setEmbeddingPreferences(selected);
     setSaved(selected);
     setOpen(provider);
-    toast.success(t.settings.embeddingSaved);
   };
 
   const identity = embedderIdentity(saved);
@@ -225,12 +246,11 @@ export function EmbeddingSection({
           <OpenAIEmbeddingPane
             initial={saved.openai ?? { model: prefill.openaiModel }}
             hasKey={radarOpenAiKey}
-            onKeyChange={(present) =>
-              onCredentialChange("RADAR_EMBEDDING_OPENAI_API_KEY", present)
-            }
             configured={saved.openai !== null}
             locked={locked}
-            onSave={(openai) => saveAndSelect("openai", { ...saved, openai })}
+            onSave={(openai, apiKey) =>
+              saveAndSelect("openai", { ...saved, openai }, apiKey)
+            }
           />
         )}
         {open === "openai_compatible" && (
@@ -239,11 +259,14 @@ export function EmbeddingSection({
               saved.openaiCompatible ?? { baseUrl: "", model: "", spaceId: "" }
             }
             hasKey={compatibleKey}
-            onKeyChange={(present) => onCredentialChange("EMBEDDING_API_KEY", present)}
             configured={saved.openaiCompatible !== null}
             locked={locked}
-            onSave={(openaiCompatible) =>
-              saveAndSelect("openai_compatible", { ...saved, openaiCompatible })
+            onSave={(openaiCompatible, apiKey) =>
+              saveAndSelect(
+                "openai_compatible",
+                { ...saved, openaiCompatible },
+                apiKey,
+              )
             }
           />
         )}
@@ -330,24 +353,48 @@ function OmlxEmbeddingPane({
 function OpenAIEmbeddingPane({
   initial,
   hasKey,
-  onKeyChange,
   configured,
   locked,
   onSave,
 }: {
   initial: OpenAIEmbeddingSettings;
   hasKey: boolean;
-  onKeyChange: (present: boolean) => void;
   configured: boolean;
   locked: boolean;
-  onSave: (value: OpenAIEmbeddingSettings) => Promise<void>;
+  /** `apiKey` is the freshly typed value, empty when the operator left it
+   * blank to keep whatever is already stored under `hasKey`. */
+  onSave: (value: OpenAIEmbeddingSettings, apiKey: string) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const { saved, value, setValue, saving, save, reset } = usePaneSave(
-    initial,
-    onSave,
-    t.settings.embeddingSaved,
-  );
+  const [saved, setSaved] = useState(initial);
+  const [value, setValue] = useState(initial);
+  const [apiKey, setApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // An unconfigured pane opens prefilled with a valid suggestion, so `value`
+  // already equals `saved` — dirty-gating alone would leave no way to commit
+  // that first, unedited default.
+  const dirty = !configured || value.model !== saved.model || apiKey.trim() !== "";
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave(value, apiKey);
+      setSaved(value);
+      setApiKey("");
+      toast.success(t.settings.embeddingSaved);
+    } catch (err) {
+      console.error("failed to save embedding settings", err);
+      toast.error(t.settings.saveFailed);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = () => {
+    setValue(saved);
+    setApiKey("");
+  };
 
   return (
     <>
@@ -363,12 +410,13 @@ function OpenAIEmbeddingPane({
           autoCorrect="off"
           spellCheck={false}
         />
-        <InlineCredential
+        <CredentialField
           name="RADAR_EMBEDDING_OPENAI_API_KEY"
           label="RADAR_EMBEDDING_OPENAI_API_KEY"
+          value={apiKey}
+          onValueChange={setApiKey}
           present={hasKey}
-          onChange={onKeyChange}
-          disabled={locked}
+          disabled={locked || saving}
         />
       </div>
       <p className="set-note">{t.settings.embeddingHostedHint}</p>
@@ -377,12 +425,9 @@ function OpenAIEmbeddingPane({
       {!configured && <p className="set-note">{t.settings.embeddingSaveToSelectHint}</p>}
       {!locked && (
         <PaneActions
-          // An unconfigured pane opens prefilled with a valid suggestion, so
-          // `value` already equals `saved` — dirty-gating alone would leave no
-          // way to commit that first, unedited default.
-          dirty={!configured || value.model !== saved.model}
+          dirty={dirty}
           saving={saving}
-          canSave={Boolean(value.model.trim() && hasKey)}
+          canSave={Boolean(value.model.trim() && (hasKey || apiKey.trim()))}
           onSave={() => void save()}
           onReset={reset}
         />
@@ -394,28 +439,51 @@ function OpenAIEmbeddingPane({
 function CompatibleEmbeddingPane({
   initial,
   hasKey,
-  onKeyChange,
   configured,
   locked,
   onSave,
 }: {
   initial: OpenAICompatibleEmbeddingSettings;
   hasKey: boolean;
-  onKeyChange: (present: boolean) => void;
   configured: boolean;
   locked: boolean;
-  onSave: (value: OpenAICompatibleEmbeddingSettings) => Promise<void>;
+  /** `apiKey` is the freshly typed value, empty when the operator left it
+   * blank to keep whatever is already stored under `hasKey`. */
+  onSave: (
+    value: OpenAICompatibleEmbeddingSettings,
+    apiKey: string,
+  ) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const { saved, value, setValue, saving, save, reset } = usePaneSave(
-    initial,
-    onSave,
-    t.settings.embeddingSaved,
-  );
+  const [saved, setSaved] = useState(initial);
+  const [value, setValue] = useState(initial);
+  const [apiKey, setApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
   const dirty =
     value.baseUrl !== saved.baseUrl ||
     value.model !== saved.model ||
-    value.spaceId !== saved.spaceId;
+    value.spaceId !== saved.spaceId ||
+    apiKey.trim() !== "";
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave(value, apiKey);
+      setSaved(value);
+      setApiKey("");
+      toast.success(t.settings.embeddingSaved);
+    } catch (err) {
+      console.error("failed to save embedding settings", err);
+      toast.error(t.settings.saveFailed);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const reset = () => {
+    setValue(saved);
+    setApiKey("");
+  };
 
   return (
     <>
@@ -460,12 +528,13 @@ function CompatibleEmbeddingPane({
           autoCorrect="off"
           spellCheck={false}
         />
-        <InlineCredential
+        <CredentialField
           name="EMBEDDING_API_KEY"
           label="EMBEDDING_API_KEY"
+          value={apiKey}
+          onValueChange={setApiKey}
           present={hasKey}
-          onChange={onKeyChange}
-          disabled={locked}
+          disabled={locked || saving}
         />
       </div>
       <p className="set-note">{t.settings.embeddingBaseUrlHint}</p>
@@ -481,10 +550,13 @@ function CompatibleEmbeddingPane({
           dirty={dirty}
           saving={saving}
           // No inherit path: a partial endpoint cannot be sent anywhere, and
-          // the credential must already be saved before this pane can lock
-          // the section.
+          // the credential must already be saved (or freshly typed) before
+          // this pane can lock the section.
           canSave={Boolean(
-            value.baseUrl.trim() && value.model.trim() && value.spaceId.trim() && hasKey,
+            value.baseUrl.trim() &&
+              value.model.trim() &&
+              value.spaceId.trim() &&
+              (hasKey || apiKey.trim()),
           )}
           onSave={() => void save()}
           onReset={reset}

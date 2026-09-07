@@ -5,11 +5,12 @@ import { useState, type ComponentType } from "react";
 import { toast } from "sonner";
 
 import { useI18n } from "@/components/i18n-provider";
+import { CredentialField } from "@/components/settings/credential-field";
 import { PaneActions } from "@/components/settings/engine-section";
-import { InlineCredential } from "@/components/settings/inline-credential";
 import { SettingsSectionShell } from "@/components/settings/section-shell";
 import { Input } from "@/components/ui/input";
 import { initializeGbrain } from "@/lib/actions/knowledge-embedding";
+import { saveCredential } from "@/lib/actions/secrets";
 import {
   KNOWLEDGE_EMBEDDING_PROVIDERS,
   knowledgeEmbeddingCredential,
@@ -82,22 +83,37 @@ export function KnowledgeEmbeddingSection({
   };
 
   /**
-   * The one write this section ever makes: confirm the permanent choice, run
-   * `gbrain-init`, and — only on success — lock the section. A failure
-   * (including "already initialised") leaves it unlocked and unselected.
+   * The one write this section ever makes: confirm the permanent choice,
+   * store the credential if the operator typed a new one, run `gbrain-init`
+   * — which resolves that credential at call time — and, only on success,
+   * lock the section. A failure (including "already initialised") leaves it
+   * unlocked and unselected.
+   *
+   * The credential writes first so a failure partway through is safely
+   * retryable: if `gbrain-init` fails after the credential succeeded, `hasKey`
+   * already reads true on retry and an empty key input keeps it.
    */
   const initializeAndLock = async (
     provider: KnowledgeEmbeddingProvider,
     model: string,
+    apiKey: string,
   ) => {
     if (!window.confirm(t.settings.knowledgeEmbeddingConfirmPermanent)) return;
+    const credentialName = knowledgeEmbeddingCredential(provider);
+    const trimmedKey = apiKey.trim();
+    if (credentialName && trimmedKey) {
+      await saveCredential(credentialName, trimmedKey);
+      onCredentialChange(credentialName, true);
+    }
     const result = await initializeGbrain(provider, model);
     if (!result.ok) {
       throw new Error(result.message || t.settings.knowledgeEmbeddingInitFailed);
     }
-    const credentialName = knowledgeEmbeddingCredential(provider);
+    const keyKnownPresent = trimmedKey !== "" || Boolean(
+      credentialName && credentialPresence[credentialName],
+    );
     setReadiness({
-      state: credentialName && !credentialPresence[credentialName] ? "credential_missing" : "ready",
+      state: credentialName && !keyKnownPresent ? "credential_missing" : "ready",
       provider,
       model,
     });
@@ -191,12 +207,8 @@ export function KnowledgeEmbeddingSection({
               return name ? Boolean(credentialPresence[name]) : true;
             })()
           }
-          onKeyChange={(present) => {
-            const name = knowledgeEmbeddingCredential(open);
-            if (name) onCredentialChange(name, present);
-          }}
           locked={locked}
-          onSave={(model) => initializeAndLock(open, model)}
+          onSave={(model, apiKey) => initializeAndLock(open, model, apiKey)}
         />
       </div>
     </SettingsSectionShell>
@@ -206,25 +218,26 @@ export function KnowledgeEmbeddingSection({
 function KnowledgeEmbeddingPane({
   provider,
   hasKey,
-  onKeyChange,
   locked,
   onSave,
 }: {
   provider: KnowledgeEmbeddingProvider;
   hasKey: boolean;
-  onKeyChange: (present: boolean) => void;
   locked: boolean;
-  onSave: (model: string) => Promise<void>;
+  /** `apiKey` is the freshly typed value, empty when the operator left it
+   * blank to keep whatever is already stored under `hasKey`. */
+  onSave: (model: string, apiKey: string) => Promise<void>;
 }) {
   const { t } = useI18n();
   const [value, setValue] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
   const credentialName = knowledgeEmbeddingCredential(provider);
 
   const save = async () => {
     setSaving(true);
     try {
-      await onSave(value);
+      await onSave(value, apiKey);
       toast.success(t.settings.knowledgeEmbeddingSaved);
     } catch (err) {
       // Shows the backend's actual message (e.g. "already initialised with
@@ -235,6 +248,11 @@ function KnowledgeEmbeddingPane({
     } finally {
       setSaving(false);
     }
+  };
+
+  const reset = () => {
+    setValue("");
+    setApiKey("");
   };
 
   return (
@@ -253,12 +271,13 @@ function KnowledgeEmbeddingPane({
           spellCheck={false}
         />
         {credentialName ? (
-          <InlineCredential
+          <CredentialField
             name={credentialName}
             label={credentialName}
+            value={apiKey}
+            onValueChange={setApiKey}
             present={hasKey}
-            onChange={onKeyChange}
-            disabled={locked}
+            disabled={locked || saving}
           />
         ) : null}
       </div>
@@ -271,11 +290,13 @@ function KnowledgeEmbeddingPane({
       {!locked && <p className="set-note">{t.settings.knowledgeEmbeddingSaveToInitHint}</p>}
       {!locked && (
         <PaneActions
-          dirty={Boolean(value.trim())}
+          dirty={Boolean(value.trim() || apiKey.trim())}
           saving={saving}
-          canSave={Boolean(value.trim() && (!credentialName || hasKey))}
+          canSave={Boolean(
+            value.trim() && (!credentialName || hasKey || apiKey.trim()),
+          )}
           onSave={() => void save()}
-          onReset={() => setValue("")}
+          onReset={reset}
         />
       )}
     </>
