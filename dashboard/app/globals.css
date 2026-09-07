@@ -686,6 +686,9 @@ textarea.input { padding: 8px 10px; height: auto; line-height: 1.55; resize: ver
 .set-engine { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; border-radius: 8px; background: var(--card); box-shadow: var(--shadow-card); cursor: pointer; text-align: left; font-family: var(--font-sans); border: none; transition: box-shadow 0.14s; }
 .set-engine:hover { box-shadow: var(--shadow-pop); }
 .set-engine.on { box-shadow: var(--shadow-card), 0 0 0 1.5px var(--accent); }
+/* Open for viewing/editing, but not (yet) the committed choice — a lighter,
+   dashed ring keeps it visually distinct from `.on`'s solid accent ring. */
+.set-engine.set-engineopen { box-shadow: var(--shadow-card), 0 0 0 1.5px var(--border-strong); outline: 1px dashed var(--border-strong); outline-offset: -1px; }
 .set-engine:focus-visible { outline: none; box-shadow: var(--shadow-card), var(--focus-ring); }
 .set-enginetop { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .set-engineid { display: flex; align-items: center; gap: 8px; min-width: 0; }

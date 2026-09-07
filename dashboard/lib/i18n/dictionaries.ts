@@ -28,10 +28,9 @@ export const dictionaries = {
       subtitle:
         "What next-signal generates, when it runs, and which engine it runs on.",
       saveFailed: "Could not save. Check the dashboard logs.",
-      // Deliberately more explicit than a bare "Save": every pane using this
-      // button sits beside a section-level commit ("Apply selection" in
-      // Engine) that is a different action on different state, and the two
-      // read as interchangeable without this distinction.
+      // Deliberately more explicit than a bare "Save": this button writes
+      // only a pane's own fields (and, for DeepSeek, its credential) — never
+      // which engine is primary, a separate, separately-labeled action.
       save: "Save configuration",
       saving: "Saving…",
       reset: "Reset",
@@ -131,12 +130,13 @@ export const dictionaries = {
 
       engine: "Engine",
       engineHint:
-        "Which engine next-signal calls. Nothing is selected until you choose a card and apply it — its settings open below.",
+        "Which engine next-signal calls. Open a card to configure it, or use it as primary right away.",
       engineUnselectedHint:
-        "No engine is selected yet, so next-signal cannot make a chat call. Pick one below and apply it.",
+        "No engine is selected yet, so next-signal cannot make a chat call. Open a card below and use it as primary.",
       engineSaved: "Engine settings saved",
       enginePrimarySaved: "Engine selection applied",
-      engineApplySelection: "Apply selection",
+      engineUsePrimary: "Use as primary",
+      enginePrimaryBadge: "Primary",
       engineOmlx: "Local model",
       engineDeepseek: "DeepSeek",
       engineCodex: "Codex CLI",
@@ -761,11 +761,12 @@ export const dictionaries = {
 
       engine: "模型引擎",
       engineHint:
-        "next-signal 调用哪个引擎。没选之前什么都不会生效——选一张卡片并应用，它的设置会在下面展开。",
-      engineUnselectedHint: "还没选引擎，next-signal 没法发起对话调用。选一个并应用。",
+        "next-signal 调用哪个引擎。点开一张卡片配置它，或者直接把它设为主引擎。",
+      engineUnselectedHint: "还没选引擎，next-signal 没法发起对话调用。点开下面一张卡片，设为主引擎。",
       engineSaved: "引擎设置已保存",
       enginePrimarySaved: "引擎选择已应用",
-      engineApplySelection: "应用选择",
+      engineUsePrimary: "设为主引擎",
+      enginePrimaryBadge: "主引擎",
       engineOmlx: "本地模型",
       engineDeepseek: "DeepSeek",
       engineCodex: "Codex CLI",

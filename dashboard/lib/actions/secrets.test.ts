@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -136,6 +136,74 @@ test("the store is written owner-only", { skip: process.platform === "win32" }, 
     await actions.saveCredential("OPENAI_API_KEY", "sk-example");
 
     assert.equal((await stat(storePath)).mode & 0o777, 0o600);
+  });
+});
+
+test("a Radar Embedding credential is writable before any provider is selected", async () => {
+  await withStore(async (actions) => {
+    await actions.saveCredential("RADAR_EMBEDDING_OPENAI_API_KEY", "sk-example");
+    assert.equal(
+      (await actions.getCredentialPresence()).RADAR_EMBEDDING_OPENAI_API_KEY,
+      true,
+    );
+  });
+});
+
+test("a locked Radar Embedding section rejects a credential save and delete", async () => {
+  await withStore(async (actions, storePath) => {
+    await actions.saveCredential("RADAR_EMBEDDING_OPENAI_API_KEY", "sk-example");
+
+    const embeddingPath = path.join(path.dirname(storePath), "embedding.json");
+    await writeFile(
+      embeddingPath,
+      JSON.stringify({ provider: "openai", openai: { model: "text-embedding-3-small" } }),
+      "utf-8",
+    );
+
+    await assert.rejects(
+      () => actions.saveCredential("RADAR_EMBEDDING_OPENAI_API_KEY", "sk-replacement"),
+      /locked/,
+    );
+    await assert.rejects(
+      () => actions.deleteCredential("RADAR_EMBEDDING_OPENAI_API_KEY"),
+      /locked/,
+    );
+    assert.deepEqual(JSON.parse(await readFile(storePath, "utf-8")), {
+      RADAR_EMBEDDING_OPENAI_API_KEY: "sk-example",
+    });
+  });
+});
+
+test("a locked Knowledge Embedding section rejects a credential save and delete", async () => {
+  await withStore(async (actions, storePath) => {
+    await actions.saveCredential("VOYAGE_API_KEY", "voyage-example");
+
+    const gbrainHome = await mkdtemp(path.join(os.tmpdir(), "ns-gbrain-"));
+    const previousGbrainHome = process.env.GBRAIN_HOME;
+    process.env.GBRAIN_HOME = gbrainHome;
+    try {
+      await mkdir(path.join(gbrainHome, ".gbrain"), { recursive: true });
+      await writeFile(
+        path.join(gbrainHome, ".gbrain", "config.json"),
+        JSON.stringify({ embedding_model: "voyage:voyage-3-large" }),
+        "utf-8",
+      );
+
+      await assert.rejects(
+        () => actions.saveCredential("VOYAGE_API_KEY", "voyage-replacement"),
+        /locked/,
+      );
+      await assert.rejects(
+        () => actions.deleteCredential("VOYAGE_API_KEY"),
+        /locked/,
+      );
+      assert.deepEqual(JSON.parse(await readFile(storePath, "utf-8")), {
+        VOYAGE_API_KEY: "voyage-example",
+      });
+    } finally {
+      if (previousGbrainHome === undefined) delete process.env.GBRAIN_HOME;
+      else process.env.GBRAIN_HOME = previousGbrainHome;
+    }
   });
 });
 

@@ -4,8 +4,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { useI18n } from "@/components/i18n-provider";
+import { CredentialField } from "@/components/settings/credential-field";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { deleteCredential, saveCredential } from "@/lib/actions/secrets";
 
 /**
@@ -15,6 +15,12 @@ import { deleteCredential, saveCredential } from "@/lib/actions/secrets";
  *
  * Write-only, same as before centralization: a saved value is never held in
  * client state after the write, and no masked preview is ever rendered.
+ *
+ * Saves and clears immediately, independent of anything else in its section —
+ * only right for a credential with no section-level commit to fold into
+ * (RSS/Folo's token today). A credential that lives inside a section with its
+ * own single commit action uses `CredentialField` directly instead, so its
+ * value joins that section's draft rather than writing on its own.
  */
 export function InlineCredential({
   name,
@@ -67,48 +73,37 @@ export function InlineCredential({
   };
 
   return (
-    <>
-      <label htmlFor={`cred-${name}`}>{label}</label>
-      <span className="row gap-8">
-        <Input
-          id={`cred-${name}`}
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          value={value}
-          disabled={busy || disabled}
-          aria-label={label}
-          placeholder={
-            present ? t.settings.credentialReplace : t.settings.credentialEnter
-          }
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") void save();
-          }}
-        />
-        <span className={`set-status ${present ? "ok" : "warn"}`}>
-          {present ? t.settings.credentialSet : t.settings.credentialUnset}
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          disabled={busy || disabled || !value.trim()}
-          onClick={() => void save()}
-        >
-          {t.settings.credentialSave}
-        </Button>
-        {present && (
+    <CredentialField
+      name={name}
+      label={label}
+      value={value}
+      onValueChange={setValue}
+      present={present}
+      disabled={busy || disabled}
+      onEnter={() => void save()}
+      actions={
+        <>
           <Button
             type="button"
             size="sm"
-            variant="ghost"
-            disabled={busy || disabled}
-            onClick={() => void clear()}
+            disabled={busy || disabled || !value.trim()}
+            onClick={() => void save()}
           >
-            {t.settings.credentialClear}
+            {t.settings.credentialSave}
           </Button>
-        )}
-      </span>
-    </>
+          {present && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={busy || disabled}
+              onClick={() => void clear()}
+            >
+              {t.settings.credentialClear}
+            </Button>
+          )}
+        </>
+      }
+    />
   );
 }
